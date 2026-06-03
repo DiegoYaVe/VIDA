@@ -11,7 +11,10 @@ const fastify = Fastify({ logger: true });
 
 // CORS — permite llamadas desde el frontend React
 await fastify.register(cors, {
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: [
+    'http://localhost:5173',
+    'http://israceballos-001-site18.mtempurl.com',
+  ],
   credentials: true,
 });
 
