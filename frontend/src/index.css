@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { font-family: 'Nunito', sans-serif; background: #F4F6F8; }
+
+@layer components {
+  .btn-primary {
+    @apply bg-vida-green hover:bg-vida-green-dark text-white font-bold py-2.5 px-6 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .input-field {
+    @apply w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-vida-green focus:border-transparent transition-all;
+  }
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-5;
+  }
+  .kpi-card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-start gap-4 hover:shadow-md transition-shadow;
+  }
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-vida-green-light hover:text-vida-green transition-all cursor-pointer;
+  }
+  .sidebar-item.active {
+    @apply bg-vida-green text-white shadow-sm;
+  }
+}
