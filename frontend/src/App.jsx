@@ -2,23 +2,24 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore.js';
-import Login from './pages/Login.jsx';
+import Login     from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
-import Layout from './components/Layout.jsx';
+import Usuarios  from './pages/Usuarios.jsx';
+import Activar   from './pages/Activar.jsx';
+import Layout    from './components/Layout.jsx';
 
 function ProtectedRoute({ children }) {
-  const { usuario, accessToken } = useAuthStore();
-  if (!usuario && !accessToken) return <Navigate to="/login" replace />;
+  const { accessToken } = useAuthStore();
+  if (!accessToken) return <Navigate to="/login" replace />;
   return children;
 }
 
 function PublicRoute({ children }) {
-  const { usuario } = useAuthStore();
-  if (usuario) return <Navigate to="/dashboard" replace />;
+  const { accessToken } = useAuthStore();
+  if (accessToken) return <Navigate to="/dashboard" replace />;
   return children;
 }
 
-// Placeholder para módulos futuros
 function ComingSoon({ nombre }) {
   return (
     <div className="flex-1 flex items-center justify-center">
@@ -36,7 +37,11 @@ export default function App() {
   const { refreshSession } = useAuthStore();
 
   useEffect(() => {
-    // Al cargar la app, intentar recuperar sesión con refresh token guardado
+    const stored = localStorage.getItem('pos_refresh');
+    if (!stored) {
+      setChecking(false);
+      return;
+    }
     refreshSession().finally(() => setChecking(false));
   }, []);
 
@@ -58,15 +63,17 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/login"   element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/activar" element={<Activar />} />
 
         <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <Layout><Dashboard /></Layout>
-          </ProtectedRoute>
+          <ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>
         } />
 
-        {/* Módulos futuros — placeholder */}
+        <Route path="/admin" element={
+          <ProtectedRoute><Layout><Usuarios /></Layout></ProtectedRoute>
+        } />
+
         {[
           { path:'/catalogos',   nombre:'Catálogos' },
           { path:'/precios',     nombre:'Precios y Promociones' },
@@ -77,12 +84,9 @@ export default function App() {
           { path:'/logistica',   nombre:'Repartidores y Logística' },
           { path:'/clientes',    nombre:'Consumidores Finales' },
           { path:'/reportes',    nombre:'Reportes y Estadísticas' },
-          { path:'/admin',       nombre:'Seguridad y Admin' },
         ].map(({ path, nombre }) => (
           <Route key={path} path={path} element={
-            <ProtectedRoute>
-              <Layout><ComingSoon nombre={nombre} /></Layout>
-            </ProtectedRoute>
+            <ProtectedRoute><Layout><ComingSoon nombre={nombre} /></Layout></ProtectedRoute>
           } />
         ))}
 

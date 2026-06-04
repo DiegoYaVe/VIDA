@@ -6,6 +6,7 @@ import cors from '@fastify/cors';
 import { getPool } from './db/sqlserver.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { dashboardRoutes } from './routes/dashboard.routes.js';
+import { usuariosRoutes } from './routes/usuarios.routes.js';
 
 const fastify = Fastify({ logger: true });
 
@@ -37,6 +38,7 @@ fastify.get('/health', async () => {
 // Rutas bajo /api
 fastify.register(authRoutes,      { prefix: '/api' });
 fastify.register(dashboardRoutes, { prefix: '/api' });
+fastify.register(usuariosRoutes, { prefix: '/api' });
 
 // Arrancar
 const PORT = process.env.PORT || 3001;

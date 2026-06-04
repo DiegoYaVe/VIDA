@@ -47,17 +47,26 @@ export const useAuthStore = create((set, get) => ({
     const stored = localStorage.getItem('pos_refresh');
     if (!stored) return false;
     try {
+      // 1. Obtener nuevo access token
       const res = await api.post('/auth/refresh', { refreshToken: stored });
       const { accessToken } = res.data;
-      set({ accessToken });
-      api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
 
-      // También re-cargar datos de usuario desde el JWT
-      const payload = JSON.parse(atob(accessToken.split('.')[1]));
-      set(s => ({ usuario: { ...s.usuario, ...payload } }));
+      // 2. Aplicar token a axios INMEDIATAMENTE
+      api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+      set({ accessToken });
+
+      // 3. Cargar datos del usuario y pantallas con el nuevo token
+      const meRes = await api.get('/auth/me');
+      set({ 
+        usuario:   meRes.data.usuario,
+        pantallas: meRes.data.pantallas,
+      });
+
       return true;
     } catch {
       localStorage.removeItem('pos_refresh');
+      delete api.defaults.headers.common['Authorization'];
+      set({ usuario: null, accessToken: null, pantallas: [] });
       return false;
     }
   },

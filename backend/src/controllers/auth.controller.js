@@ -78,7 +78,7 @@ export async function login(request, reply) {
       idPuntoVenta:usuario.idPuntoVenta,
     };
 
-    const accessToken  = reply.jwtSign(payload, { expiresIn: '15m' });
+    const accessToken = await reply.jwtSign(payload, { expiresIn: '15m' });
     const refreshToken = uuidv4();
     const expiraEn     = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 días
 
@@ -152,7 +152,7 @@ export async function refresh(request, reply) {
       idPuntoVenta:sesion.idPuntoVenta,
     };
 
-    const accessToken = reply.jwtSign(payload, { expiresIn: '15m' });
+    const accessToken = await reply.jwtSign(payload, { expiresIn: '15m' });
     return reply.send({ accessToken });
 
   } catch (err) {
