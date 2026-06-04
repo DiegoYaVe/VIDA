@@ -1,9 +1,7 @@
 // src/controllers/usuarios.controller.js
 import bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
 import { getPool, sql } from '../db/sqlserver.js';
 
-// ── Helper: leer configuración por país ───────────────────────────────────
 async function getConfig(pool, idBranch, clave) {
   const r = await pool.request()
     .input('idBranch', sql.BigInt, idBranch)
@@ -13,8 +11,18 @@ async function getConfig(pool, idBranch, clave) {
   return r.recordset[0]?.Valor ?? null;
 }
 
-// ── Helper: enviar email de invitación ────────────────────────────────────
-async function enviarEmailInvitacion(pool, usuario, token, idBranch) {
+function generarPasswordTemporal() {
+  const letras   = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz';
+  const numeros  = '23456789';
+  const especiales = '#$@!';
+  let pass = 'Vida';
+  pass += especiales[Math.floor(Math.random() * especiales.length)];
+  for (let i = 0; i < 3; i++) pass += numeros[Math.floor(Math.random() * numeros.length)];
+  for (let i = 0; i < 3; i++) pass += letras[Math.floor(Math.random() * letras.length)];
+  return pass;
+}
+
+async function enviarEmailInvitacion(pool, usuario, passwordTemporal, idBranch) {
   const smtpHost   = await getConfig(pool, idBranch, 'SMTP_HOST');
   const smtpPort   = await getConfig(pool, idBranch, 'SMTP_PORT');
   const smtpUser   = await getConfig(pool, idBranch, 'SMTP_USER');
@@ -32,101 +40,75 @@ async function enviarEmailInvitacion(pool, usuario, token, idBranch) {
     tls: { rejectUnauthorized: false },
   });
 
-  const linkActivacion = `${urlSistema}/activar?token=${token}`;
-
-  const html = `
-  <!DOCTYPE html>
-  <html lang="es">
-  <head><meta charset="UTF-8"/></head>
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/></head>
   <body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,sans-serif;">
     <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 0;">
       <tr><td align="center">
         <table width="580" cellpadding="0" cellspacing="0"
           style="background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
           <tr>
-            <td style="background:linear-gradient(135deg,#1A6A9A,#27AE60);
-                       padding:32px;text-align:center;">
+            <td style="background:linear-gradient(135deg,#1A6A9A,#27AE60);padding:32px;text-align:center;">
               <div style="font-size:30px;font-weight:900;color:#fff;letter-spacing:2px;">VIDA</div>
-              <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:4px;">
-                PLATAFORMA DE DESARROLLO EMPRESARIAL
-              </div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:4px;">PLATAFORMA DE DESARROLLO EMPRESARIAL</div>
             </td>
           </tr>
           <tr>
             <td style="padding:36px 32px;">
-              <h2 style="color:#0D1B2A;font-size:20px;margin:0 0 8px 0;">
-                ¡Bienvenido a VIDA, ${usuario.Nombre}!
-              </h2>
+              <h2 style="color:#0D1B2A;font-size:20px;margin:0 0 8px 0;">¡Bienvenido a VIDA, ${usuario.Nombre}!</h2>
               <p style="color:#64748b;font-size:14px;line-height:1.6;margin:0 0 24px 0;">
-                El administrador te ha creado una cuenta como
-                <strong style="color:#27AE60;">${usuario.TipoUsuario}</strong>.
-                Haz clic en el botón para activar tu cuenta y establecer tu contraseña.
+                El administrador te ha creado una cuenta como <strong style="color:#27AE60;">${usuario.TipoUsuario}</strong>.
+                Usa las siguientes credenciales para iniciar sesión. Al entrar, el sistema te pedirá cambiar tu contraseña.
               </p>
-              <div style="background:#f8fafc;border-radius:12px;padding:18px;margin-bottom:24px;">
-                <table width="100%" cellpadding="4">
+              <div style="background:#f8fafc;border-radius:12px;padding:20px;margin-bottom:24px;">
+                <table width="100%" cellpadding="6">
                   <tr>
                     <td style="font-size:12px;color:#94a3b8;">Usuario</td>
-                    <td style="font-size:13px;color:#0D1B2A;font-weight:700;text-align:right;">
-                      ${usuario.Cve}
-                    </td>
+                    <td style="font-size:14px;color:#0D1B2A;font-weight:700;text-align:right;font-family:monospace;">${usuario.Cve}</td>
                   </tr>
                   <tr>
-                    <td style="font-size:12px;color:#94a3b8;">Correo</td>
-                    <td style="font-size:13px;color:#0D1B2A;font-weight:700;text-align:right;">
-                      ${usuario.Correo}
-                    </td>
+                    <td style="font-size:12px;color:#94a3b8;">Contraseña temporal</td>
+                    <td style="font-size:16px;color:#27AE60;font-weight:900;text-align:right;font-family:monospace;letter-spacing:2px;">${passwordTemporal}</td>
                   </tr>
                   <tr>
                     <td style="font-size:12px;color:#94a3b8;">Rol</td>
-                    <td style="font-size:13px;color:#27AE60;font-weight:700;text-align:right;">
-                      ${usuario.TipoUsuario}
-                    </td>
+                    <td style="font-size:13px;color:#0D1B2A;font-weight:700;text-align:right;">${usuario.TipoUsuario}</td>
                   </tr>
                 </table>
               </div>
               <div style="text-align:center;margin:28px 0;">
-                <a href="${linkActivacion}"
-                  style="background:linear-gradient(135deg,#27AE60,#1A6A9A);
-                         color:#fff;text-decoration:none;padding:14px 32px;
-                         border-radius:12px;font-size:15px;font-weight:700;
-                         display:inline-block;">
-                  Activar mi cuenta
+                <a href="${urlSistema}/login"
+                  style="background:linear-gradient(135deg,#27AE60,#1A6A9A);color:#fff;text-decoration:none;
+                         padding:14px 32px;border-radius:12px;font-size:15px;font-weight:700;display:inline-block;">
+                  Iniciar sesión
                 </a>
               </div>
-              <p style="color:#94a3b8;font-size:12px;text-align:center;">
-                Este link expira en <strong>48 horas</strong>.<br/>
-                Si no esperabas este correo, puedes ignorarlo.
-              </p>
+              <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;">
+                <p style="color:#92400e;font-size:12px;margin:0;line-height:1.6;">
+                  ⚠️ Esta es una contraseña temporal. Al iniciar sesión, el sistema te pedirá crear una contraseña personal segura.
+                </p>
+              </div>
             </td>
           </tr>
           <tr>
-            <td style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;
-                       text-align:center;">
-              <p style="color:#94a3b8;font-size:11px;margin:0;">
-                ${smtpName} · Correo automático, no respondas a este mensaje.
-              </p>
+            <td style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;text-align:center;">
+              <p style="color:#94a3b8;font-size:11px;margin:0;">${smtpName} · Correo automático, no respondas a este mensaje.</p>
             </td>
           </tr>
         </table>
       </td></tr>
     </table>
-  </body>
-  </html>`;
+  </body></html>`;
 
   await transporter.sendMail({
     from: `"${smtpName}" <${smtpFrom}>`,
     to: usuario.Correo,
-    subject: `Activa tu cuenta en VIDA — ${smtpName}`,
+    subject: `Tus credenciales de acceso — ${smtpName}`,
     html,
   });
 }
 
-// ── Helper: nivel de acceso por rol ───────────────────────────────────────
 function nivelPorRol(rol) {
-  const niveles = {
-    SUPER_ADMIN: 0, ADMIN_PAIS: 1, ADMIN: 1,
-    SUPERVISOR: 2,  CAJERO: 3,     CASHIER: 3,
-  };
+  const niveles = { SUPER_ADMIN: 0, ADMIN_PAIS: 1, ADMIN: 1, SUPERVISOR: 2, CAJERO: 3, CASHIER: 3 };
   return niveles[rol] ?? 3;
 }
 
@@ -139,8 +121,7 @@ export async function listarUsuarios(request, reply) {
   try {
     const pool = await getPool();
     let whereExtra = '';
-    if (search) whereExtra += ` AND (u.Nombre LIKE @search OR u.Apellidos LIKE @search
-                                 OR u.Correo LIKE @search OR u.Cve LIKE @search)`;
+    if (search) whereExtra += ` AND (u.Nombre LIKE @search OR u.Apellidos LIKE @search OR u.Correo LIKE @search OR u.Cve LIKE @search)`;
     if (rol)    whereExtra += ` AND u.TipoUsuario = @rol`;
 
     const req = pool.request()
@@ -153,20 +134,16 @@ export async function listarUsuarios(request, reply) {
     if (rol)    req.input('rol',    sql.VarChar(50),  rol);
 
     const result = await req.query(`
-      SELECT
-        u.idUsuario, u.Nombre, u.Apellidos, u.NomComercial,
-        u.Correo, u.Telefono, u.Cve,
-        u.TipoUsuario, u.NivelAcceso, u.Puesto,
-        u.idPuntoVenta, u.Status, u.FechaAlta,
-        u.ImagenUsuario, u.FechaNacimiento,
+      SELECT u.idUsuario, u.Nombre, u.Apellidos, u.NomComercial,
+        u.Correo, u.Telefono, u.Cve, u.TipoUsuario, u.NivelAcceso, u.Puesto,
+        u.idPuntoVenta, u.Status, u.FechaAlta, u.ImagenUsuario, u.FechaNacimiento, u.CambiarPass,
         p.NomComercial AS NombreSucursal,
         (SELECT COUNT(*) FROM VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO a
          WHERE a.idBranch=u.idBranch AND a.idCuenta=u.idCuenta
            AND a.idUsuario=u.idUsuario AND a.StatusAcceso='ACTIVO') AS totalAccesos
       FROM VIDA_CUENTA_USUARIOS u
       LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA p
-        ON p.idBranch=u.idBranch AND p.idCuenta=u.idCuenta
-       AND p.idPuntoVenta=u.idPuntoVenta
+        ON p.idBranch=u.idBranch AND p.idCuenta=u.idCuenta AND p.idPuntoVenta=u.idPuntoVenta
       WHERE u.idBranch=@idBranch AND u.idCuenta=@idCuenta
       ${whereExtra}
       ORDER BY u.idUsuario
@@ -176,8 +153,7 @@ export async function listarUsuarios(request, reply) {
     const totalRes = await pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
-      .query(`SELECT COUNT(*) AS total FROM VIDA_CUENTA_USUARIOS
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+      .query(`SELECT COUNT(*) AS total FROM VIDA_CUENTA_USUARIOS WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
 
     return reply.send({
       data:  result.recordset,
@@ -194,11 +170,7 @@ export async function listarUsuarios(request, reply) {
 // ── POST /api/usuarios ────────────────────────────────────────────────────
 export async function crearUsuario(request, reply) {
   const { idBranch, idCuenta, idUsuario: idCreador } = request.user;
-  const {
-    Nombre, Apellidos, NomComercial, Correo, Cve,
-    TipoUsuario, Puesto, Telefono, FechaNacimiento,
-    idPuntoVenta, pantallas = []
-  } = request.body;
+  const { Nombre, Apellidos, NomComercial, Correo, Cve, TipoUsuario, Puesto, Telefono, FechaNacimiento, idPuntoVenta, pantallas = [] } = request.body;
 
   if (!Nombre || !Correo || !Cve || !TipoUsuario) {
     return reply.code(400).send({ error: 'Nombre, Correo, Usuario y Rol son requeridos' });
@@ -207,32 +179,31 @@ export async function crearUsuario(request, reply) {
   try {
     const pool = await getPool();
 
-    // Verificar Cve único
     const existe = await pool.request()
-      .input('Cve',      sql.VarChar(50), Cve)
-      .input('idBranch', sql.BigInt,      idBranch)
-      .input('idCuenta', sql.BigInt,      idCuenta)
-      .query(`SELECT idUsuario FROM VIDA_CUENTA_USUARIOS
-              WHERE Cve=@Cve AND idBranch=@idBranch AND idCuenta=@idCuenta`);
+      .input('Cve', sql.VarChar(50), Cve)
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .query(`SELECT idUsuario FROM VIDA_CUENTA_USUARIOS WHERE Cve=@Cve AND idBranch=@idBranch AND idCuenta=@idCuenta`);
 
     if (existe.recordset.length > 0) {
       return reply.code(409).send({ error: 'El nombre de usuario ya está en uso' });
     }
 
-    // Siguiente ID
     const maxId = await pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
-      .query(`SELECT ISNULL(MAX(idUsuario),0)+1 AS nextId
-              FROM VIDA_CUENTA_USUARIOS
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+      .query(`SELECT ISNULL(MAX(idUsuario),0)+1 AS nextId FROM VIDA_CUENTA_USUARIOS WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
 
     const nuevoId = maxId.recordset[0].nextId;
 
+    // Generar password temporal
+    const passwordTemporal = generarPasswordTemporal();
+    const hash = await bcrypt.hash(passwordTemporal, 12);
+
     await pool.request()
-      .input('idBranch',       sql.BigInt,    idBranch)
-      .input('idCuenta',       sql.BigInt,    idCuenta)
-      .input('idUsuario',      sql.BigInt,    nuevoId)
+      .input('idBranch',       sql.BigInt,       idBranch)
+      .input('idCuenta',       sql.BigInt,       idCuenta)
+      .input('idUsuario',      sql.BigInt,       nuevoId)
       .input('Nombre',         sql.VarChar(200), Nombre)
       .input('Apellidos',      sql.VarChar(200), Apellidos || null)
       .input('NomComercial',   sql.VarChar(200), NomComercial || null)
@@ -244,17 +215,17 @@ export async function crearUsuario(request, reply) {
       .input('FechaNacimiento',sql.Date,         FechaNacimiento || null)
       .input('idPuntoVenta',   sql.BigInt,       idPuntoVenta || null)
       .input('NivelAcceso',    sql.Int,           nivelPorRol(TipoUsuario))
+      .input('Pass',           sql.VarChar(255), hash)
       .input('UsuAlta',        sql.VarChar(10),  String(idCreador))
       .query(`INSERT INTO VIDA_CUENTA_USUARIOS
                 (idBranch, idCuenta, idUsuario, Nombre, Apellidos, NomComercial,
                  Correo, Telefono, Cve, TipoUsuario, Puesto, FechaNacimiento,
-                 idPuntoVenta, NivelAcceso, UsuAlta, Status)
+                 idPuntoVenta, NivelAcceso, Pass, CambiarPass, UsuAlta, Status)
               VALUES
                 (@idBranch, @idCuenta, @idUsuario, @Nombre, @Apellidos, @NomComercial,
                  @Correo, @Telefono, @Cve, @TipoUsuario, @Puesto, @FechaNacimiento,
-                 @idPuntoVenta, @NivelAcceso, @UsuAlta, 'PENDIENTE')`);
+                 @idPuntoVenta, @NivelAcceso, @Pass, 1, @UsuAlta, 'ACTIVO')`);
 
-    // Asignar accesos a pantallas
     for (const idPantalla of pantallas) {
       await pool.request()
         .input('idBranch',   sql.BigInt, idBranch)
@@ -264,33 +235,13 @@ export async function crearUsuario(request, reply) {
         .input('UsuAlta',    sql.VarChar(10), String(idCreador))
         .query(`INSERT INTO VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO
                   (idBranch, idCuenta, idPantalla, idUsuario, StatusAcceso, UsuAlta, Status)
-                VALUES
-                  (@idBranch, @idCuenta, @idPantalla, @idUsuario, 'ACTIVO', @UsuAlta, 'ACTIVO')`);
+                VALUES (@idBranch, @idCuenta, @idPantalla, @idUsuario, 'ACTIVO', @UsuAlta, 'ACTIVO')`);
     }
 
-    // Token de invitación
-    const token = uuidv4();
-    const horas = parseInt(await getConfig(pool, idBranch, 'TOKEN_EXPIRA') || '48');
-    const fechaExpira = new Date(Date.now() + horas * 3600000);
-
-    await pool.request()
-      .input('idBranch',    sql.BigInt,      idBranch)
-      .input('idCuenta',    sql.BigInt,      idCuenta)
-      .input('idUsuario',   sql.BigInt,      nuevoId)
-      .input('Token',       sql.VarChar(200), token)
-      .input('FechaExpira', sql.DateTime,    fechaExpira)
-      .query(`INSERT INTO VIDA_TOKENS_INVITACION
-                (idBranch, idCuenta, idUsuario, Token, FechaExpira, Usado, Status)
-              VALUES
-                (@idBranch, @idCuenta, @idUsuario, @Token, @FechaExpira, 0, 'ACTIVO')`);
-
-    // Enviar email
-    await enviarEmailInvitacion(
-      pool, { Nombre, Correo, Cve, TipoUsuario }, token, idBranch
-    );
+    await enviarEmailInvitacion(pool, { Nombre, Correo, Cve, TipoUsuario }, passwordTemporal, idBranch);
 
     return reply.code(201).send({
-      message: 'Usuario creado. Se envió email de activación.',
+      message: 'Usuario creado. Se enviaron las credenciales por email.',
       idUsuario: nuevoId,
     });
 
@@ -304,18 +255,15 @@ export async function crearUsuario(request, reply) {
 export async function editarUsuario(request, reply) {
   const { idBranch, idCuenta, idUsuario: idEditor } = request.user;
   const { idUsuario } = request.params;
-  const {
-    Nombre, Apellidos, NomComercial, Correo, Telefono,
-    TipoUsuario, Puesto, FechaNacimiento, idPuntoVenta, pantallas
-  } = request.body;
+  const { Nombre, Apellidos, NomComercial, Correo, Telefono, TipoUsuario, Puesto, FechaNacimiento, idPuntoVenta, pantallas } = request.body;
 
   try {
     const pool = await getPool();
 
     await pool.request()
-      .input('idBranch',       sql.BigInt,    idBranch)
-      .input('idCuenta',       sql.BigInt,    idCuenta)
-      .input('idUsuario',      sql.BigInt,    idUsuario)
+      .input('idBranch',       sql.BigInt,       idBranch)
+      .input('idCuenta',       sql.BigInt,       idCuenta)
+      .input('idUsuario',      sql.BigInt,       idUsuario)
       .input('Nombre',         sql.VarChar(200), Nombre)
       .input('Apellidos',      sql.VarChar(200), Apellidos || null)
       .input('NomComercial',   sql.VarChar(200), NomComercial || null)
@@ -340,8 +288,7 @@ export async function editarUsuario(request, reply) {
         .input('idBranch',  sql.BigInt, idBranch)
         .input('idCuenta',  sql.BigInt, idCuenta)
         .input('idUsuario', sql.BigInt, idUsuario)
-        .query(`DELETE FROM VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO
-                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
+        .query(`DELETE FROM VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
 
       for (const idPantalla of pantallas) {
         await pool.request()
@@ -352,8 +299,7 @@ export async function editarUsuario(request, reply) {
           .input('UsuAlta',    sql.VarChar(10), String(idEditor))
           .query(`INSERT INTO VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO
                     (idBranch, idCuenta, idPantalla, idUsuario, StatusAcceso, UsuAlta, Status)
-                  VALUES
-                    (@idBranch, @idCuenta, @idPantalla, @idUsuario, 'ACTIVO', @UsuAlta, 'ACTIVO')`);
+                  VALUES (@idBranch, @idCuenta, @idPantalla, @idUsuario, 'ACTIVO', @UsuAlta, 'ACTIVO')`);
       }
     }
 
@@ -364,7 +310,7 @@ export async function editarUsuario(request, reply) {
   }
 }
 
-// ── PATCH /api/usuarios/:idUsuario/status ──────────────────────────────────
+// ── PATCH /api/usuarios/:idUsuario/status ─────────────────────────────────
 export async function toggleStatus(request, reply) {
   const { idBranch, idCuenta, idUsuario: idEditor } = request.user;
   const { idUsuario } = request.params;
@@ -373,68 +319,60 @@ export async function toggleStatus(request, reply) {
   try {
     const pool = await getPool();
     await pool.request()
-      .input('idBranch',  sql.BigInt,   idBranch)
-      .input('idCuenta',  sql.BigInt,   idCuenta)
-      .input('idUsuario', sql.BigInt,   idUsuario)
+      .input('idBranch',  sql.BigInt,      idBranch)
+      .input('idCuenta',  sql.BigInt,      idCuenta)
+      .input('idUsuario', sql.BigInt,      idUsuario)
       .input('Status',    sql.VarChar(50), status)
       .input('UsuMod',    sql.VarChar(10), String(idEditor))
-      .query(`UPDATE VIDA_CUENTA_USUARIOS SET
-                Status=@Status, FechaMod=GETDATE(), UsuMod=@UsuMod
+      .query(`UPDATE VIDA_CUENTA_USUARIOS SET Status=@Status, FechaMod=GETDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
 
-    return reply.send({
-      message: `Usuario ${status === 'ACTIVO' ? 'activado' : 'desactivado'} correctamente`
-    });
+    return reply.send({ message: `Usuario ${status === 'ACTIVO' ? 'activado' : 'desactivado'} correctamente` });
   } catch (err) {
     return reply.code(500).send({ error: 'Error al cambiar status' });
   }
 }
 
-// ── POST /api/usuarios/activar — público ──────────────────────────────────
-export async function activarCuenta(request, reply) {
-  const { token, password } = request.body;
+// ── POST /api/usuarios/cambiar-pass ───────────────────────────────────────
+export async function cambiarPassword(request, reply) {
+  const { idBranch, idCuenta, idUsuario } = request.user;
+  const { passwordActual, passwordNueva } = request.body;
 
-  if (!token || !password) {
-    return reply.code(400).send({ error: 'Token y contraseña son requeridos' });
+  if (!passwordActual || !passwordNueva) {
+    return reply.code(400).send({ error: 'Contraseña actual y nueva son requeridas' });
   }
-  if (password.length < 8) {
+  if (passwordNueva.length < 8) {
     return reply.code(400).send({ error: 'La contraseña debe tener al menos 8 caracteres' });
   }
 
   try {
     const pool = await getPool();
 
-    const tokenRes = await pool.request()
-      .input('Token', sql.VarChar(200), token)
-      .query(`SELECT * FROM VIDA_TOKENS_INVITACION
-              WHERE Token=@Token AND Usado=0 AND Status='ACTIVO'
-                AND FechaExpira > GETDATE()`);
+    const res = await pool.request()
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idUsuario', sql.BigInt, idUsuario)
+      .query(`SELECT Pass FROM VIDA_CUENTA_USUARIOS WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
 
-    const inv = tokenRes.recordset[0];
-    if (!inv) {
-      return reply.code(400).send({ error: 'El link de activación es inválido o ya expiró' });
-    }
+    const usuario = res.recordset[0];
+    if (!usuario) return reply.code(404).send({ error: 'Usuario no encontrado' });
 
-    const hash = await bcrypt.hash(password, 12);
+    const valido = await bcrypt.compare(passwordActual, usuario.Pass);
+    if (!valido) return reply.code(401).send({ error: 'La contraseña actual es incorrecta' });
 
+    const hash = await bcrypt.hash(passwordNueva, 12);
     await pool.request()
-      .input('idBranch',  sql.BigInt,     inv.idBranch)
-      .input('idCuenta',  sql.BigInt,     inv.idCuenta)
-      .input('idUsuario', sql.BigInt,     inv.idUsuario)
+      .input('idBranch',  sql.BigInt,       idBranch)
+      .input('idCuenta',  sql.BigInt,       idCuenta)
+      .input('idUsuario', sql.BigInt,       idUsuario)
       .input('Pass',      sql.VarChar(255), hash)
-      .query(`UPDATE VIDA_CUENTA_USUARIOS SET
-                Pass=@Pass, Status='ACTIVO', FechaMod=GETDATE(), UsuMod='ACTIVACION'
+      .query(`UPDATE VIDA_CUENTA_USUARIOS SET Pass=@Pass, CambiarPass=0, FechaMod=GETDATE(), UsuMod='CAMBIO_PASS'
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
 
-    await pool.request()
-      .input('Token', sql.VarChar(200), token)
-      .query(`UPDATE VIDA_TOKENS_INVITACION SET Usado=1, FechaMod=GETDATE()
-              WHERE Token=@Token`);
-
-    return reply.send({ message: 'Cuenta activada. Ya puedes iniciar sesión.' });
+    return reply.send({ message: 'Contraseña actualizada correctamente' });
   } catch (err) {
     request.log.error(err);
-    return reply.code(500).send({ error: 'Error al activar cuenta' });
+    return reply.code(500).send({ error: 'Error al cambiar contraseña' });
   }
 }
 

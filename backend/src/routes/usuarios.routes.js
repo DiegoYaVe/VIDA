@@ -6,21 +6,19 @@ import {
   crearUsuario,
   editarUsuario,
   toggleStatus,
-  activarCuenta,
+  cambiarPassword,
   getPantallas,
 } from '../controllers/usuarios.controller.js';
 
 export async function usuariosRoutes(fastify) {
 
-  // ── Públicos (sin auth) ──────────────────────────────
-  fastify.post('/usuarios/activar', activarCuenta);
-
-  // ── Rutas fijas primero (antes que las dinámicas) ────
+  // ── Rutas fijas primero ──────────────────────────────
   fastify.get('/usuarios',           { preHandler: [authenticate] }, listarUsuarios);
   fastify.post('/usuarios',          { preHandler: [authenticate] }, crearUsuario);
   fastify.get('/usuarios/pantallas', { preHandler: [authenticate] }, getPantallas);
+  fastify.post('/usuarios/cambiar-pass', { preHandler: [authenticate] }, cambiarPassword);
 
-  // ── Rutas dinámicas (:idUsuario) después ─────────────
+  // ── Rutas dinámicas después ──────────────────────────
   fastify.put('/usuarios/:idUsuario',           { preHandler: [authenticate] }, editarUsuario);
   fastify.patch('/usuarios/:idUsuario/status',  { preHandler: [authenticate] }, toggleStatus);
   fastify.get('/usuarios/:idUsuario/accesos',   { preHandler: [authenticate] }, async (request, reply) => {

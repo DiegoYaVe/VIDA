@@ -13,7 +13,6 @@ export async function login(request, reply) {
   try {
     const pool = await getPool();
 
-    // Buscar usuario por Cve
     const result = await pool.request()
       .input('Cve', sql.VarChar(50), cve)
       .query(`
@@ -23,6 +22,7 @@ export async function login(request, reply) {
           u.TipoUsuario, u.NivelAcceso,
           u.Cve, u.Pass,
           u.idPuntoVenta, u.Status,
+          u.CambiarPass,
           c.NomComercial AS NombreCuenta,
           c.logoCuenta
         FROM VIDA_CUENTA_USUARIOS u
@@ -38,20 +38,17 @@ export async function login(request, reply) {
       return reply.code(401).send({ error: 'Credenciales incorrectas' });
     }
 
-    // Verificar password
     const passwordValido = await bcrypt.compare(pass, usuario.Pass);
     if (!passwordValido) {
       return reply.code(401).send({ error: 'Credenciales incorrectas' });
     }
 
-    // Obtener pantallas (módulos) a las que tiene acceso
     const pantallasResult = await pool.request()
-      .input('idBranch', sql.BigInt, usuario.idBranch)
-      .input('idCuenta', sql.BigInt, usuario.idCuenta)
+      .input('idBranch',  sql.BigInt, usuario.idBranch)
+      .input('idCuenta',  sql.BigInt, usuario.idCuenta)
       .input('idUsuario', sql.BigInt, usuario.idUsuario)
       .query(`
-        SELECT
-          p.idPantalla, p.Nombre, p.Descripcion,
+        SELECT p.idPantalla, p.Nombre, p.Descripcion,
           p.Modulo, p.Link, p.Icono, p.OrdenPantalla
         FROM VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO a
         INNER JOIN VIDA_CUENTA_PANTALLAS p
@@ -66,7 +63,6 @@ export async function login(request, reply) {
         ORDER BY p.OrdenPantalla
       `);
 
-    // Generar tokens
     const payload = {
       idBranch:    usuario.idBranch,
       idCuenta:    usuario.idCuenta,
@@ -76,19 +72,19 @@ export async function login(request, reply) {
       TipoUsuario: usuario.TipoUsuario,
       NivelAcceso: usuario.NivelAcceso,
       idPuntoVenta:usuario.idPuntoVenta,
+      CambiarPass: usuario.CambiarPass,  // ← nuevo
     };
 
-    const accessToken = await reply.jwtSign(payload, { expiresIn: '15m' });
+    const accessToken  = await reply.jwtSign(payload, { expiresIn: '15m' });
     const refreshToken = uuidv4();
-    const expiraEn     = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 días
+    const expiraEn     = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    // Guardar refresh token en BD
     await pool.request()
-      .input('idBranch',     sql.BigInt,     usuario.idBranch)
-      .input('idCuenta',     sql.BigInt,     usuario.idCuenta)
-      .input('idUsuario',    sql.BigInt,     usuario.idUsuario)
+      .input('idBranch',     sql.BigInt,      usuario.idBranch)
+      .input('idCuenta',     sql.BigInt,      usuario.idCuenta)
+      .input('idUsuario',    sql.BigInt,      usuario.idUsuario)
       .input('RefreshToken', sql.VarChar(500), refreshToken)
-      .input('FechaExpira',  sql.DateTime,   expiraEn)
+      .input('FechaExpira',  sql.DateTime,    expiraEn)
       .input('IpOrigen',     sql.VarChar(50), request.ip)
       .query(`
         INSERT INTO VIDA_SESIONES
@@ -109,6 +105,7 @@ export async function login(request, reply) {
         NivelAcceso:  usuario.NivelAcceso,
         NombreCuenta: usuario.NombreCuenta,
         logoCuenta:   usuario.logoCuenta,
+        CambiarPass:  usuario.CambiarPass,  // ← nuevo
       },
       pantallas: pantallasResult.recordset,
     });
@@ -129,7 +126,8 @@ export async function refresh(request, reply) {
     const result = await pool.request()
       .input('RefreshToken', sql.VarChar(500), refreshToken)
       .query(`
-        SELECT s.*, u.Nombre, u.Apellidos, u.TipoUsuario, u.NivelAcceso, u.idPuntoVenta
+        SELECT s.*, u.Nombre, u.Apellidos, u.TipoUsuario,
+               u.NivelAcceso, u.idPuntoVenta, u.CambiarPass
         FROM VIDA_SESIONES s
         INNER JOIN VIDA_CUENTA_USUARIOS u
           ON u.idBranch = s.idBranch AND u.idCuenta = s.idCuenta AND u.idUsuario = s.idUsuario
@@ -150,6 +148,7 @@ export async function refresh(request, reply) {
       TipoUsuario: sesion.TipoUsuario,
       NivelAcceso: sesion.NivelAcceso,
       idPuntoVenta:sesion.idPuntoVenta,
+      CambiarPass: sesion.CambiarPass,  // ← nuevo
     };
 
     const accessToken = await reply.jwtSign(payload, { expiresIn: '15m' });
