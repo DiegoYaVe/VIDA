@@ -8,7 +8,7 @@ import Usuarios  from './pages/Usuarios.jsx';
 import Activar   from './pages/Activar.jsx';
 import Layout    from './components/Layout.jsx';
 import CambiarPassword from './pages/CambiarPassword.jsx';
-
+import Perfil from './pages/Perfil.jsx';
 
 function ProtectedRoute({ children, skipCambiarPass = false }) {
   const { accessToken, usuario } = useAuthStore();
@@ -84,6 +84,10 @@ export default function App() {
 
         <Route path="/cambiar-password" element={
           <ProtectedRoute skipCambiarPass={true}><CambiarPassword /></ProtectedRoute>
+        } />
+
+        <Route path="/perfil" element={
+          <ProtectedRoute><Layout><Perfil /></Layout></ProtectedRoute>
         } />
 
         {[

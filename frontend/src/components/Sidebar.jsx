@@ -10,6 +10,20 @@ function DynamicIcon({ name, size = 18 }) {
   return <Icon size={size} />;
 }
 
+function Avatar({ nombre, apellidos, imagen }) {
+  if (imagen) return (
+    <img src={imagen} alt={nombre}
+      className="w-9 h-9 rounded-full object-cover border-2 border-white shadow" />
+  );
+  const initials = `${nombre?.[0] || ''}${apellidos?.[0] || ''}`.toUpperCase();
+  return (
+    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-vida-blue to-vida-green
+                    flex items-center justify-center text-white font-bold text-sm shadow">
+      {initials}
+    </div>
+  );
+}
+
 export default function Sidebar() {
   const { usuario, pantallas, logout } = useAuthStore();
   const navigate = useNavigate();
@@ -55,15 +69,13 @@ export default function Sidebar() {
 
       {/* Usuario */}
       <div className="p-4 border-t border-gray-100">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 rounded-full bg-vida-green flex items-center justify-center text-white font-bold text-sm shrink-0">
-            {usuario?.Nombre?.[0]}{usuario?.Apellidos?.[0]}
-          </div>
+        <NavLink to="/perfil" className="flex items-center gap-3 mb-3 hover:bg-gray-50 rounded-xl p-2 transition-colors cursor-pointer">
+          <Avatar nombre={usuario?.Nombre} apellidos={usuario?.Apellidos} />
           <div className="min-w-0">
             <p className="text-sm font-bold text-gray-800 truncate">{usuario?.Nombre} {usuario?.Apellidos}</p>
             <p className="text-xs text-gray-400 truncate">Rol: {usuario?.TipoUsuario}</p>
           </div>
-        </div>
+        </NavLink>
         <button onClick={handleLogout}
           className="w-full flex items-center gap-2 text-sm text-gray-500 hover:text-red-500 hover:bg-red-50 px-3 py-2 rounded-lg transition-all font-semibold">
           <LogOut size={15} />
