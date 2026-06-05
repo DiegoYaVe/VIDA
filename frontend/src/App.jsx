@@ -7,16 +7,24 @@ import Dashboard from './pages/Dashboard.jsx';
 import Usuarios  from './pages/Usuarios.jsx';
 import Activar   from './pages/Activar.jsx';
 import Layout    from './components/Layout.jsx';
+import CambiarPassword from './pages/CambiarPassword.jsx';
 
-function ProtectedRoute({ children }) {
-  const { accessToken } = useAuthStore();
+
+function ProtectedRoute({ children, skipCambiarPass = false }) {
+  const { accessToken, usuario } = useAuthStore();
   if (!accessToken) return <Navigate to="/login" replace />;
+  if (!skipCambiarPass && usuario?.CambiarPass) {
+    return <Navigate to="/cambiar-password" replace />;
+  }
   return children;
 }
 
 function PublicRoute({ children }) {
-  const { accessToken } = useAuthStore();
-  if (accessToken) return <Navigate to="/dashboard" replace />;
+  const { accessToken, usuario } = useAuthStore();
+  if (accessToken) {
+    if (usuario?.CambiarPass) return <Navigate to="/cambiar-password" replace />;
+    return <Navigate to="/dashboard" replace />;
+  }
   return children;
 }
 
@@ -72,6 +80,10 @@ export default function App() {
 
         <Route path="/admin" element={
           <ProtectedRoute><Layout><Usuarios /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/cambiar-password" element={
+          <ProtectedRoute skipCambiarPass={true}><CambiarPassword /></ProtectedRoute>
         } />
 
         {[

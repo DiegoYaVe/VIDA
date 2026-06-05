@@ -17,7 +17,16 @@ export default function Login() {
     e.preventDefault();
     clearError();
     const ok = await login(cve, pass);
-    if (ok) navigate('/dashboard');
+    if (ok) {
+      const estado = useAuthStore.getState();
+      console.log('Usuario en store:', estado.usuario);
+      console.log('CambiarPass:', estado.usuario?.CambiarPass);
+      if (estado.usuario?.CambiarPass) {
+        navigate('/cambiar-password');
+      } else {
+        navigate('/dashboard');
+      }
+    }
   };
 
   return (
