@@ -8,6 +8,9 @@ import { authRoutes } from './routes/auth.routes.js';
 import { dashboardRoutes } from './routes/dashboard.routes.js';
 import { usuariosRoutes } from './routes/usuarios.routes.js';
 import { perfilRoutes } from './routes/perfil.routes.js';
+import { inventarioRoutes } from './routes/inventario.routes.js';
+import { sucursalesRoutes } from './routes/sucursales.routes.js';
+import { proveedoresRoutes } from './routes/proveedores.routes.js';
 import multipart from '@fastify/multipart';
 import staticFiles from '@fastify/static';
 import { fileURLToPath } from 'url';
@@ -54,7 +57,10 @@ fastify.register(authRoutes,      { prefix: '/api' });
 fastify.register(dashboardRoutes, { prefix: '/api' });
 fastify.register(usuariosRoutes, { prefix: '/api' });
 
-fastify.register(perfilRoutes, { prefix: '/api' });
+fastify.register(perfilRoutes,    { prefix: '/api' });
+fastify.register(inventarioRoutes,  { prefix: '/api' });
+fastify.register(sucursalesRoutes,  { prefix: '/api' });
+fastify.register(proveedoresRoutes, { prefix: '/api' });
 
 // Arrancar
 const PORT = process.env.PORT || 3001;

@@ -8,7 +8,9 @@ import Usuarios  from './pages/Usuarios.jsx';
 import Activar   from './pages/Activar.jsx';
 import Layout    from './components/Layout.jsx';
 import CambiarPassword from './pages/CambiarPassword.jsx';
-import Perfil from './pages/Perfil.jsx';
+import Perfil      from './pages/Perfil.jsx';
+import Inventario   from './pages/Inventario.jsx';
+import Proveedores  from './pages/Proveedores.jsx';
 
 function ProtectedRoute({ children, skipCambiarPass = false }) {
   const { accessToken, usuario } = useAuthStore();
@@ -90,11 +92,18 @@ export default function App() {
           <ProtectedRoute><Layout><Perfil /></Layout></ProtectedRoute>
         } />
 
+        <Route path="/inventarios" element={
+          <ProtectedRoute><Layout><Inventario /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/proveedores" element={
+          <ProtectedRoute><Layout><Proveedores /></Layout></ProtectedRoute>
+        } />
+
         {[
           { path:'/catalogos',   nombre:'Catálogos' },
           { path:'/precios',     nombre:'Precios y Promociones' },
-          { path:'/proveedores', nombre:'Proveedores' },
-          { path:'/inventarios', nombre:'Inventarios' },
+          // inventarios ya tiene ruta propia
           { path:'/sucursales',  nombre:'Puntos de Venta' },
           { path:'/pedidos',     nombre:'Pedidos' },
           { path:'/logistica',   nombre:'Repartidores y Logística' },
