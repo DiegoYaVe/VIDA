@@ -3,6 +3,7 @@ import 'dotenv/config';
 import Fastify from 'fastify';
 import fjwt from '@fastify/jwt';
 import cors from '@fastify/cors';
+import fws from '@fastify/websocket';
 import { getPool } from './db/sqlserver.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { dashboardRoutes } from './routes/dashboard.routes.js';
@@ -11,6 +12,14 @@ import { perfilRoutes } from './routes/perfil.routes.js';
 import { inventarioRoutes } from './routes/inventario.routes.js';
 import { sucursalesRoutes } from './routes/sucursales.routes.js';
 import { proveedoresRoutes } from './routes/proveedores.routes.js';
+import { pedidosRoutes } from './routes/pedidos.routes.js';
+import { reportesRoutes }   from './routes/reportes.routes.js';
+import { heartbeatRoutes }  from './routes/heartbeat.routes.js';
+import { cajaRoutes }       from './routes/caja.routes.js';
+import { deliveryRoutes }   from './routes/delivery.routes.js';
+import { marcarInactivos }  from './controllers/heartbeat.controller.js';
+import { expirarPedidosVencidos } from './controllers/pedidos.controller.js';
+import { wsRoutes } from './ws/ws.routes.js';
 import multipart from '@fastify/multipart';
 import staticFiles from '@fastify/static';
 import { fileURLToPath } from 'url';
@@ -21,13 +30,19 @@ const fastify = Fastify({ logger: true });
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // CORS — permite llamadas desde el frontend React
+const origensPermitidos = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 await fastify.register(cors, {
-  origin: [
-    'http://localhost:5173',
-    'http://israceballos-001-site17.mtempurl.com',
-  ],
+  origin: origensPermitidos,
   credentials: true,
 });
+
+// WebSocket
+await fastify.register(fws);
 
 // JWT
 await fastify.register(fjwt, {
@@ -61,6 +76,28 @@ fastify.register(perfilRoutes,    { prefix: '/api' });
 fastify.register(inventarioRoutes,  { prefix: '/api' });
 fastify.register(sucursalesRoutes,  { prefix: '/api' });
 fastify.register(proveedoresRoutes, { prefix: '/api' });
+fastify.register(pedidosRoutes,    { prefix: '/api' });
+fastify.register(reportesRoutes,   { prefix: '/api' });
+fastify.register(heartbeatRoutes,  { prefix: '/api' });
+fastify.register(cajaRoutes,       { prefix: '/api' });
+fastify.register(deliveryRoutes,   { prefix: '/api' });
+fastify.register(wsRoutes,         { prefix: '/api' });
+
+// Job: expirar pedidos vencidos cada 60 segundos
+setInterval(async () => {
+  try {
+    const pool = await getPool();
+    await expirarPedidosVencidos(pool, fastify.log);
+  } catch {}
+}, 60_000);
+
+// Job: detectar sucursales sin heartbeat cada 60 segundos
+setInterval(async () => {
+  try {
+    const pool = await getPool();
+    await marcarInactivos(pool, fastify.log);
+  } catch {}
+}, 60_000);
 
 // Arrancar
 const PORT = process.env.PORT || 3001;

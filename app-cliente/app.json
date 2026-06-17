@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "VIDA Compras",
+    "slug": "vida-cliente",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#1A6A9A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.vida.cliente",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para calcular la distancia a las sucursales y para que el repartidor pueda entregarte el pedido."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1A6A9A",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.vida.cliente",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Necesitamos tu ubicación para el seguimiento del pedido."
+        }
+      ],
+      "expo-router",
+      "expo-status-bar",
+      "expo-web-browser"
+    ],
+    "scheme": "vida-cliente"
+  }
+}

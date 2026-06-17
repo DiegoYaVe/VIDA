@@ -99,10 +99,23 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
     try {
       if (esEdicion) {
         await api.put(`/usuarios/${usuario.idUsuario}`, form);
+        onSaved();
       } else {
-        await api.post('/usuarios', form);
+        const res = await api.post('/usuarios', form);
+        // Si no se pudo enviar email, mostrar la contraseña temporal al admin
+        if (res.data.passwordTemporal) {
+          const pass = res.data.passwordTemporal;
+          setTimeout(() => {
+            alert(
+              `✅ Usuario creado exitosamente.\n\n` +
+              `⚠️ No se configuró correo, así que la contraseña NO se envió por email.\n\n` +
+              `🔑 Contraseña temporal:\n${pass}\n\n` +
+              `Compártela manualmente con el usuario. Deberá cambiarla al primer inicio de sesión.`
+            );
+          }, 100);
+        }
+        onSaved();
       }
-      onSaved();
     } catch (err) {
       setError(err.response?.data?.error || 'Error al guardar usuario');
     } finally {
@@ -356,8 +369,8 @@ export default function Usuarios() {
 
   const cargarSucursales = async () => {
     try {
-      const r = await api.get('/dashboard/stats');
-      setSucursales(r.data.sucursales || []);
+      const r = await api.get('/sucursales/puntos-venta');
+      setSucursales(r.data.sucursales || r.data || []);
     } catch {}
   };
 

@@ -50,19 +50,32 @@ export default function Login() {
 
         {/* Logo */}
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center">
-              <span className="text-white font-black text-2xl">V</span>
+          {/* Logo imagen — guarda el archivo como /public/logo-login.png (logo blanco sobre fondo oscuro) */}
+          <img
+            src="/logo-login.png"
+            alt="Comercializadora VIDA"
+            className="h-24 w-auto object-contain drop-shadow-lg"
+            onError={e => {
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'block';
+            }}
+          />
+          {/* Fallback si no existe la imagen */}
+          <div style={{ display: 'none' }}>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-14 h-14 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center">
+                <span className="text-white font-black text-2xl">V</span>
+              </div>
+              <div>
+                <p className="text-white/70 text-xs font-semibold tracking-widest uppercase">Comercializadora</p>
+                <p className="text-white font-black text-3xl leading-none">VIDA</p>
+              </div>
             </div>
-            <div>
-              <p className="text-white/70 text-xs font-semibold tracking-widest uppercase">Comercializadora</p>
-              <p className="text-white font-black text-3xl leading-none">VIDA</p>
+            <div className="mt-2 bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1 inline-block">
+              <p className="text-white text-xs font-semibold tracking-wider">PLATAFORMA DE DESARROLLO EMPRESARIAL</p>
             </div>
+            <p className="text-white/60 text-xs mt-1">Por Venezuela, sus productos y su gente</p>
           </div>
-          <div className="mt-2 bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1 inline-block">
-            <p className="text-white text-xs font-semibold tracking-wider">PLATAFORMA DE DESARROLLO EMPRESARIAL</p>
-          </div>
-          <p className="text-white/60 text-xs mt-1">Por Venezuela, sus productos y su gente</p>
         </div>
 
         {/* Tagline */}
@@ -98,13 +111,25 @@ export default function Login() {
         <div className="w-full max-w-md">
 
           {/* Logo mobile */}
-          <div className="lg:hidden flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 bg-vida-green rounded-xl flex items-center justify-center">
-              <span className="text-white font-black text-lg">V</span>
-            </div>
-            <div>
-              <p className="text-gray-400 text-xs font-semibold tracking-wider uppercase">Comercializadora</p>
-              <p className="text-vida-green font-black text-xl">VIDA</p>
+          <div className="lg:hidden flex items-center justify-center mb-8">
+            <img
+              src="/logo-sidebar.png"
+              alt="Comercializadora VIDA"
+              className="h-16 w-auto object-contain"
+              onError={e => {
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'flex';
+              }}
+            />
+            {/* Fallback mobile */}
+            <div style={{ display: 'none' }} className="items-center gap-3">
+              <div className="w-10 h-10 bg-vida-green rounded-xl flex items-center justify-center">
+                <span className="text-white font-black text-lg">V</span>
+              </div>
+              <div>
+                <p className="text-gray-400 text-xs font-semibold tracking-wider uppercase">Comercializadora</p>
+                <p className="text-vida-green font-black text-xl">VIDA</p>
+              </div>
             </div>
           </div>
 

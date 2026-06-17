@@ -1,365 +1,533 @@
 // src/pages/Dashboard.jsx
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore.js';
+import { useWebSocket } from '../hooks/useWebSocket.js';
 import api from '../services/api.js';
 import {
-  DollarSign, ShoppingCart, Store, Package, Truck,
-  TrendingUp, TrendingDown, Bell, Download, AlertTriangle,
-  Clock, MapPin, Users, Activity
+  DollarSign, ShoppingCart, Store, Package,
+  TrendingUp, TrendingDown, AlertTriangle,
+  Clock, Banknote, CreditCard, Activity,
+  RefreshCw, ArrowRight, BarChart2, Wifi, WifiOff,
 } from 'lucide-react';
 import {
-  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 
-// Datos demo para gráficas (se reemplazarán con datos reales al agregar módulo de ventas)
-const ventasDiarias = [
-  { dia:'01 May', ventas:12400, pedidos:42 },
-  { dia:'05 May', ventas:15800, pedidos:61 },
-  { dia:'10 May', ventas:11200, pedidos:38 },
-  { dia:'15 May', ventas:18600, pedidos:72 },
-  { dia:'20 May', ventas:16900, pedidos:65 },
-  { dia:'23 May', ventas:20100, pedidos:89 },
-];
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const USD  = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const FMT  = (v) => Number(v || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 });
+const HORA = (f) => f ? new Date(f).toLocaleTimeString('es-VE', { hour:'2-digit', minute:'2-digit' }) : '';
+const DIA  = (f) => f ? new Date(f).toLocaleDateString('es-VE', { weekday:'short', day:'2-digit', month:'short' }) : '';
 
-const ventasCat = [
-  { name:'Alimentos', value:45, color:'#27AE60', monto:'$39,445.44' },
-  { name:'Bebidas',   value:25, color:'#2980B9', monto:'$21,913.58' },
-  { name:'Lácteos',   value:15, color:'#8E44AD', monto:'$13,148.15' },
-  { name:'Limpieza',  value:10, color:'#E67E22', monto:'$8,587.15'  },
-  { name:'Otros',     value:5,  color:'#95A5A6', monto:'$4,560.00'  },
-];
+const METODO_COLOR = { EFECTIVO:'text-amber-600', TARJETA:'text-blue-600', MIXTO:'text-purple-600' };
+const METODO_BG    = { EFECTIVO:'bg-amber-50', TARJETA:'bg-blue-50', MIXTO:'bg-purple-50' };
 
-const estadoPedidos = [
-  { name:'Entregados', value:932,  pct:'74.7%', color:'#27AE60' },
-  { name:'En camino',  value:184,  pct:'14.7%', color:'#2980B9' },
-  { name:'Pendientes', value:82,   pct:'6.6%',  color:'#F39C12' },
-  { name:'Cancelados', value:50,   pct:'4.0%',  color:'#E74C3C' },
-];
+// ─── Componentes ─────────────────────────────────────────────────────────────
 
-const accesosRapidos = [
-  { icon: Package,      label: 'Nuevo Producto',  color: '#8E44AD' },
-  { icon: ShoppingCart, label: 'Nuevo Pedido',     color: '#2980B9' },
-  { icon: Store,        label: 'Nueva Sucursal',   color: '#27AE60' },
-  { icon: TrendingUp,   label: 'Solicitar Stock',  color: '#E67E22' },
-  { icon: Users,        label: 'Registrar Prov.',  color: '#1ABC9C' },
-  { icon: Activity,     label: 'Reporte Ventas',   color: '#E74C3C' },
-  { icon: Users,        label: 'Usuarios',         color: '#34495E' },
-];
-
-function KpiCard({ icon: Icon, title, valor, variacion, positivo, color, sub }) {
+function Spinner() {
   return (
-    <div className="kpi-card">
+    <div className="flex-1 flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-10 h-10 border-4 border-vida-blue/30 border-t-vida-blue rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-gray-400 font-semibold text-sm">Cargando dashboard…</p>
+      </div>
+    </div>
+  );
+}
+
+function KpiCard({ icon: Icon, label, valor, sub, variacion, color, onClick }) {
+  const positivo = variacion >= 0;
+  return (
+    <div onClick={onClick}
+      className={`bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex items-center gap-4 ${onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}>
       <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
-        style={{ backgroundColor: `${color}15` }}>
+        style={{ backgroundColor: `${color}18` }}>
         <Icon size={22} style={{ color }} />
       </div>
-      <div className="min-w-0">
-        <p className="text-xs text-gray-400 font-semibold truncate">{title}</p>
-        <p className="text-xl font-black text-gray-800 leading-tight">{valor}</p>
-        <div className="flex items-center gap-1 mt-0.5">
-          {positivo
-            ? <TrendingUp size={12} className="text-green-500" />
-            : <TrendingDown size={12} className="text-red-400" />}
-          <span className={`text-xs font-bold ${positivo ? 'text-green-500' : 'text-red-400'}`}>
-            {variacion}
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide truncate">{label}</p>
+        <p className="text-xl font-black text-gray-900 leading-tight truncate">{valor}</p>
+        {sub && <p className="text-xs text-gray-400 mt-0.5 truncate">{sub}</p>}
+        {variacion !== undefined && (
+          <div className="flex items-center gap-1 mt-0.5">
+            {positivo
+              ? <TrendingUp size={11} className="text-green-500" />
+              : <TrendingDown size={11} className="text-red-400" />}
+            <span className={`text-xs font-bold ${positivo ? 'text-green-500' : 'text-red-400'}`}>
+              {positivo ? '+' : ''}{variacion}% vs ayer
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SeccionTitulo({ icon: Icon, titulo, linkLabel, linkTo }) {
+  const navigate = useNavigate();
+  return (
+    <div className="flex items-center justify-between mb-3">
+      <h3 className="font-black text-gray-800 text-sm flex items-center gap-2">
+        <Icon size={15} className="text-vida-blue" />
+        {titulo}
+      </h3>
+      {linkLabel && (
+        <button onClick={() => navigate(linkTo)}
+          className="text-xs text-vida-blue font-bold hover:underline flex items-center gap-1">
+          {linkLabel} <ArrowRight size={11} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VISTA ADMIN (SUPER_ADMIN, ADMIN_PAIS, ADMIN)
+// ─────────────────────────────────────────────────────────────────────────────
+function DotConexion({ online }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full
+      ${online ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+      {online ? 'Online' : 'Offline'}
+    </span>
+  );
+}
+
+function PanelConexion({ sucursales }) {
+  const online  = sucursales.filter(s => s.StatusConexion === 'ONLINE');
+  const offline = sucursales.filter(s => s.StatusConexion !== 'ONLINE');
+
+  const hace = (fecha) => {
+    if (!fecha) return 'Nunca';
+    const mins = Math.floor((Date.now() - new Date(fecha)) / 60000);
+    if (mins < 1)  return 'Ahora mismo';
+    if (mins < 60) return `Hace ${mins} min`;
+    return `Hace ${Math.floor(mins/60)}h`;
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h3 className="font-black text-gray-800 text-sm flex items-center gap-2">
+          <Wifi size={15} className="text-vida-blue" />
+          Estado de conexión
+        </h3>
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1 text-xs font-semibold text-green-700">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            {online.length} online
           </span>
-          {sub && <span className="text-xs text-gray-400 truncate">{sub}</span>}
+          <span className="flex items-center gap-1 text-xs font-semibold text-gray-400">
+            <span className="w-2 h-2 rounded-full bg-gray-300" />
+            {offline.length} offline
+          </span>
+        </div>
+      </div>
+      <div className="divide-y divide-gray-50 max-h-64 overflow-y-auto">
+        {sucursales.map(s => (
+          <div key={s.idPuntoVenta}
+            className={`flex items-center gap-3 px-5 py-3 ${s.StatusConexion === 'ONLINE' ? '' : 'opacity-60'}`}>
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0
+              ${s.StatusConexion === 'ONLINE' ? 'bg-green-100' : 'bg-gray-100'}`}>
+              {s.StatusConexion === 'ONLINE'
+                ? <Wifi size={14} className="text-green-600" />
+                : <WifiOff size={14} className="text-gray-400" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-800 truncate">{s.Nombre}</p>
+              <p className="text-xs text-gray-400">{s.Ciudad || s.Estado || '—'} · {hace(s.UltimoHeartbeat)}</p>
+            </div>
+            <DotConexion online={s.StatusConexion === 'ONLINE'} />
+          </div>
+        ))}
+        {sucursales.length === 0 && (
+          <p className="text-center text-gray-300 py-6 text-sm">Sin sucursales registradas</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DashboardAdmin({ stats, conexiones, setConexiones }) {
+  const navigate = useNavigate();
+  const { ventas, graficaDiaria, topProductos, topSucursales, stockBajo, pedidosActivos, recientes, globales } = stats;
+  const sucursalesConexion = conexiones || stats.sucursalesConexion || [];
+
+  const grafData = (graficaDiaria || []).map(r => ({
+    fecha: new Date(r.Fecha).toLocaleDateString('es-VE', { weekday:'short', day:'2-digit' }),
+    ventas: Number(r.TotalUSD || 0),
+    num:    r.NumVentas,
+  }));
+
+  const maxSuc = topSucursales?.[0]?.TotalUSD || 1;
+
+  return (
+    <div className="space-y-5">
+
+      {/* KPIs principales */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard icon={DollarSign}   label="Ventas hoy"        valor={USD(ventas.hoy)}      variacion={ventas.variacion} color="#27AE60"
+          sub={`${ventas.numHoy} transacciones`} onClick={() => navigate('/ventas')} />
+        <KpiCard icon={Banknote}     label="Efectivo hoy"      valor={USD(ventas.efectivoHoy)} color="#F39C12"
+          sub="Cobrado en efectivo" />
+        <KpiCard icon={CreditCard}   label="Tarjeta hoy"       valor={USD(ventas.tarjetaHoy)}  color="#2980B9"
+          sub="Cobrado con tarjeta" />
+        <KpiCard icon={ShoppingCart} label="Pedidos activos"   valor={pedidosActivos?.Total || 0} color="#8E44AD"
+          sub={`${pedidosActivos?.Nuevos || 0} nuevos · ${pedidosActivos?.EnCamino || 0} en camino`}
+          onClick={() => navigate('/pedidos')} />
+      </div>
+
+      {/* KPIs secundarios */}
+      <div className="grid grid-cols-3 gap-3">
+        <KpiCard icon={Wifi}   label="Sucursales online"
+          valor={`${globales?.SucursalesOnline || 0} / ${globales?.TotalSucursales || 0}`}
+          color="#1ABC9C"
+          sub={globales?.SucursalesOnline === globales?.TotalSucursales ? 'Todas conectadas' : `${(globales?.TotalSucursales||0)-(globales?.SucursalesOnline||0)} sin conexión`}
+          onClick={() => navigate('/sucursales')} />
+        <KpiCard icon={Package} label="Productos"   valor={globales?.TotalProductos  || '—'} color="#E67E22"
+          sub="En inventario" onClick={() => navigate('/inventarios')} />
+        <KpiCard icon={AlertTriangle} label="Bajo stock" valor={stockBajo?.total || 0} color="#E74C3C"
+          sub="Productos por reponer" onClick={() => navigate('/reportes')} />
+      </div>
+
+      {/* Gráfica + Top sucursales */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* Gráfica 7 días */}
+        <div className="lg:col-span-2 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <SeccionTitulo icon={TrendingUp} titulo="Ventas últimos 7 días (USD)" linkLabel="Reporte completo" linkTo="/reportes" />
+          {grafData.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-gray-300 text-sm">Sin ventas en el período</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={grafData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
+                <XAxis dataKey="fecha" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} />
+                <Tooltip formatter={(v, n) => [n === 'ventas' ? USD(v) : v, n === 'ventas' ? 'Total USD' : 'N° ventas']} />
+                <Legend formatter={v => v === 'ventas' ? 'Total USD' : 'N° ventas'} wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="ventas" fill="#1A6A9A" radius={[4,4,0,0]} name="ventas" />
+                <Bar dataKey="num"    fill="#27AE60" radius={[4,4,0,0]} name="num" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Top sucursales */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <SeccionTitulo icon={Store} titulo="Top sucursales hoy" linkLabel="Ver reportes" linkTo="/reportes" />
+          {topSucursales?.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-gray-300 text-sm">Sin ventas hoy</div>
+          ) : (
+            <div className="space-y-3 mt-1">
+              {topSucursales.map((s, i) => (
+                <div key={i}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="font-semibold text-gray-700 truncate max-w-[140px]">{s.Nombre}</span>
+                    <span className="font-bold text-gray-900">{USD(s.TotalUSD)}</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.max(4,(s.TotalUSD/maxSuc)*100)}%`, background:'linear-gradient(90deg,#1A6A9A,#27AE60)' }} />
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{s.NumVentas} ventas · {s.Ciudad || s.Estado}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Panel de conexión de sucursales */}
+      {sucursalesConexion.length > 0 && (
+        <PanelConexion sucursales={sucursalesConexion} />
+      )}
+
+      {/* Top productos + Bajo stock + Actividad */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* Top 5 productos hoy */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <SeccionTitulo icon={Package} titulo="Top productos hoy" linkLabel="Ver ranking" linkTo="/reportes" />
+          {topProductos?.length === 0 ? (
+            <p className="text-gray-300 text-sm text-center py-6">Sin ventas hoy</p>
+          ) : (
+            <div className="space-y-2">
+              {topProductos.map((p, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0
+                    ${i===0?'bg-amber-100 text-amber-700':i===1?'bg-gray-100 text-gray-500':i===2?'bg-orange-100 text-orange-600':'bg-gray-50 text-gray-400'}`}>
+                    {i+1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-800 truncate">{p.NombreProducto}</p>
+                    <p className="text-[10px] text-gray-400">{FMT(p.TotalCantidad)} uds.</p>
+                  </div>
+                  <span className="text-xs font-bold text-gray-900 shrink-0">{USD(p.TotalUSD)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Bajo stock */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <SeccionTitulo icon={AlertTriangle} titulo={`Bajo stock (${stockBajo?.total || 0})`} linkLabel="Ver inventario" linkTo="/reportes" />
+          {stockBajo?.detalle?.length === 0 ? (
+            <p className="text-green-600 text-sm text-center py-6 font-semibold">✓ Todo el stock está bien</p>
+          ) : (
+            <div className="space-y-2">
+              {stockBajo.detalle.map((s, i) => (
+                <div key={i} className="flex items-center gap-2 p-2 rounded-xl bg-red-50 border border-red-100">
+                  <AlertTriangle size={13} className="text-red-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-red-800 truncate">{s.Producto}</p>
+                    <p className="text-[10px] text-red-400">{s.Sucursal} · Stock: {FMT(s.Stock)} / Mín: {FMT(s.StockMinimo)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Actividad reciente */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <SeccionTitulo icon={Activity} titulo="Últimas ventas" linkLabel="Ver todas" linkTo="/ventas" />
+          {recientes?.length === 0 ? (
+            <p className="text-gray-300 text-sm text-center py-6">Sin ventas registradas</p>
+          ) : (
+            <div className="space-y-2">
+              {recientes.map((r, i) => (
+                <div key={i} className={`flex items-center gap-2.5 p-2 rounded-xl ${METODO_BG[r.MetodoPago] || 'bg-gray-50'}`}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-gray-900">{USD(r.TotalUSD)}</p>
+                    <p className="text-[10px] text-gray-400 truncate">{r.Sucursal} · {HORA(r.FechaAlta)}</p>
+                  </div>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${METODO_COLOR[r.MetodoPago] || 'text-gray-500'}`}>
+                    {r.MetodoPago}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-export default function Dashboard() {
-  const { usuario } = useAuthStore();
-  const [stats, setStats]   = useState(null);
-  const [loading, setLoading] = useState(true);
-  const hoy = new Date().toLocaleDateString('es-VE', { day:'2-digit', month:'short', year:'numeric' });
+// ─────────────────────────────────────────────────────────────────────────────
+// VISTA CAJERO (SUPERVISOR, CAJERO, CASHIER)
+// ─────────────────────────────────────────────────────────────────────────────
+function DashboardCajero({ stats }) {
+  const navigate = useNavigate();
+  const { ventas, graficaDiaria, topProductos, stockBajo, pedidosActivos, recientes } = stats;
 
-  useEffect(() => {
-    api.get('/dashboard/stats')
-      .then(r => setStats(r.data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+  const grafData = (graficaDiaria || []).map(r => ({
+    fecha: new Date(r.Fecha).toLocaleDateString('es-VE', { weekday:'short', day:'2-digit' }),
+    ventas: Number(r.TotalUSD || 0),
+    num:    r.NumVentas,
+  }));
 
-  if (loading) return (
-    <div className="flex-1 flex items-center justify-center">
-      <div className="text-center">
-        <svg className="animate-spin h-10 w-10 text-vida-green mx-auto mb-3" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-        </svg>
-        <p className="text-gray-400 font-semibold">Cargando dashboard...</p>
+  return (
+    <div className="space-y-5">
+
+      {/* KPIs del turno */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard icon={DollarSign}   label="Total hoy"       valor={USD(ventas.hoy)}         variacion={ventas.variacion} color="#27AE60"
+          sub={`${ventas.numHoy} transacciones`} />
+        <KpiCard icon={Banknote}     label="Efectivo"        valor={USD(ventas.efectivoHoy)}  color="#F39C12"  sub="Cobrado en efectivo" />
+        <KpiCard icon={CreditCard}   label="Tarjeta"         valor={USD(ventas.tarjetaHoy)}   color="#2980B9"  sub="Cobrado con tarjeta" />
+        <KpiCard icon={ShoppingCart} label="Pedidos activos" valor={pedidosActivos?.Total || 0} color="#8E44AD"
+          sub={`${pedidosActivos?.Nuevos || 0} nuevos`} onClick={() => navigate('/pedidos')} />
+      </div>
+
+      {/* Gráfica de la semana + Actividad */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <SeccionTitulo icon={TrendingUp} titulo="Mis ventas — últimos 7 días" />
+          {grafData.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-gray-300 text-sm">Sin ventas en el período</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={grafData} margin={{ top:5, right:10, bottom:0, left:0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
+                <XAxis dataKey="fecha" tick={{ fontSize:11 }} />
+                <YAxis tick={{ fontSize:11 }} tickFormatter={v => `$${v}`} />
+                <Tooltip formatter={(v,n) => [n==='ventas' ? USD(v) : v, n==='ventas' ? 'Total' : 'Ventas']} />
+                <Bar dataKey="ventas" fill="#1A6A9A" radius={[4,4,0,0]} name="ventas" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Últimas ventas */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <SeccionTitulo icon={Activity} titulo="Últimas ventas" linkLabel="Ver historial" linkTo="/ventas" />
+          {recientes?.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-gray-300 text-sm">Sin ventas hoy</div>
+          ) : (
+            <div className="space-y-2 overflow-y-auto max-h-52">
+              {recientes.map((r, i) => (
+                <div key={i} className={`flex items-center gap-3 p-2.5 rounded-xl ${METODO_BG[r.MetodoPago] || 'bg-gray-50'}`}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900">{USD(r.TotalUSD)}</p>
+                    <p className="text-[10px] text-gray-400">{DIA(r.FechaAlta)} {HORA(r.FechaAlta)}</p>
+                  </div>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-lg shrink-0 ${METODO_COLOR[r.MetodoPago] || 'text-gray-500'}`}>
+                    {r.MetodoPago}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Top productos + Bajo stock */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <SeccionTitulo icon={Package} titulo="Productos más vendidos hoy" />
+          {topProductos?.length === 0 ? (
+            <p className="text-gray-300 text-sm text-center py-6">Sin ventas hoy</p>
+          ) : (
+            <div className="space-y-2.5">
+              {topProductos.map((p, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black shrink-0
+                    ${i===0?'bg-amber-100 text-amber-700':i===1?'bg-gray-100 text-gray-600':'bg-gray-50 text-gray-400'}`}>
+                    {i+1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{p.NombreProducto}</p>
+                    <p className="text-xs text-gray-400">{FMT(p.TotalCantidad)} uds.</p>
+                  </div>
+                  <span className="text-sm font-bold text-gray-900">{USD(p.TotalUSD)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <SeccionTitulo icon={AlertTriangle} titulo={`Alertas de stock (${stockBajo?.total || 0})`} linkLabel="Ver inventario" linkTo="/inventarios" />
+          {stockBajo?.detalle?.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-2">
+              <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                <Package size={20} className="text-green-600" />
+              </div>
+              <p className="text-green-700 font-bold text-sm">Stock en orden</p>
+              <p className="text-gray-400 text-xs">Todos los productos tienen stock suficiente</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {stockBajo.detalle.map((s, i) => (
+                <div key={i} className="p-3 rounded-xl bg-red-50 border border-red-100">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={14} className="text-red-500 shrink-0" />
+                    <p className="text-sm font-semibold text-red-800 flex-1 truncate">{s.Producto}</p>
+                    <span className="text-xs font-bold text-red-600 shrink-0">{FMT(s.Stock)} uds.</span>
+                  </div>
+                  <p className="text-xs text-red-400 mt-0.5 ml-5">Mínimo requerido: {FMT(s.StockMinimo)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PÁGINA PRINCIPAL
+// ─────────────────────────────────────────────────────────────────────────────
+export default function Dashboard() {
+  const { usuario } = useAuthStore();
+  const [stats, setStats]     = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState(null);
+
+  const esAdmin  = ['SUPER_ADMIN','ADMIN_PAIS','ADMIN'].includes(usuario?.TipoUsuario);
+
+  // Estado de conexión de sucursales (actualizado en tiempo real vía WS)
+  const [conexiones, setConexiones] = useState([]);
+
+  const cargar = useCallback(async (silencioso = false) => {
+    if (!silencioso) setLoading(true);
+    try {
+      const r = await api.get('/dashboard/stats');
+      setStats(r.data);
+      if (r.data.sucursalesConexion) setConexiones(r.data.sucursalesConexion);
+      setLastUpdate(new Date());
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Actualizar dot de conexión en tiempo real sin recargar todo
+  const handleWs = useCallback((msg) => {
+    if (msg.tipo === 'sucursal:online' || msg.tipo === 'sucursal:offline') {
+      const nuevoStatus = msg.tipo === 'sucursal:online' ? 'ONLINE' : 'OFFLINE';
+      setConexiones(prev => prev.map(s =>
+        s.idPuntoVenta === msg.idPuntoVenta
+          ? { ...s, StatusConexion: nuevoStatus, UltimoHeartbeat: new Date().toISOString() }
+          : s
+      ));
+    }
+  }, []);
+
+  useWebSocket(handleWs, esAdmin);
+
+  useEffect(() => {
+    cargar();
+    // Auto-refresh cada 2 minutos
+    const t = setInterval(() => cargar(true), 120_000);
+    return () => clearInterval(t);
+  }, [cargar]);
+
+  const hoy = new Date().toLocaleDateString('es-VE', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50">
-      <div className="p-6 max-w-[1400px]">
-
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-black text-gray-800">Dashboard — MATRIZ</h1>
-            <p className="text-gray-400 text-sm font-semibold">Bienvenido, <span className="text-vida-green">{usuario?.Nombre}</span></p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="bg-white border border-gray-200 rounded-xl px-4 py-2 flex items-center gap-2 text-sm text-gray-500 font-semibold">
-              <Clock size={15} />
-              01 May 2026 – {hoy}
-            </div>
-            <button className="relative bg-white border border-gray-200 rounded-xl p-2.5 hover:bg-gray-50">
-              <Bell size={18} className="text-gray-500" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center">8</span>
-            </button>
-            <button className="btn-primary text-sm py-2">
-              <Download size={15} />
-              Exportar
-            </button>
-          </div>
+      {/* Header */}
+      <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+        <div>
+          <h1 className="text-xl font-black text-gray-900 flex items-center gap-2">
+            <BarChart2 size={20} className="text-vida-blue" />
+            Dashboard
+          </h1>
+          <p className="text-xs text-gray-400 mt-0.5 capitalize">{hoy} · Bienvenido, <span className="text-vida-green font-bold">{usuario?.Nombre}</span></p>
         </div>
-
-        {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          <KpiCard icon={DollarSign}  title="Ventas Totales"     valor="$87,654.32" variacion="18.6%" positivo sub="período anterior" color="#27AE60" />
-          <KpiCard icon={ShoppingCart}title="Pedidos Totales"    valor="1,248"      variacion="24.3%" positivo sub="período anterior" color="#2980B9" />
-          <KpiCard icon={Store}       title="Puntos de Venta"    valor={`${stats?.kpis?.puntosDeVenta?.activos ?? 0}`}   variacion="" positivo={true} sub={`Activos de ${stats?.kpis?.puntosDeVenta?.total ?? 0} registrados`} color="#8E44AD" />
-          <KpiCard icon={Package}     title="Productos"          valor={`${stats?.kpis?.usuarios?.total ?? 0}`}  variacion="" positivo={true} sub="Activos en inventario" color="#E67E22" />
-          <KpiCard icon={Truck}       title="Entregas Realizadas" valor="932"       variacion="21.4%" positivo sub="vs período anterior" color="#1ABC9C" />
+        <div className="flex items-center gap-3">
+          {lastUpdate && (
+            <span className="text-xs text-gray-400 flex items-center gap-1">
+              <Clock size={11} />
+              Actualizado {lastUpdate.toLocaleTimeString('es-VE', { hour:'2-digit', minute:'2-digit' })}
+            </span>
+          )}
+          <button onClick={() => cargar(true)} disabled={loading}
+            className="flex items-center gap-2 px-3 py-2 bg-vida-blue/10 hover:bg-vida-blue/20 text-vida-blue text-sm font-semibold rounded-xl transition-all">
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            Actualizar
+          </button>
         </div>
+      </div>
 
-        {/* Fila principal de gráficas */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-
-          {/* Ventas por día */}
-          <div className="lg:col-span-2 card">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-gray-700">Ventas y Pedidos por día</h3>
-              <select className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-500 font-semibold">
-                <option>Últimos 23 días</option>
-                <option>Últimos 7 días</option>
-                <option>Este mes</option>
-              </select>
-            </div>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={ventasDiarias}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="dia" tick={{ fontSize:11, fill:'#9CA3AF' }} />
-                <YAxis yAxisId="ventas" tick={{ fontSize:11, fill:'#9CA3AF' }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                <YAxis yAxisId="pedidos" orientation="right" tick={{ fontSize:11, fill:'#9CA3AF' }} />
-                <Tooltip formatter={(v,n) => n==='ventas' ? [`$${v.toLocaleString()}`,n] : [v,n]} />
-                <Legend wrapperStyle={{ fontSize:12 }} />
-                <Line yAxisId="ventas"  type="monotone" dataKey="ventas"  stroke="#27AE60" strokeWidth={2.5} dot={{ r:4 }} name="Ventas ($)" />
-                <Line yAxisId="pedidos" type="monotone" dataKey="pedidos" stroke="#2980B9" strokeWidth={2}   dot={{ r:3 }} name="Pedidos (#)" strokeDasharray="5 5" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Ventas por categoría */}
-          <div className="card">
-            <h3 className="font-black text-gray-700 mb-4">Ventas por Categoría</h3>
-            <ResponsiveContainer width="100%" height={160}>
-              <PieChart>
-                <Pie data={ventasCat} cx="50%" cy="50%" innerRadius={45} outerRadius={70}
-                  dataKey="value" paddingAngle={3}>
-                  {ventasCat.map((e, i) => <Cell key={i} fill={e.color} />)}
-                </Pie>
-                <Tooltip formatter={v => `${v}%`} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="space-y-1.5 mt-2">
-              {ventasCat.map(c => (
-                <div key={c.name} className="flex items-center gap-2 text-xs">
-                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: c.color }} />
-                  <span className="flex-1 text-gray-600 font-semibold">{c.name}</span>
-                  <span className="text-gray-400">{c.value}%</span>
-                  <span className="text-gray-700 font-bold">{c.monto}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Fila secundaria */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-
-          {/* Ventas por Punto de Venta */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-gray-700 text-sm">Ventas por Punto de Venta</h3>
-              <a href="#" className="text-xs text-vida-green font-bold hover:underline">Ver reporte</a>
-            </div>
-            {(stats?.sucursales || []).length === 0 ? (
-              <p className="text-xs text-gray-400 text-center py-4">Sin datos de sucursales</p>
-            ) : (
-              <div className="space-y-3">
-                {(stats?.sucursales || []).slice(0,5).map((s, i) => {
-                  const montos = [18564, 14235, 12856, 10235, 8125];
-                  const m = montos[i] || 5000;
-                  const max = 20000;
-                  return (
-                    <div key={s.idPuntoVenta}>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-gray-600 font-semibold truncate max-w-[160px]">{s.NomComercial || s.Nombre}</span>
-                        <span className="font-bold text-gray-800">${m.toLocaleString()}</span>
-                      </div>
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{
-                          width: `${(m/max)*100}%`,
-                          background: 'linear-gradient(90deg, #27AE60, #1ABC9C)'
-                        }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Estado de Pedidos */}
-          <div className="card">
-            <h3 className="font-black text-gray-700 text-sm mb-4">Estado de Pedidos</h3>
-            <ResponsiveContainer width="100%" height={160}>
-              <PieChart>
-                <Pie data={estadoPedidos} cx="50%" cy="50%" innerRadius={50} outerRadius={70}
-                  dataKey="value" paddingAngle={3}>
-                  {estadoPedidos.map((e, i) => <Cell key={i} fill={e.color} />)}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="grid grid-cols-2 gap-1.5 mt-2">
-              {estadoPedidos.map(e => (
-                <div key={e.name} className="flex items-center gap-1.5 text-xs">
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: e.color }} />
-                  <span className="text-gray-500">{e.name}</span>
-                  <span className="font-bold ml-auto">{e.pct}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Alertas */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-gray-700 text-sm">Alertas y Notificaciones</h3>
-              <a href="#" className="text-xs text-vida-green font-bold hover:underline">Ver todas</a>
-            </div>
-            <div className="space-y-3">
-              {[
-                { icon: AlertTriangle, color:'#F39C12', bg:'#FEF9E7', title:'Stock bajo', desc:`${stats?.sucursales?.length || 0} sucursales con productos bajos`, time:'Hace 10 min' },
-                { icon: ShoppingCart,  color:'#2980B9', bg:'#EBF5FB', title:'Pedido pendiente', desc:'23 pedidos en espera de aprobación', time:'Hace 25 min' },
-                { icon: Truck,         color:'#E74C3C', bg:'#FDEDEC', title:'Entregas retrasadas', desc:'5 entregas con retraso', time:'Hace 1 hora' },
-                { icon: Store,         color:'#8E44AD', bg:'#F4ECF7', title:'Punto de venta inactivo', desc:'1 sucursal sin conexión', time:'Hace 2 horas' },
-              ].map(a => (
-                <div key={a.title} className="flex gap-3 items-start">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ background: a.bg }}>
-                    <a.icon size={15} style={{ color: a.color }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-gray-700">{a.title}</p>
-                    <p className="text-xs text-gray-400 truncate">{a.desc}</p>
-                  </div>
-                  <span className="text-[10px] text-gray-300 shrink-0 whitespace-nowrap">{a.time}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Fila inferior */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-
-          {/* Accesos rápidos */}
-          <div className="card">
-            <h3 className="font-black text-gray-700 text-sm mb-4">Accesos Rápidos</h3>
-            <div className="grid grid-cols-4 gap-3">
-              {accesosRapidos.map(({ icon: Icon, label, color }) => (
-                <button key={label}
-                  className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-gray-50 transition-all group">
-                  <div className="w-11 h-11 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform"
-                    style={{ background: `${color}20` }}>
-                    <Icon size={20} style={{ color }} />
-                  </div>
-                  <span className="text-[11px] text-gray-500 font-semibold text-center leading-tight">{label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Actividad reciente */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-gray-700 text-sm">Actividad Reciente</h3>
-              <a href="#" className="text-xs text-vida-green font-bold hover:underline">Ver todas</a>
-            </div>
-            <div className="space-y-3">
-              {[
-                { color:'#27AE60', text:'Administrador aprobó el pedido #PED-000123',        time:'Hace 5 min'   },
-                { color:'#2980B9', text:'Punto de Venta 2 actualizó inventario de 15 productos', time:'Hace 15 min' },
-                { color:'#8E44AD', text:'Nuevo usuario registrado: maria.gomez@vida.com',     time:'Hace 30 min'  },
-                { color:'#27AE60', text:'Se generó reporte de ventas del 23/05/2026',         time:'Hace 1 hora'  },
-                { color:'#F39C12', text:'Stock bajo detectado en 15 productos',                time:'Hace 2 horas' },
-              ].map((a, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: a.color }} />
-                  <p className="text-xs text-gray-600 flex-1 font-semibold">{a.text}</p>
-                  <span className="text-[10px] text-gray-300 shrink-0 whitespace-nowrap">{a.time}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Tabla sucursales */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-black text-gray-700 text-sm flex items-center gap-2">
-              <MapPin size={16} className="text-vida-green" />
-              Puntos de Venta Registrados
-            </h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  {['#','Nombre','Ciudad','Estado','Encargado','Tipo','Status'].map(h => (
-                    <th key={h} className="text-left py-2 px-3 text-gray-400 font-bold uppercase tracking-wider">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(stats?.sucursales || []).map(s => (
-                  <tr key={s.idPuntoVenta} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                    <td className="py-3 px-3 text-gray-400 font-semibold">{s.idPuntoVenta}</td>
-                    <td className="py-3 px-3 font-bold text-gray-700">{s.NomComercial || s.Nombre}</td>
-                    <td className="py-3 px-3 text-gray-500">{s.Ciudad || '—'}</td>
-                    <td className="py-3 px-3 text-gray-500">{s.Estado || '—'}</td>
-                    <td className="py-3 px-3 text-gray-500">{s.Encargado || '—'}</td>
-                    <td className="py-3 px-3 text-gray-500">{s.TipoPuntoVenta || '—'}</td>
-                    <td className="py-3 px-3">
-                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
-                        s.StatusPuntoVenta === 'ACTIVO'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-600'
-                      }`}>
-                        {s.StatusPuntoVenta}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-                {(!stats?.sucursales || stats.sucursales.length === 0) && (
-                  <tr><td colSpan={7} className="text-center py-8 text-gray-300 font-semibold">Sin sucursales registradas</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
+      <div className="p-6">
+        {loading
+          ? <Spinner />
+          : stats && (esAdmin
+              ? <DashboardAdmin stats={stats} conexiones={conexiones} setConexiones={setConexiones} />
+              : <DashboardCajero stats={stats} />)
+        }
       </div>
     </div>
   );

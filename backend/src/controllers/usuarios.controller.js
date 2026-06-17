@@ -238,11 +238,23 @@ export async function crearUsuario(request, reply) {
                 VALUES (@idBranch, @idCuenta, @idPantalla, @idUsuario, 'ACTIVO', @UsuAlta, 'ACTIVO')`);
     }
 
-    await enviarEmailInvitacion(pool, { Nombre, Correo, Cve, TipoUsuario }, passwordTemporal, idBranch);
+    let emailEnviado = false;
+    if (Correo) {
+      try {
+        await enviarEmailInvitacion(pool, { Nombre, Correo, Cve, TipoUsuario }, passwordTemporal, idBranch);
+        emailEnviado = true;
+      } catch (emailErr) {
+        request.log.warn('[Usuarios] No se pudo enviar email de invitación: ' + emailErr.message);
+      }
+    }
 
     return reply.code(201).send({
-      message: 'Usuario creado. Se enviaron las credenciales por email.',
+      message: emailEnviado
+        ? 'Usuario creado. Se enviaron las credenciales por email.'
+        : 'Usuario creado. No se envió email (sin correo configurado).',
       idUsuario: nuevoId,
+      // Devolver contraseña temporal solo si no se pudo enviar email
+      passwordTemporal: emailEnviado ? undefined : passwordTemporal,
     });
 
   } catch (err) {

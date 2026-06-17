@@ -133,9 +133,12 @@ export async function toggleCategoria(request, reply) {
 
 // GET /api/inventario/productos
 export async function listarProductos(request, reply) {
-  const { idBranch, idCuenta } = request.user;
+  const { idBranch, idCuenta, TipoUsuario, idPuntoVenta: pvUsuario } = request.user;
   const { page = 1, limit = 20, search = '', idCategoria = '', status = 'ACTIVO' } = request.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
+
+  // Cajeros y cashiers solo ven productos con stock en su punto de venta
+  const esCajero = ['CAJERO', 'CASHIER', 'SUPERVISOR'].includes(TipoUsuario);
 
   try {
     const pool = await getPool();
@@ -155,19 +158,49 @@ export async function listarProductos(request, reply) {
     if (idCategoria) req.input('idCategoria', sql.BigInt,       idCategoria);
     if (status)      req.input('status',      sql.VarChar(20),  status);
 
-    const r = await req.query(`
-      SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
-             p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
-             p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.StockMinimo,
-             p.ImagenProducto, p.Notas, p.Status, p.FechaAlta
-      FROM VIDA_INVENTARIO_PRODUCTOS p
-      LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
-        ON c.idBranch = p.idBranch AND c.idCuenta = p.idCuenta AND c.idCategoria = p.idCategoria
-      WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
-      ${whereExtra}
-      ORDER BY p.Nombre
-      OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
-    `);
+    let query;
+    if (esCajero && pvUsuario) {
+      // Cajero: muestra solo productos con stock > 0 en su sucursal
+      req.input('idPuntoVenta', sql.BigInt, pvUsuario);
+      query = `
+        SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
+               p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
+               p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.StockMinimo,
+               p.ImagenProducto, p.Notas, p.Status, p.FechaAlta,
+               ISNULL(s.Cantidad, 0) AS StockDisponible
+        FROM VIDA_INVENTARIO_PRODUCTOS p
+        LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
+          ON c.idBranch = p.idBranch AND c.idCuenta = p.idCuenta AND c.idCategoria = p.idCategoria
+        INNER JOIN VIDA_INVENTARIO_STOCK s
+          ON s.idBranch = p.idBranch AND s.idCuenta = p.idCuenta
+         AND s.idProducto = p.idProducto AND s.idPuntoVenta = @idPuntoVenta
+        WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
+          AND s.Cantidad > 0
+        ${whereExtra}
+        ORDER BY p.Nombre
+        OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+      `;
+    } else {
+      // Admin/supervisor global: todos los productos con stock sumado
+      query = `
+        SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
+               p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
+               p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.StockMinimo,
+               p.ImagenProducto, p.Notas, p.Status, p.FechaAlta,
+               ISNULL((SELECT SUM(s2.Cantidad) FROM VIDA_INVENTARIO_STOCK s2
+                       WHERE s2.idBranch=p.idBranch AND s2.idCuenta=p.idCuenta
+                         AND s2.idProducto=p.idProducto), 0) AS StockDisponible
+        FROM VIDA_INVENTARIO_PRODUCTOS p
+        LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
+          ON c.idBranch = p.idBranch AND c.idCuenta = p.idCuenta AND c.idCategoria = p.idCategoria
+        WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
+        ${whereExtra}
+        ORDER BY p.Nombre
+        OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+      `;
+    }
+
+    const r = await req.query(query);
 
     const totalReq = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
@@ -176,12 +209,29 @@ export async function listarProductos(request, reply) {
     if (idCategoria) totalReq.input('idCategoria', sql.BigInt,       idCategoria);
     if (status)      totalReq.input('status',      sql.VarChar(20),  status);
 
-    const totalR = await totalReq.query(`
-      SELECT COUNT(*) AS total
-      FROM VIDA_INVENTARIO_PRODUCTOS p
-      WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
-      ${whereExtra}
-    `);
+    let totalQuery;
+    if (esCajero && pvUsuario) {
+      totalReq.input('idPuntoVenta', sql.BigInt, pvUsuario);
+      totalQuery = `
+        SELECT COUNT(*) AS total
+        FROM VIDA_INVENTARIO_PRODUCTOS p
+        INNER JOIN VIDA_INVENTARIO_STOCK s
+          ON s.idBranch = p.idBranch AND s.idCuenta = p.idCuenta
+         AND s.idProducto = p.idProducto AND s.idPuntoVenta = @idPuntoVenta
+        WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
+          AND s.Cantidad > 0
+        ${whereExtra}
+      `;
+    } else {
+      totalQuery = `
+        SELECT COUNT(*) AS total
+        FROM VIDA_INVENTARIO_PRODUCTOS p
+        WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
+        ${whereExtra}
+      `;
+    }
+
+    const totalR = await totalReq.query(totalQuery);
 
     return reply.send({
       data:  r.recordset,

@@ -10,8 +10,8 @@ import {
 // Roles que pueden escribir (alta/edición)
 const ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
-// Roles que pueden leer (consultas)
-const LECTURA   = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN', 'SUPERVISOR'];
+// Roles que pueden leer (consultas) — incluye cajeros porque el POS busca productos
+const LECTURA   = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
 
 export async function inventarioRoutes(fastify) {
 

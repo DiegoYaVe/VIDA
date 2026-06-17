@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "519799220858",
+    "project_id": "vida-pos-e6d45",
+    "storage_bucket": "vida-pos-e6d45.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:519799220858:android:0198c820dd5d6358c8e9c3",
+        "android_client_info": {
+          "package_name": "com.vida.cliente"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARju17HZImuM-k-CQklgPmS6u4vt2Vg2I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:519799220858:android:3f5d276cf26e1165c8e9c3",
+        "android_client_info": {
+          "package_name": "com.vida.repartidor"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARju17HZImuM-k-CQklgPmS6u4vt2Vg2I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

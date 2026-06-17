@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VIDA — Gestión y delivery para tu negocio</title>
+  <meta name="description" content="Sistema todo-en-uno para gestionar tu negocio, recibir pedidos en línea y coordinar tus entregas. Más ventas, menos caos." />
+  <meta property="og:title" content="VIDA — Tu tienda, en todas partes" />
+  <meta property="og:description" content="POS, pedidos en línea, pagos y delivery en un solo sistema. Simple para tu equipo, conveniente para tus clientes." />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue: #1A6A9A;
+      --green: #27AE60;
+      --blue-light: #E6F1FB;
+      --green-light: #EAF3DE;
+      --amber-light: #FAEEDA;
+      --amber: #BA7517;
+      --coral-light: #FAECE7;
+      --coral: #993C1D;
+      --teal-light: #E1F5EE;
+      --teal: #0F6E56;
+      --purple-light: #EEEDFE;
+      --purple: #534AB7;
+      --bg: #ffffff;
+      --bg-secondary: #F7F9FB;
+      --text: #111827;
+      --text-muted: #6B7280;
+      --border: rgba(0,0,0,0.08);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+
+    /* NAV */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255,255,255,0.94);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 64px;
+    }
+    .nav-logo {
+      font-size: 22px; font-weight: 600; letter-spacing: 6px;
+      background: linear-gradient(135deg, var(--blue), var(--green));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .nav-links { display: flex; gap: 32px; align-items: center; }
+    .nav-links a { font-size: 14px; color: var(--text-muted); text-decoration: none; transition: color .2s; }
+    .nav-links a:hover { color: var(--blue); }
+    .nav-cta {
+      background: linear-gradient(135deg, var(--blue), var(--green));
+      color: #fff !important; padding: 9px 22px; border-radius: var(--radius-sm);
+      font-weight: 500; font-size: 14px !important;
+    }
+    @media(max-width:600px){ .nav-links { display: none; } }
+
+    /* HERO */
+    .hero {
+      background: linear-gradient(135deg, var(--blue) 0%, var(--green) 100%);
+      padding: 110px 24px 130px; text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content:''; position:absolute; top:-80px; right:-80px;
+      width:340px; height:340px; border-radius:50%; background:rgba(255,255,255,0.06);
+    }
+    .hero::after {
+      content:''; position:absolute; bottom:-100px; left:-60px;
+      width:420px; height:420px; border-radius:50%; background:rgba(255,255,255,0.04);
+    }
+    .hero-inner { position:relative; z-index:1; max-width:700px; margin:0 auto; }
+    .hero-logo { font-size:84px; font-weight:600; color:#fff; letter-spacing:18px; line-height:1; }
+    .hero-tag {
+      display:inline-flex; align-items:center; gap:8px; margin-top:18px;
+      background:rgba(255,255,255,0.16); border:1px solid rgba(255,255,255,0.28);
+      border-radius:20px; padding:6px 20px; font-size:13px; color:rgba(255,255,255,0.9);
+    }
+    .hero h1 { margin-top:28px; font-size:32px; font-weight:500; color:#fff; line-height:1.35; }
+    .hero-sub { margin-top:16px; font-size:17px; color:rgba(255,255,255,0.78); line-height:1.7; }
+    .hero-ctas { display:flex; gap:12px; justify-content:center; margin-top:42px; flex-wrap:wrap; }
+    .btn-white {
+      background:#fff; color:var(--blue); padding:15px 34px;
+      border-radius:var(--radius-sm); font-size:15px; font-weight:600;
+      text-decoration:none; transition:transform .15s, box-shadow .15s;
+    }
+    .btn-white:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(0,0,0,0.18); }
+    .btn-ghost {
+      background:rgba(255,255,255,0.12); color:#fff; padding:15px 34px;
+      border-radius:var(--radius-sm); font-size:15px; font-weight:500;
+      text-decoration:none; border:1px solid rgba(255,255,255,0.35); transition:background .2s;
+    }
+    .btn-ghost:hover { background:rgba(255,255,255,0.22); }
+    .pills { display:flex; gap:8px; justify-content:center; margin-top:38px; flex-wrap:wrap; }
+    .pill {
+      background:rgba(255,255,255,0.14); border:1px solid rgba(255,255,255,0.22);
+      border-radius:20px; padding:6px 16px; font-size:12px; color:rgba(255,255,255,0.88);
+    }
+
+    /* SECTIONS */
+    .section { padding:88px 24px; max-width:840px; margin:0 auto; }
+    .section-center { text-align:center; }
+    .label {
+      font-size:11px; font-weight:600; letter-spacing:2.5px;
+      text-transform:uppercase; color:var(--blue); margin-bottom:12px;
+    }
+    .section h2 { font-size:28px; font-weight:500; color:var(--text); line-height:1.35; margin-bottom:14px; }
+    .section p { font-size:16px; color:var(--text-muted); line-height:1.75; margin-bottom:40px; }
+    .divider { height:1px; background:var(--border); max-width:840px; margin:0 auto; }
+
+    /* STATS */
+    .stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; }
+    .stat-card {
+      background:var(--bg-secondary); border-radius:var(--radius); padding:28px 16px;
+      text-align:center; border:1px solid var(--border);
+    }
+    .stat-num {
+      font-size:34px; font-weight:600;
+      background:linear-gradient(135deg,var(--blue),var(--green));
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+    }
+    .stat-label { font-size:13px; color:var(--text-muted); margin-top:6px; line-height:1.4; }
+
+    /* APPS */
+    .apps-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:20px; }
+    .app-card {
+      background:var(--bg); border:1px solid var(--border); border-radius:var(--radius);
+      padding:36px 24px; text-align:center; transition:box-shadow .2s, transform .2s;
+    }
+    .app-card:hover { box-shadow:0 10px 40px rgba(0,0,0,0.09); transform:translateY(-4px); }
+    .app-circle {
+      width:68px; height:68px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      margin:0 auto 20px; font-size:30px;
+    }
+    .app-circle.blue { background:var(--blue-light); color:var(--blue); }
+    .app-circle.green { background:var(--green-light); color:var(--green); }
+    .app-circle.amber { background:var(--amber-light); color:var(--amber); }
+    .app-name { font-size:17px; font-weight:600; margin-bottom:10px; }
+    .app-desc { font-size:14px; color:var(--text-muted); line-height:1.65; }
+
+    /* FEATURES */
+    .feat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:16px; }
+    .feat-card {
+      background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius);
+      padding:26px; transition:border-color .2s;
+    }
+    .feat-card:hover { border-color:rgba(26,106,154,0.3); }
+    .feat-icon {
+      width:46px; height:46px; border-radius:var(--radius-sm);
+      display:flex; align-items:center; justify-content:center;
+      font-size:22px; margin-bottom:16px;
+    }
+    .feat-icon.blue { background:var(--blue-light); color:var(--blue); }
+    .feat-icon.green { background:var(--green-light); color:var(--green); }
+    .feat-icon.amber { background:var(--amber-light); color:var(--amber); }
+    .feat-icon.coral { background:var(--coral-light); color:var(--coral); }
+    .feat-icon.teal { background:var(--teal-light); color:var(--teal); }
+    .feat-icon.purple { background:var(--purple-light); color:var(--purple); }
+    .feat-title { font-size:15px; font-weight:600; margin-bottom:8px; }
+    .feat-desc { font-size:13px; color:var(--text-muted); line-height:1.65; }
+
+    /* FLOW */
+    .flow { display:flex; align-items:flex-start; flex-wrap:wrap; }
+    .flow-step { flex:1; min-width:120px; text-align:center; padding:20px 8px; position:relative; }
+    .flow-step:not(:last-child)::after {
+      content:'›'; position:absolute; top:28px; right:-6px;
+      font-size:22px; color:#CBD5E0;
+    }
+    .flow-num {
+      width:38px; height:38px; border-radius:50%;
+      background:linear-gradient(135deg,var(--blue),var(--green));
+      color:#fff; display:flex; align-items:center; justify-content:center;
+      font-size:15px; font-weight:600; margin:0 auto 12px;
+    }
+    .flow-label-title { font-size:13px; font-weight:600; margin-bottom:4px; }
+    .flow-label-sub { font-size:12px; color:var(--text-muted); line-height:1.5; }
+
+    /* BENEFICIOS — lista con check */
+    .benefits-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; }
+    .benefit-row {
+      display:flex; align-items:flex-start; gap:12px;
+      padding:16px; background:var(--bg-secondary);
+      border:1px solid var(--border); border-radius:var(--radius-sm);
+    }
+    .check-circle {
+      width:28px; height:28px; border-radius:50%; flex-shrink:0;
+      background:var(--green-light); color:var(--green);
+      display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:600;
+    }
+    .benefit-text { font-size:14px; color:var(--text); line-height:1.55; }
+    .benefit-text strong { font-weight:600; }
+
+    /* TESTIMONIAL / QUOTE */
+    .quote-band { background:var(--bg-secondary); padding:72px 24px; text-align:center; }
+    .quote-inner { max-width:640px; margin:0 auto; }
+    .quote-mark { font-size:64px; line-height:1; color:var(--blue); opacity:.25; font-weight:700; }
+    .quote-text { font-size:20px; font-weight:500; color:var(--text); line-height:1.55; margin-top:-16px; }
+    .quote-author { margin-top:20px; font-size:14px; color:var(--text-muted); }
+
+    /* CTA */
+    .cta-band {
+      background:linear-gradient(135deg,var(--blue) 0%,var(--green) 100%);
+      padding:88px 24px; text-align:center;
+    }
+    .cta-band h2 { font-size:30px; font-weight:500; color:#fff; margin-bottom:14px; }
+    .cta-band p { font-size:16px; color:rgba(255,255,255,0.78); margin-bottom:40px; max-width:500px; margin-left:auto; margin-right:auto; line-height:1.7; }
+
+    /* FOOTER */
+    footer { background:#111827; padding:52px 24px 36px; text-align:center; }
+    .footer-logo { font-size:30px; font-weight:600; letter-spacing:10px; color:#fff; }
+    .footer-sub { font-size:14px; color:rgba(255,255,255,0.45); margin-top:10px; }
+    .footer-links { display:flex; gap:28px; justify-content:center; margin-top:28px; flex-wrap:wrap; }
+    .footer-links a { font-size:13px; color:rgba(255,255,255,0.45); text-decoration:none; transition:color .2s; }
+    .footer-links a:hover { color:#fff; }
+    .footer-copy { margin-top:36px; font-size:12px; color:rgba(255,255,255,0.2); }
+
+    @media(max-width:640px){
+      .hero-logo { font-size:58px; letter-spacing:12px; }
+      .hero h1 { font-size:23px; }
+      .section h2 { font-size:23px; }
+      .flow-step:not(:last-child)::after { display:none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-logo">VIDA</div>
+    <div class="nav-links">
+      <a href="#sistema">El sistema</a>
+      <a href="#funciones">Funciones</a>
+      <a href="#flujo">Cómo funciona</a>
+      <a href="#contacto" class="nav-cta">Contáctanos</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-inner">
+      <div class="hero-logo">VIDA</div>
+      <div class="hero-tag">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4.5 8-11.8A8 8 0 0012 2a8 8 0 00-8 8.2C4 17.5 12 22 12 22z"/></svg>
+        Diseñado para el comercio latinoamericano
+      </div>
+      <h1>Tu negocio, tus clientes y tu equipo — todos en el mismo sistema</h1>
+      <p class="hero-sub">Gestiona tu punto de venta, recibe pedidos en línea, coordina entregas y acepta pagos. Todo desde un solo lugar, en tiempo real.</p>
+      <div class="hero-ctas">
+        <a href="#contacto" class="btn-white">Quiero saber más</a>
+        <a href="#sistema" class="btn-ghost">Ver el sistema</a>
+      </div>
+      <div class="pills">
+        <span class="pill">📦 Inventario en tiempo real</span>
+        <span class="pill">🚴 Delivery propio</span>
+        <span class="pill">💳 Múltiples formas de pago</span>
+        <span class="pill">📱 App para tus clientes</span>
+        <span class="pill">📊 Reportes al instante</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- NÚMEROS -->
+  <section class="section section-center">
+    <div class="label">Por qué VIDA</div>
+    <h2>Un sistema pensado para negocios reales</h2>
+    <p>Hecho para comercios que venden físicamente y también quieren vender en línea, sin tener que usar tres herramientas distintas.</p>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-num">3</div>
+        <div class="stat-label">Superficies integradas: web, app cliente y app repartidor</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">1</div>
+        <div class="stat-label">Solo sistema que necesitas — todo conectado</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">0</div>
+        <div class="stat-label">Plataformas externas de terceros para operar</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">24/7</div>
+        <div class="stat-label">Tus clientes pueden pedir en cualquier momento</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- TRES SURFACES -->
+  <section class="section section-center" id="sistema">
+    <div class="label">El sistema</div>
+    <h2>Una plataforma, tres experiencias</h2>
+    <p>Tu equipo trabaja en el panel web. Tus clientes piden desde la app. Tus repartidores coordinan desde su propia pantalla. Todo sincronizado al segundo.</p>
+    <div class="apps-grid">
+      <div class="app-card">
+        <div class="app-circle blue">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        </div>
+        <div class="app-name">Panel de gestión</div>
+        <div class="app-desc">Tu equipo cobra, gestiona el inventario, aprueba pedidos y ve reportes — todo desde el navegador, sin instalar nada.</div>
+      </div>
+      <div class="app-card">
+        <div class="app-circle green">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+        </div>
+        <div class="app-name">App para tus clientes</div>
+        <div class="app-desc">Tus clientes descubren tus productos, hacen su pedido y pagan desde su celular. Con cuenta propia o login con Google.</div>
+      </div>
+      <div class="app-card">
+        <div class="app-circle amber">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div class="app-name">App para repartidores</div>
+        <div class="app-desc">Tus repartidores ven sus entregas del día, actualizan el estado de cada pedido y coordinan con la sucursal en tiempo real.</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- FUNCIONES -->
+  <section class="section" id="funciones">
+    <div class="label" style="text-align:center">Funciones incluidas</div>
+    <h2 style="text-align:center">Todo lo que tu negocio necesita para operar</h2>
+    <p style="text-align:center">Cada función está pensada para reducir el tiempo que tu equipo pasa apagando incendios y darte más visibilidad sobre lo que pasa en tu negocio.</p>
+    <div class="feat-grid">
+      <div class="feat-card">
+        <div class="feat-icon blue">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        </div>
+        <div class="feat-title">Punto de venta (POS)</div>
+        <div class="feat-desc">Cobra rápido por código de barras, nombre o categoría. Soporta múltiples cajas en el mismo local.</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon green">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+        </div>
+        <div class="feat-title">Control de inventario</div>
+        <div class="feat-desc">Stock actualizado automáticamente con cada venta o pedido. Alertas de bajo inventario y movimientos trazables.</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon amber">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h11a2 2 0 012 2v3"/><rect x="9" y="11" width="14" height="10" rx="1"/></svg>
+        </div>
+        <div class="feat-title">Pedidos y delivery</div>
+        <div class="feat-desc">Recibe pedidos desde la app, asígnalos a un repartidor y haz seguimiento hasta la entrega final.</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon coral">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg>
+        </div>
+        <div class="feat-title">Pagos sin fricciones</div>
+        <div class="feat-desc">Acepta tarjeta de crédito/débito internacional y transferencias. El cliente elige cómo pagar.</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon teal">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </div>
+        <div class="feat-title">Reportes y cierre de caja</div>
+        <div class="feat-desc">Resumen de ventas del día, semana o mes. Cierre de caja con detalle por forma de pago y cajero.</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon purple">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        </div>
+        <div class="feat-title">Gestión de tu equipo</div>
+        <div class="feat-desc">Administra roles y permisos por persona. Cajeros, supervisores, administradores y repartidores con accesos independientes.</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- FLUJO -->
+  <section class="section" id="flujo">
+    <div class="label" style="text-align:center">Cómo funciona</div>
+    <h2 style="text-align:center">El pedido perfecto, paso a paso</h2>
+    <p style="text-align:center">Desde que tu cliente elige un producto hasta que lo tiene en sus manos — todo automatizado y sin llamadas.</p>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-label-title">Cliente elige</div>
+        <div class="flow-label-sub">Navega tu catálogo y arma su pedido desde la app</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-label-title">Paga al instante</div>
+        <div class="flow-label-sub">Con tarjeta o transferencia, en segundos</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-label-title">Tu local recibe</div>
+        <div class="flow-label-sub">El pedido aparece en el panel en tiempo real</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-label-title">Repartidor sale</div>
+        <div class="flow-label-sub">Asignado automáticamente según disponibilidad</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">5</div>
+        <div class="flow-label-title">Entregado</div>
+        <div class="flow-label-sub">Cliente recibe confirmación en su app</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- BENEFICIOS -->
+  <section class="section">
+    <div class="label" style="text-align:center">Beneficios concretos</div>
+    <h2 style="text-align:center">Lo que cambia cuando usas VIDA</h2>
+    <p style="text-align:center">No solo es tecnología — es cómo recuperas tiempo, reduces errores y vendes más sin contratar más personas.</p>
+    <div class="benefits-grid">
+      <div class="benefit-row">
+        <div class="check-circle">✓</div>
+        <div class="benefit-text"><strong>Nunca vendas algo que no tienes.</strong> El stock se reserva en el momento del pedido y se descuenta al confirmar la entrega.</div>
+      </div>
+      <div class="benefit-row">
+        <div class="check-circle">✓</div>
+        <div class="benefit-text"><strong>Tus clientes compran solos, a cualquier hora.</strong> La app funciona 24/7 sin que tu equipo tenga que atender por WhatsApp.</div>
+      </div>
+      <div class="benefit-row">
+        <div class="check-circle">✓</div>
+        <div class="benefit-text"><strong>Menos errores en el cobro.</strong> El POS calcula todo automáticamente y registra cada transacción con nombre y hora.</div>
+      </div>
+      <div class="benefit-row">
+        <div class="check-circle">✓</div>
+        <div class="benefit-text"><strong>Controla todo desde donde estés.</strong> El panel web funciona desde cualquier dispositivo con internet, sin instalar nada.</div>
+      </div>
+      <div class="benefit-row">
+        <div class="check-circle">✓</div>
+        <div class="benefit-text"><strong>Tus repartidores siempre saben qué hacer.</strong> Cada uno ve solo sus entregas, su ruta y puede actualizar el estado en tiempo real.</div>
+      </div>
+      <div class="benefit-row">
+        <div class="check-circle">✓</div>
+        <div class="benefit-text"><strong>Cierra caja en minutos, no en horas.</strong> El reporte está listo al final de cada turno, con detalle por cajero y forma de pago.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUOTE -->
+  <div class="quote-band">
+    <div class="quote-inner">
+      <div class="quote-mark">"</div>
+      <p class="quote-text">Antes coordinábamos los pedidos por WhatsApp y siempre había confusión. Ahora el equipo y los repartidores ven exactamente lo que tienen que hacer sin que yo tenga que decirles nada.</p>
+      <p class="quote-author">— Comercio en prueba piloto con VIDA</p>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <section class="cta-band" id="contacto">
+    <h2>¿Listo para ordenar tu negocio?</h2>
+    <p>Cuéntanos sobre tu operación y te mostramos cómo VIDA se adapta a lo que necesitas. Sin compromisos.</p>
+    <div class="hero-ctas">
+      <a href="mailto:vidacomercializadorait@gmail.com" class="btn-white">Hablar con el equipo</a>
+      <a href="#sistema" class="btn-ghost">Ver el sistema</a>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-logo">VIDA</div>
+    <div class="footer-sub">Tu tienda favorita, a tu puerta.</div>
+    <div class="footer-links">
+      <a href="#sistema">El sistema</a>
+      <a href="#funciones">Funciones</a>
+      <a href="#flujo">Cómo funciona</a>
+      <a href="mailto:vidacomercializadorait@gmail.com">Contacto</a>
+    </div>
+    <div class="footer-copy">© 2026 VIDA. Todos los derechos reservados.</div>
+  </footer>
+
+</body>
+</html>

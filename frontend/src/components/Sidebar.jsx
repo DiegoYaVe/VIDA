@@ -37,8 +37,19 @@ export default function Sidebar() {
     <aside className="w-64 shrink-0 bg-white border-r border-gray-100 flex flex-col h-screen sticky top-0">
 
       {/* Logo */}
-      <div className="p-5 border-b border-gray-100">
-        <div className="flex items-center gap-3">
+      <div className="px-4 py-3 border-b border-gray-100">
+        <img
+          src="/logo-sidebar.png"
+          alt="Comercializadora VIDA"
+          className="h-14 w-auto object-contain"
+          onError={e => {
+            // Fallback si no está el archivo de imagen
+            e.target.style.display = 'none';
+            e.target.nextSibling.style.display = 'flex';
+          }}
+        />
+        {/* Fallback texto (se muestra si no hay imagen) */}
+        <div className="items-center gap-3 hidden">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center"
             style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
             <span className="text-white font-black text-lg">V</span>

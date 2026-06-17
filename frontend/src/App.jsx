@@ -11,6 +11,13 @@ import CambiarPassword from './pages/CambiarPassword.jsx';
 import Perfil      from './pages/Perfil.jsx';
 import Inventario   from './pages/Inventario.jsx';
 import Proveedores  from './pages/Proveedores.jsx';
+import Pedidos      from './pages/Pedidos.jsx';
+import POS          from './pages/POS.jsx';
+import Sucursales   from './pages/Sucursales.jsx';
+import Ventas       from './pages/Ventas.jsx';
+import Reportes     from './pages/Reportes.jsx';
+import CierreCaja   from './pages/CierreCaja.jsx';
+import { ToastContainer } from './components/Toast.jsx';
 
 function ProtectedRoute({ children, skipCambiarPass = false }) {
   const { accessToken, usuario } = useAuthStore();
@@ -72,6 +79,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <ToastContainer />
       <Routes>
         <Route path="/login"   element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/activar" element={<Activar />} />
@@ -100,15 +108,35 @@ export default function App() {
           <ProtectedRoute><Layout><Proveedores /></Layout></ProtectedRoute>
         } />
 
+        <Route path="/pedidos" element={
+          <ProtectedRoute><Layout><Pedidos /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/pos" element={
+          <ProtectedRoute><Layout><POS /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/sucursales" element={
+          <ProtectedRoute><Layout><Sucursales /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/ventas" element={
+          <ProtectedRoute><Layout><Ventas /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/reportes" element={
+          <ProtectedRoute><Layout><Reportes /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/caja" element={
+          <ProtectedRoute><Layout><CierreCaja /></Layout></ProtectedRoute>
+        } />
+
         {[
           { path:'/catalogos',   nombre:'Catálogos' },
           { path:'/precios',     nombre:'Precios y Promociones' },
-          // inventarios ya tiene ruta propia
-          { path:'/sucursales',  nombre:'Puntos de Venta' },
-          { path:'/pedidos',     nombre:'Pedidos' },
           { path:'/logistica',   nombre:'Repartidores y Logística' },
           { path:'/clientes',    nombre:'Consumidores Finales' },
-          { path:'/reportes',    nombre:'Reportes y Estadísticas' },
         ].map(({ path, nombre }) => (
           <Route key={path} path={path} element={
             <ProtectedRoute><Layout><ComingSoon nombre={nombre} /></Layout></ProtectedRoute>

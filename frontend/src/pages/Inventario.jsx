@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore.js';
 import api from '../services/api.js';
+import { useToast } from '../components/Toast.jsx';
 import {
   Plus, Search, Package, Tag, ArrowDownCircle, ArrowUpCircle,
   SlidersHorizontal, ChevronLeft, ChevronRight, X, AlertTriangle,
@@ -15,7 +16,12 @@ function DynamicIcon({ name, size = 20 }) {
 }
 
 // ── Constantes ─────────────────────────────────────────────────────────────
-const UNIDADES = ['pza', 'kg', 'lt', 'caja', 'bolsa', 'par', 'docena', 'rollo', 'metro', 'g', 'ml'];
+const UNIDADES = [
+  { value: 'Pieza', label: 'Pieza' },
+  { value: 'Kg',    label: 'Kilogramo (Kg)' },
+  { value: 'Litro', label: 'Litro' },
+  { value: 'Caja',  label: 'Caja' },
+];
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
 // ── Helpers visuales ────────────────────────────────────────────────────────
@@ -83,6 +89,7 @@ function SelectField({ label, children, ...props }) {
 // MODAL — CATEGORÍA
 // ══════════════════════════════════════════════════════════════════════════
 function ModalCategoria({ data, onClose, onSaved }) {
+  const toast = useToast();
   const [form, setForm] = useState({
     Nombre: data?.Nombre || '',
     Descripcion: data?.Descripcion || '',
@@ -99,8 +106,10 @@ function ModalCategoria({ data, onClose, onSaved }) {
     try {
       if (data?.idCategoria) {
         await api.put(`/inventario/categorias/${data.idCategoria}`, form);
+        toast.success('Categoría actualizada', form.Nombre);
       } else {
         await api.post('/inventario/categorias', form);
+        toast.success('Categoría creada', form.Nombre);
       }
       onSaved();
     } catch (err) {
@@ -141,17 +150,19 @@ function ModalCategoria({ data, onClose, onSaved }) {
 // MODAL — PRODUCTO
 // ══════════════════════════════════════════════════════════════════════════
 function ModalProducto({ data, categorias, onClose, onSaved }) {
+  const toast = useToast();
   const [form, setForm] = useState({
-    idCategoria:  data?.idCategoria  || '',
-    Nombre:       data?.Nombre       || '',
-    Descripcion:  data?.Descripcion  || '',
-    SKU:          data?.SKU          || '',
-    CodigoBarras: data?.CodigoBarras || '',
-    UnidadMedida: data?.UnidadMedida || 'pza',
-    PrecioUSD:    data?.PrecioUSD    ?? '',
-    CostoUSD:     data?.CostoUSD     ?? '',
-    StockMinimo:  data?.StockMinimo  ?? 0,
-    Notas:        data?.Notas        || '',
+    idCategoria:     data?.idCategoria     || '',
+    Nombre:          data?.Nombre          || '',
+    Descripcion:     data?.Descripcion     || '',
+    SKU:             data?.SKU             || '',
+    CodigoBarras:    data?.CodigoBarras    || '',
+    UnidadMedida:    data?.UnidadMedida    || 'Pieza',
+    UnidadesPorCaja: data?.UnidadesPorCaja ?? '',
+    PrecioUSD:       data?.PrecioUSD       ?? '',
+    CostoUSD:        data?.CostoUSD        ?? '',
+    StockMinimo:     data?.StockMinimo     ?? 0,
+    Notas:           data?.Notas           || '',
   });
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
@@ -171,12 +182,19 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
     if (Object.keys(e2).length) { setErrors(e2); return; }
     setSaving(true);
     try {
-      const body = { ...form, PrecioUSD: parseFloat(form.PrecioUSD),
-        CostoUSD: form.CostoUSD !== '' ? parseFloat(form.CostoUSD) : null };
+      const body = {
+        ...form,
+        PrecioUSD:       parseFloat(form.PrecioUSD),
+        CostoUSD:        form.CostoUSD !== '' ? parseFloat(form.CostoUSD) : null,
+        UnidadesPorCaja: form.UnidadMedida === 'Caja' && form.UnidadesPorCaja !== ''
+                           ? parseInt(form.UnidadesPorCaja) : null,
+      };
       if (data?.idProducto) {
         await api.put(`/inventario/productos/${data.idProducto}`, body);
+        toast.success('Producto actualizado', form.Nombre);
       } else {
         await api.post('/inventario/productos', body);
+        toast.success('Producto creado', form.Nombre);
       }
       onSaved();
     } catch (err) {
@@ -216,11 +234,26 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
         <div className="grid grid-cols-2 gap-3">
           <SelectField label="Unidad de Medida *" value={form.UnidadMedida}
             onChange={e => f('UnidadMedida', e.target.value)}>
-            {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+            {UNIDADES.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
           </SelectField>
           <InputField label="Stock Mínimo (alerta)" type="number" step="0.01"
             value={form.StockMinimo} onChange={e => f('StockMinimo', e.target.value)} />
         </div>
+
+        {form.UnidadMedida === 'Caja' && (
+          <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+            <InputField
+              label="¿Cuántas unidades tiene cada caja? *"
+              type="number" min="1" step="1"
+              value={form.UnidadesPorCaja}
+              placeholder="Ej: 24"
+              onChange={e => f('UnidadesPorCaja', e.target.value)}
+            />
+            <p className="text-xs text-blue-400 mt-1">
+              Esto permite calcular el equivalente en piezas al registrar movimientos.
+            </p>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <InputField label="Precio Venta USD *" type="number" step="0.0001"
@@ -256,31 +289,70 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
 // ══════════════════════════════════════════════════════════════════════════
 // MODAL — MOVIMIENTO
 // ══════════════════════════════════════════════════════════════════════════
-function ModalMovimiento({ producto, puntoVenta, onClose, onSaved }) {
+function ModalMovimiento({ producto, puntoVentaInicial, onClose, onSaved }) {
+  const toast = useToast();
+
+  const [sucursales,    setSucursales]    = useState([]);
+  const [loadingSucs,   setLoadingSucs]   = useState(true);
+  const [stockActual,   setStockActual]   = useState(null);  // stock en la sucursal elegida
+  const [loadingStock,  setLoadingStock]  = useState(false);
+
   const [form, setForm] = useState({
+    idPuntoVenta:   puntoVentaInicial || '',
     TipoMovimiento: 'ENTRADA',
-    Cantidad: '',
-    Motivo: '',
-    Referencia: '',
+    Cantidad:       '',
+    Motivo:         '',
+    Referencia:     '',
   });
   const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState('');
+  const [error,  setError]  = useState('');
+
+  // Cargar lista de sucursales al abrir
+  useEffect(() => {
+    api.get('/sucursales/puntos-venta')
+      .then(r => {
+        setSucursales(r.data.filter(s => s.StatusPuntoVenta === 'ACTIVO'));
+        // Si no viene puntoVentaInicial y hay sucursales, pre-seleccionar la primera
+        if (!puntoVentaInicial && r.data.length > 0) {
+          setForm(f => ({ ...f, idPuntoVenta: r.data[0].idPuntoVenta }));
+        }
+      })
+      .finally(() => setLoadingSucs(false));
+  }, []);
+
+  // Cada vez que cambia la sucursal seleccionada, obtener el stock de ese producto ahí
+  useEffect(() => {
+    if (!form.idPuntoVenta) { setStockActual(null); return; }
+    setLoadingStock(true);
+    api.get('/inventario/stock', {
+      params: { idPuntoVenta: form.idPuntoVenta },
+    })
+      .then(r => {
+        const fila = r.data.find(p => p.idProducto === producto.idProducto);
+        setStockActual(fila ? fila.Cantidad : 0);
+      })
+      .catch(() => setStockActual(null))
+      .finally(() => setLoadingStock(false));
+  }, [form.idPuntoVenta, producto.idProducto]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.idPuntoVenta) { setError('Selecciona una sucursal'); return; }
     if (!form.Cantidad || parseFloat(form.Cantidad) <= 0) {
       setError('La cantidad debe ser mayor a 0'); return;
     }
     setSaving(true);
     try {
       await api.post('/inventario/movimientos', {
-        idPuntoVenta:  puntoVenta,
-        idProducto:    producto.idProducto,
+        idPuntoVenta:   form.idPuntoVenta,
+        idProducto:     producto.idProducto,
         TipoMovimiento: form.TipoMovimiento,
-        Cantidad:      parseFloat(form.Cantidad),
-        Motivo:        form.Motivo || null,
-        Referencia:    form.Referencia || null,
+        Cantidad:       parseFloat(form.Cantidad),
+        Motivo:         form.Motivo   || null,
+        Referencia:     form.Referencia || null,
       });
+      const labels = { ENTRADA: 'Entrada registrada', SALIDA: 'Salida registrada', AJUSTE: 'Stock ajustado' };
+      toast.success(labels[form.TipoMovimiento], producto.Nombre);
       onSaved();
     } catch (err) {
       setError(err.response?.data?.error || 'Error al registrar movimiento');
@@ -289,20 +361,73 @@ function ModalMovimiento({ producto, puntoVenta, onClose, onSaved }) {
     }
   };
 
-  const tipoInfo = {
-    ENTRADA: { color: 'text-green-600', label: 'Entrada de stock' },
-    SALIDA:  { color: 'text-red-500',   label: 'Salida de stock' },
-    AJUSTE:  { color: 'text-blue-600',  label: 'Ajuste (nuevo total)' },
+  const tipoConfig = {
+    ENTRADA: { label: 'Entrada',  bg: 'border-green-400 bg-green-50 text-green-700' },
+    SALIDA:  { label: 'Salida',   bg: 'border-red-400 bg-red-50 text-red-600'       },
+    AJUSTE:  { label: 'Ajuste',   bg: 'border-blue-400 bg-blue-50 text-blue-700'    },
   };
+  const inactivo = 'border-gray-200 text-gray-500 hover:bg-gray-50';
+
+  const sucursalElegida = sucursales.find(s => String(s.idPuntoVenta) === String(form.idPuntoVenta));
 
   return (
     <Modal title="Registrar Movimiento" onClose={onClose}>
-      <div className="bg-gray-50 rounded-xl p-3 mb-4">
-        <p className="font-bold text-gray-800 text-sm">{producto.Nombre}</p>
-        <p className="text-xs text-gray-400">Stock actual: <strong>{producto.Cantidad} {producto.UnidadMedida}</strong></p>
+      {/* Producto */}
+      <div className="bg-gray-50 rounded-xl p-3 mb-4 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: 'linear-gradient(135deg, #1A6A9A22, #27AE6022)' }}>
+          <Package size={16} className="text-vida-blue" />
+        </div>
+        <div>
+          <p className="font-bold text-gray-800 text-sm leading-tight">{producto.Nombre}</p>
+          {producto.SKU && <p className="text-xs text-gray-400">SKU: {producto.SKU}</p>}
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+
+        {/* Selector de sucursal */}
+        <div>
+          <label className="block text-xs font-bold text-gray-600 mb-1">Sucursal *</label>
+          {loadingSucs ? (
+            <div className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-400">
+              Cargando sucursales...
+            </div>
+          ) : sucursales.length === 0 ? (
+            <div className="border border-red-200 bg-red-50 rounded-xl px-3 py-2 text-sm text-red-500">
+              No hay sucursales activas
+            </div>
+          ) : (
+            <select
+              value={form.idPuntoVenta}
+              onChange={e => { setForm(f => ({ ...f, idPuntoVenta: e.target.value })); setError(''); }}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue bg-white">
+              <option value="">— Selecciona sucursal —</option>
+              {sucursales.map(s => (
+                <option key={s.idPuntoVenta} value={s.idPuntoVenta}>
+                  {s.NomComercial || s.Nombre}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Stock actual en esa sucursal */}
+          {sucursalElegida && (
+            <div className="mt-2 flex items-center gap-2 text-xs">
+              <span className="text-gray-400">Stock actual en</span>
+              <span className="font-bold text-gray-700">{sucursalElegida.NomComercial || sucursalElegida.Nombre}:</span>
+              {loadingStock ? (
+                <span className="text-gray-400">cargando...</span>
+              ) : (
+                <span className={`font-black ${stockActual <= 0 ? 'text-red-500' : 'text-green-600'}`}>
+                  {stockActual ?? 0} {producto.UnidadMedida}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Tipo de movimiento */}
         <div>
           <label className="block text-xs font-bold text-gray-600 mb-2">Tipo de Movimiento</label>
           <div className="grid grid-cols-3 gap-2">
@@ -310,26 +435,31 @@ function ModalMovimiento({ producto, puntoVenta, onClose, onSaved }) {
               <button key={tipo} type="button"
                 onClick={() => { setForm(f => ({ ...f, TipoMovimiento: tipo })); setError(''); }}
                 className={`py-2 rounded-xl text-xs font-bold border transition
-                  ${form.TipoMovimiento === tipo
-                    ? 'border-vida-blue bg-blue-50 text-vida-blue'
-                    : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                {tipoInfo[tipo].label}
+                  ${form.TipoMovimiento === tipo ? tipoConfig[tipo].bg : inactivo}`}>
+                {tipoConfig[tipo].label}
               </button>
             ))}
           </div>
+          <p className="text-xs text-gray-400 mt-1">
+            {form.TipoMovimiento === 'ENTRADA' && 'Suma unidades al stock existente'}
+            {form.TipoMovimiento === 'SALIDA'  && 'Resta unidades del stock existente'}
+            {form.TipoMovimiento === 'AJUSTE'  && 'Reemplaza el stock con el valor que ingreses'}
+          </p>
         </div>
 
         <InputField
           label={form.TipoMovimiento === 'AJUSTE' ? 'Nuevo stock total' : 'Cantidad'}
-          type="number" step="0.01" value={form.Cantidad} error={error}
+          type="number" step="0.01" min="0.01" value={form.Cantidad} error={error}
           onChange={e => { setForm(f => ({ ...f, Cantidad: e.target.value })); setError(''); }}
           placeholder="0" />
 
-        <InputField label="Motivo" value={form.Motivo}
+        <InputField label="Motivo"
+          value={form.Motivo}
           onChange={e => setForm(f => ({ ...f, Motivo: e.target.value }))}
-          placeholder="Ej: Compra, merma, inventario físico..." />
+          placeholder="Ej: Compra a proveedor, merma, inventario físico..." />
 
-        <InputField label="Referencia (folio/factura)" value={form.Referencia}
+        <InputField label="Referencia (folio / factura)"
+          value={form.Referencia}
           onChange={e => setForm(f => ({ ...f, Referencia: e.target.value }))}
           placeholder="Opcional" />
 
@@ -338,8 +468,8 @@ function ModalMovimiento({ producto, puntoVenta, onClose, onSaved }) {
             className="flex-1 border border-gray-200 rounded-xl py-2 text-sm font-bold text-gray-600 hover:bg-gray-50 transition">
             Cancelar
           </button>
-          <button type="submit" disabled={saving}
-            className="flex-1 rounded-xl py-2 text-sm font-bold text-white transition"
+          <button type="submit" disabled={saving || loadingSucs}
+            className="flex-1 rounded-xl py-2 text-sm font-bold text-white transition disabled:opacity-50"
             style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
             {saving ? 'Guardando...' : 'Confirmar'}
           </button>
@@ -353,6 +483,7 @@ function ModalMovimiento({ producto, puntoVenta, onClose, onSaved }) {
 // PESTAÑA — CATEGORÍAS
 // ══════════════════════════════════════════════════════════════════════════
 function TabCategorias({ puedeEscribir }) {
+  const toast = useToast();
   const [categorias, setCategorias] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [modal, setModal]           = useState(null); // null | { data? }
@@ -372,6 +503,10 @@ function TabCategorias({ puedeEscribir }) {
   const toggleStatus = async (cat) => {
     const nuevoStatus = cat.Status === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
     await api.patch(`/inventario/categorias/${cat.idCategoria}/status`, { status: nuevoStatus });
+    toast.success(
+      nuevoStatus === 'ACTIVO' ? 'Categoría activada' : 'Categoría desactivada',
+      cat.Nombre
+    );
     cargar();
   };
 
@@ -442,6 +577,7 @@ function TabCategorias({ puedeEscribir }) {
 // PESTAÑA — PRODUCTOS
 // ══════════════════════════════════════════════════════════════════════════
 function TabProductos({ puedeEscribir }) {
+  const toast = useToast();
   const [productos,   setProductos]   = useState([]);
   const [categorias,  setCategorias]  = useState([]);
   const [total,       setTotal]       = useState(0);
@@ -477,6 +613,10 @@ function TabProductos({ puedeEscribir }) {
   const toggleStatus = async (prod) => {
     const nuevoStatus = prod.Status === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
     await api.patch(`/inventario/productos/${prod.idProducto}/status`, { status: nuevoStatus });
+    toast.success(
+      nuevoStatus === 'ACTIVO' ? 'Producto activado' : 'Producto desactivado',
+      prod.Nombre
+    );
     cargar();
   };
 
@@ -749,7 +889,7 @@ function TabStock({ puedeEscribir, usuario }) {
       {modal && (
         <ModalMovimiento
           producto={modal.producto}
-          puntoVenta={puntoVenta}
+          puntoVentaInicial={puntoVenta}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); cargar(); }}
         />
