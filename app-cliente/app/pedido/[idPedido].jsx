@@ -44,7 +44,15 @@ function normalizeStatus(raw) {
 export default function SeguimientoScreen() {
   const { idPedido } = useLocalSearchParams();
   const router = useRouter();
-  const { token } = useAuthStore();
+  const { token, setPostLoginRedirect } = useAuthStore();
+
+  // El tracking requiere sesión (el pedido pertenece a un cliente)
+  useEffect(() => {
+    if (!token) {
+      setPostLoginRedirect(`/pedido/${idPedido}`);
+      router.replace('/(auth)/login');
+    }
+  }, [token]);
 
   const [estado, setEstado] = useState(null);
   const [loading, setLoading] = useState(true);

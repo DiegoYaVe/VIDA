@@ -34,12 +34,15 @@ function AuthGuard({ children }) {
     return () => sub.remove();
   }, []);
 
+  // Navegación guest-first: se puede explorar productos y llenar el carrito
+  // sin cuenta. El login se exige solo al confirmar pedido, en el perfil y
+  // en el tracking. Al iniciar sesión regresa a donde estaba (postLoginRedirect).
   useEffect(() => {
     const inAuthGroup = segments[0] === '(auth)';
-    if (!token && !inAuthGroup) {
-      router.replace('/(auth)/login');
-    } else if (token && inAuthGroup) {
-      router.replace('/(tabs)');
+    if (token && inAuthGroup) {
+      const destino = useAuthStore.getState().postLoginRedirect;
+      useAuthStore.getState().setPostLoginRedirect(null);
+      router.replace(destino || '/(tabs)');
     }
   }, [token, segments]);
 

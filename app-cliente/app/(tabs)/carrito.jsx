@@ -25,7 +25,7 @@ const METODOS = ['EFECTIVO', 'TARJETA'];
 
 export default function CarritoScreen() {
   const router = useRouter();
-  const { idBranch } = useAuthStore();
+  const { idBranch, token, setPostLoginRedirect } = useAuthStore();
 
   const items = useCarritoStore((s) => s.items);
   const idPuntoVenta = useCarritoStore((s) => s.idPuntoVenta);
@@ -42,6 +42,25 @@ export default function CarritoScreen() {
   const [loading, setLoading] = useState(false);
 
   const handlePedido = async () => {
+    // Explorar y llenar el carrito no requiere cuenta; pedir sí.
+    // El carrito está persistido: no se pierde al ir a login/registro.
+    if (!token) {
+      Alert.alert(
+        'Inicia sesión para pedir',
+        'Tu carrito se guarda — crea tu cuenta o inicia sesión y termina tu pedido.',
+        [
+          { text: 'Ahora no', style: 'cancel' },
+          {
+            text: 'Iniciar sesión',
+            onPress: () => {
+              setPostLoginRedirect('/(tabs)/carrito');
+              router.push('/(auth)/login');
+            },
+          },
+        ]
+      );
+      return;
+    }
     if (!direccion.trim()) {
       Alert.alert('Dirección requerida', 'Por favor ingresa tu dirección de entrega.');
       return;

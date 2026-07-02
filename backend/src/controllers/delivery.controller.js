@@ -189,7 +189,7 @@ export async function registrarCliente(request, reply) {
 
     const token = request.server.jwt.sign(
       { idBranch, idCuenta, idCliente, rol: 'CLIENTE' },
-      { expiresIn: '30d' }
+      { expiresIn: '180d' }
     );
 
     return reply.code(201).send({ idCliente, token, emailPendiente: !!Email });
@@ -231,7 +231,7 @@ export async function loginCliente(request, reply) {
 
     const token = request.server.jwt.sign(
       { idBranch, idCuenta, idCliente: cliente.idCliente, rol: 'CLIENTE' },
-      { expiresIn: '30d' }
+      { expiresIn: '180d' }
     );
 
     return reply.send({
@@ -458,7 +458,7 @@ export async function googleOAuthCallback(request, reply) {
 
     const jwtToken = request.server.jwt.sign(
       { idBranch, idCuenta, idCliente, rol: 'CLIENTE' },
-      { expiresIn: '30d' }
+      { expiresIn: '180d' }
     );
 
     const deepLink = `${appRedirectUri}?token=${encodeURIComponent(jwtToken)}&nombre=${encodeURIComponent(nombreFinal)}&id=${idCliente}`;
@@ -558,37 +558,44 @@ export async function listarSucursales(request, reply) {
 // GET /delivery/productos?idBranch=1&idCuenta=1&idPuntoVenta=3&search=&idCategoria=
 // ══════════════════════════════════════════════════════════════════════════
 export async function listarProductosApp(request, reply) {
-  const { idBranch, idCuenta, idPuntoVenta, search = '', idCategoria = '' } = request.query;
+  const { idBranch, idCuenta, idPuntoVenta = '', search = '', idCategoria = '' } = request.query;
   try {
     const pool = await getPool();
 
     let whereExtra = '';
-    if (search)      whereExtra += ` AND (p.Nombre LIKE @search OR p.Descripcion LIKE @search)`;
-    if (idCategoria) whereExtra += ` AND p.idCategoria = @idCategoria`;
+    if (search)       whereExtra += ` AND (p.Nombre LIKE @search OR p.Descripcion LIKE @search)`;
+    if (idCategoria)  whereExtra += ` AND p.idCategoria = @idCategoria`;
+    // Sin idPuntoVenta: feed global — una fila por (producto, sucursal con stock),
+    // estilo Uber Eats. Con idPuntoVenta: catálogo de esa sucursal.
+    if (idPuntoVenta) whereExtra += ` AND inv.idPuntoVenta = @idPuntoVenta`;
 
     const req = pool.request()
-      .input('idBranch',     sql.BigInt,    idBranch)
-      .input('idCuenta',     sql.BigInt,    idCuenta)
-      .input('idPuntoVenta', sql.BigInt,    idPuntoVenta);
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta);
 
-    if (search)      req.input('search',      sql.VarChar(200), `%${search}%`);
-    if (idCategoria) req.input('idCategoria', sql.BigInt,       idCategoria);
+    if (idPuntoVenta) req.input('idPuntoVenta', sql.BigInt,       idPuntoVenta);
+    if (search)       req.input('search',       sql.VarChar(200), `%${search}%`);
+    if (idCategoria)  req.input('idCategoria',  sql.BigInt,       idCategoria);
 
     const r = await req.query(`
       SELECT p.idProducto, p.Nombre, p.Descripcion, p.PrecioUSD, p.ImagenProducto,
-             c.Nombre AS NombreCategoria,
-             ISNULL(inv.Cantidad, 0) AS StockDisponible
+             p.idCategoria, c.Nombre AS NombreCategoria,
+             inv.Cantidad AS StockDisponible,
+             inv.idPuntoVenta,
+             pv.NomComercial AS NombreSucursal, pv.Ciudad
       FROM VIDA_INVENTARIO_PRODUCTOS p
+      INNER JOIN VIDA_INVENTARIO_STOCK inv
+        ON inv.idBranch=p.idBranch AND inv.idCuenta=p.idCuenta
+           AND inv.idProducto=p.idProducto AND inv.Cantidad > 0
+      INNER JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+        ON pv.idBranch=inv.idBranch AND pv.idCuenta=inv.idCuenta
+           AND pv.idPuntoVenta=inv.idPuntoVenta AND pv.Status='ACTIVO'
       LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
         ON c.idBranch=p.idBranch AND c.idCuenta=p.idCuenta AND c.idCategoria=p.idCategoria
-      LEFT JOIN VIDA_INVENTARIO_STOCK inv
-        ON inv.idBranch=p.idBranch AND inv.idCuenta=p.idCuenta
-           AND inv.idProducto=p.idProducto AND inv.idPuntoVenta=@idPuntoVenta
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
         AND p.Status='ACTIVO'
-        AND ISNULL(inv.Cantidad, 0) > 0
         ${whereExtra}
-      ORDER BY c.Nombre, p.Nombre
+      ORDER BY p.Nombre, pv.NomComercial
     `);
 
     return reply.send(r.recordset);
@@ -614,18 +621,42 @@ export async function crearPedidoApp(request, reply) {
     return reply.code(400).send({ error: 'idPuntoVenta e items son requeridos' });
   }
   for (const item of items) {
-    const cant   = parseFloat(item.Cantidad);
-    const precio = parseFloat(item.PrecioUnitario);
-    if (!item.idProducto || !(cant > 0) || !(precio >= 0)) {
-      return reply.code(400).send({ error: 'Cada item requiere idProducto, Cantidad mayor a 0 y PrecioUnitario válido' });
+    const cant = parseFloat(item.Cantidad);
+    if (!item.idProducto || !(cant > 0)) {
+      return reply.code(400).send({ error: 'Cada item requiere idProducto y Cantidad mayor a 0' });
     }
   }
 
   try {
     const pool = await getPool();
 
-    // ── Verificar stock de cada item ──────────────────────────────────────
+    // ── Precios desde la BD: nunca confiar en el precio que manda la app ──
+    const idsProductos = [...new Set(items.map(i => parseInt(i.idProducto)))];
+    const preciosReq = pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta);
+    idsProductos.forEach((id, i) => preciosReq.input(`p${i}`, sql.BigInt, id));
+    const preciosR = await preciosReq.query(`
+      SELECT idProducto, PrecioUSD FROM VIDA_INVENTARIO_PRODUCTOS
+      WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'
+        AND idProducto IN (${idsProductos.map((_, i) => `@p${i}`).join(',')})`);
+
+    const precioPorId = new Map(preciosR.recordset.map(p => [String(p.idProducto), parseFloat(p.PrecioUSD)]));
     for (const item of items) {
+      if (!precioPorId.has(String(item.idProducto))) {
+        return reply.code(400).send({ error: `Producto ${item.idProducto} no existe o está inactivo` });
+      }
+    }
+
+    // Items normalizados con precio de servidor
+    const itemsNorm = items.map(i => ({
+      idProducto: parseInt(i.idProducto),
+      Cantidad: parseFloat(i.Cantidad),
+      PrecioUnitario: precioPorId.get(String(i.idProducto)),
+    }));
+
+    // ── Verificar stock de cada item ──────────────────────────────────────
+    for (const item of itemsNorm) {
       const stockR = await pool.request()
         .input('idBranch',     sql.BigInt, idBranch)
         .input('idCuenta',     sql.BigInt, idCuenta)
@@ -643,8 +674,8 @@ export async function crearPedidoApp(request, reply) {
       }
     }
 
-    // ── Calcular total ────────────────────────────────────────────────────
-    const TotalUSD = items.reduce((acc, i) => acc + i.PrecioUnitario * i.Cantidad, 0);
+    // ── Calcular total (precios de BD) ────────────────────────────────────
+    const TotalUSD = itemsNorm.reduce((acc, i) => acc + i.PrecioUnitario * i.Cantidad, 0);
 
     // ── Obtener nombre de sucursal para broadcast ─────────────────────────
     const pvR = await pool.request()
@@ -690,7 +721,7 @@ export async function crearPedidoApp(request, reply) {
                    @UbicacionEntregaLat,@UbicacionEntregaLon,@NotasCliente,GETDATE())`);
 
       let idDetalle = await nextIdTx(transaction, 'VIDA_PEDIDOS_DETALLE', 'idDetalle', idBranch, idCuenta);
-      for (const item of items) {
+      for (const item of itemsNorm) {
         await new sql.Request(transaction)
           .input('idBranch',       sql.BigInt,      idBranch)
           .input('idCuenta',       sql.BigInt,      idCuenta)
@@ -852,7 +883,7 @@ export async function loginRepartidor(request, reply) {
     const rep = r.recordset[0];
     const token = request.server.jwt.sign(
       { idBranch, idCuenta, idRepartidor: rep.idRepartidor, rol: 'REPARTIDOR' },
-      { expiresIn: '30d' }
+      { expiresIn: '180d' }
     );
 
     return reply.send({ idRepartidor: rep.idRepartidor, Nombre: rep.Nombre, token });

@@ -28,10 +28,17 @@ const useAuthStore = create(
         }),
 
       setCliente: (cliente) => set({ cliente }),
+
+      // A dónde regresar después de iniciar sesión (ej. el carrito)
+      postLoginRedirect: null,
+      setPostLoginRedirect: (ruta) => set({ postLoginRedirect: ruta }),
     }),
     {
       name: 'vida_auth',
       storage: createJSONStorage(() => AsyncStorage),
+      // La sesión (cliente + token) persiste en el teléfono — como Facebook:
+      // inicias sesión una vez y queda iniciada hasta que cierres sesión
+      partialize: (s) => ({ cliente: s.cliente, token: s.token, idBranch: s.idBranch, idCuenta: s.idCuenta }),
     }
   )
 );

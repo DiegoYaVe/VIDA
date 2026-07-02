@@ -5,6 +5,7 @@ import {
   ScrollView, Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
@@ -20,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function LoginScreen() {
+  const router = useRouter();
   const [tab, setTab] = useState('login');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -247,6 +249,16 @@ export default function LoginScreen() {
             </View>
           )}
         </View>
+
+        {/* Guest-first: se puede explorar el catálogo sin cuenta */}
+        <TouchableOpacity
+          style={{ alignItems: 'center', paddingVertical: 18 }}
+          onPress={() => router.replace('/(tabs)')}
+        >
+          <Text style={{ color: '#1A6A9A', fontWeight: '700', fontSize: 14 }}>
+            Explorar sin cuenta →
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );

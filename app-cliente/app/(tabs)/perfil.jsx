@@ -45,11 +45,12 @@ const STATUS_COLORS = {
 
 export default function PerfilScreen() {
   const router = useRouter();
-  const { cliente, logout } = useAuthStore();
+  const { cliente, token, logout } = useAuthStore();
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!token) { setLoading(false); return; }
     const fetchPedidos = async () => {
       try {
         const res = await api.get('/delivery/cliente/pedidos');
@@ -62,7 +63,32 @@ export default function PerfilScreen() {
       }
     };
     fetchPedidos();
-  }, []);
+  }, [token]);
+
+  // Invitado: CTA para iniciar sesión o crear cuenta
+  if (!token) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" />
+        <View style={guestStyles.wrap}>
+          <View style={guestStyles.iconCircle}>
+            <Ionicons name="person-outline" size={44} color="#1A6A9A" />
+          </View>
+          <Text style={guestStyles.title}>Aún no tienes sesión</Text>
+          <Text style={guestStyles.sub}>
+            Crea tu cuenta o inicia sesión para hacer pedidos y ver tu historial.
+            Lo que tengas en el carrito no se pierde.
+          </Text>
+          <TouchableOpacity
+            style={guestStyles.btn}
+            onPress={() => router.push('/(auth)/login')}
+          >
+            <Text style={guestStyles.btnText}>Iniciar sesión / Registrarme</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const handleLogout = () => {
     Alert.alert('Cerrar sesión', '¿Estás seguro de que deseas salir?', [
@@ -73,7 +99,7 @@ export default function PerfilScreen() {
         onPress: async () => {
           await AsyncStorage.removeItem('vida_cliente_token');
           logout();
-          router.replace('/(auth)/login');
+          router.replace('/(tabs)');
         },
       },
     ]);
@@ -242,4 +268,19 @@ const styles = StyleSheet.create({
     borderColor: '#FEB2B2',
   },
   logoutText: { color: '#E53E3E', fontWeight: '700', fontSize: 15 },
+});
+
+const guestStyles = StyleSheet.create({
+  wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  iconCircle: {
+    width: 88, height: 88, borderRadius: 44, backgroundColor: '#EBF8FF',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 18,
+  },
+  title: { fontSize: 20, fontWeight: '800', color: '#1A202C', marginBottom: 8 },
+  sub: { fontSize: 14, color: '#718096', textAlign: 'center', lineHeight: 21, marginBottom: 24 },
+  btn: {
+    backgroundColor: '#27AE60', borderRadius: 14,
+    paddingVertical: 14, paddingHorizontal: 28, width: '100%', alignItems: 'center',
+  },
+  btnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 });
