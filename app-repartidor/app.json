@@ -30,13 +30,19 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "com.vida.repartidor",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
-        "FOREGROUND_SERVICE"
+        "FOREGROUND_SERVICE",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ]
     },
     "web": {
@@ -52,6 +58,12 @@
       ],
       "expo-router"
     ],
-    "scheme": "vida-repartidor"
+    "scheme": "vida-repartidor",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "426fb7b3-875a-4ff3-a424-fb1e2ecf213d"
+      }
+    }
   }
 }

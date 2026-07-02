@@ -1,0 +1,8 @@
+# EAS usa este archivo EN LUGAR del .gitignore al subir el proyecto al build.
+# Importante: google-services.json NO se excluye aquí — el .gitignore lo saca
+# del repo, pero el build de Android SÍ lo necesita.
+node_modules/
+.expo/
+dist/
+*.log
+.env
