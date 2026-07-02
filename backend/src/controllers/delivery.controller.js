@@ -804,6 +804,7 @@ export async function estadoPedidoCliente(request, reply) {
       .query(`
         SELECT p.Status, p.MetodoPago, p.TotalUSD,
                p.DireccionEntrega, p.NotasCliente,
+               p.UbicacionEntregaLat, p.UbicacionEntregaLon,
                rep.Nombre AS NombreRepartidor,
                rep.Telefono AS TelefonoRepartidor,
                rep.UltimaLatitud AS LatRepartidor,

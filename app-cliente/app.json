@@ -25,6 +25,11 @@
       },
       "package": "com.vida.cliente",
       "googleServicesFile": "./google-services.json",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyARju17HZImuM-k-CQklgPmS6u4vt2Vg2I"
+        }
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",

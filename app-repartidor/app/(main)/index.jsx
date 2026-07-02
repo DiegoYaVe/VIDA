@@ -19,6 +19,7 @@ import * as Location from 'expo-location';
 import api from '../../services/api';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useLocation } from '../../hooks/useLocation';
+import MapaPedido from '../../components/MapaPedido';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -366,15 +367,9 @@ export default function IndexScreen() {
   // -------- RENDER DISPONIBLE / CON PEDIDO --------
   return (
     <View style={styles.onlineContainer}>
-      {/* Mapa placeholder */}
+      {/* Mapa: posición propia, sucursal y destino del pedido activo */}
       <View style={styles.mapPlaceholder}>
-        <Ionicons name="map-outline" size={48} color="#CBD5E0" />
-        <Text style={styles.mapText}>Mapa activo cuando se configure Google Maps</Text>
-        {ubicacion && (
-          <Text style={styles.coordsText}>
-            {ubicacion.Latitud?.toFixed(5)}, {ubicacion.Longitud?.toFixed(5)}
-          </Text>
-        )}
+        <MapaPedido ubicacion={ubicacion} pedido={pedidoActivo} />
       </View>
 
       {/* Panel inferior */}
@@ -525,9 +520,8 @@ const styles = StyleSheet.create({
   mapPlaceholder: {
     flex: 1,
     backgroundColor: '#E8EDF2',
-    justifyContent: 'center',
-    alignItems: 'center',
     minHeight: SCREEN_HEIGHT * 0.3,
+    overflow: 'hidden',
   },
   mapText: { color: '#A0AEC0', fontSize: 13, marginTop: 8, textAlign: 'center', paddingHorizontal: 20 },
   coordsText: { color: '#718096', fontSize: 11, marginTop: 4 },

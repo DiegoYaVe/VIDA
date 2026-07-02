@@ -17,6 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import { WS_URL } from '../../constants/config';
+import MapaTracking from '../../components/MapaTracking';
 
 const PASOS = [
   { key: 'BUSCANDO', label: 'Buscando\nrepartidor', icon: 'search-outline' },
@@ -243,11 +244,13 @@ export default function SeguimientoScreen() {
             </View>
           )}
 
-          {/* Map placeholder */}
-          <View style={styles.mapPlaceholder}>
-            <Ionicons name="map-outline" size={40} color="#CBD5E0" />
-            <Text style={styles.mapPlaceholderText}>Mapa disponible próximamente</Text>
-          </View>
+          {/* Mapa de seguimiento: repartidor en movimiento + destino */}
+          {!isDelivered && (
+            <MapaTracking
+              estado={estado}
+              enCamino={normalizeStatus(estado?.EstadoPedido ?? estado?.estado ?? estado?.Status) === 'EN_CAMINO'}
+            />
+          )}
 
           {/* Order summary */}
           {estado?.items && (
