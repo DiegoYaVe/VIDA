@@ -6,7 +6,7 @@ import {
   AlertCircle, Loader2, Building, Globe
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore.js';
-import api from '../services/api.js';
+import api, { API_ORIGIN } from '../services/api.js';
 
 const ROL_CONFIG = {
   SUPER_ADMIN:  { label: 'Super Admin',   color: 'bg-purple-100 text-purple-700' },
@@ -135,7 +135,7 @@ export default function Perfil() {
 
   const rolConfig = ROL_CONFIG[perfil?.TipoUsuario] || { label: perfil?.TipoUsuario, color: 'bg-gray-100 text-gray-600' };
   const fotoUrl = perfil?.ImagenUsuario
-    ? `http://localhost:3001${perfil.ImagenUsuario}`
+    ? `${API_ORIGIN}${perfil.ImagenUsuario}`
     : null;
 
   if (loading) return (
