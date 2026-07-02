@@ -8,19 +8,19 @@ import {
   User, X, CheckCircle,
 } from 'lucide-react';
 
-const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
+const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN'];
 const TIPOS = ['TIENDA', 'ALMACEN', 'KIOSCO', 'FRANQUICIA', 'OTRO'];
 
 const FORM_VACIO = {
   Nombre: '', NomComercial: '', TipoPuntoVenta: 'TIENDA',
   Correo: '', Telefono: '', Encargado: '',
   Calle: '', NumExt: '', NumInt: '', Colonia: '', CP: '',
-  Ciudad: '', Estado: '', Pais: '',
+  Ciudad: '', idPais: '', idEstado: '',
 };
 
 // ── Modal Alta / Edición ───────────────────────────────────────────────────
 function ModalSucursal({ data, onClose, onSaved }) {
-  const toast = useToast();
+  const toast  = useToast();
   const isEdit = !!data?.idPuntoVenta;
 
   const [form, setForm] = useState(isEdit ? {
@@ -36,18 +36,36 @@ function ModalSucursal({ data, onClose, onSaved }) {
     Colonia:        data.Colonia        || '',
     CP:             data.CP             || '',
     Ciudad:         data.Ciudad         || '',
-    Estado:         data.Estado         || '',
-    Pais:           data.Pais           || '',
+    idPais:         data.idPais         || '',
+    idEstado:       data.idEstado       || '',
   } : { ...FORM_VACIO });
 
-  const [saving, setSaving] = useState(false);
-  const [error, setError]   = useState('');
+  const [paises,  setPaises]  = useState([]);
+  const [estados, setEstados] = useState([]);
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState('');
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  // Cargar catálogo de países al montar
+  useEffect(() => {
+    api.get('/paises').then(r => setPaises(r.data)).catch(() => {});
+  }, []);
+
+  const handlePaisChange = (idPais) => {
+    setForm(p => ({ ...p, idPais, idEstado: '' }));
+    setEstados([]);
+    if (!idPais) return;
+    api.get(`/estados?idPais=${idPais}`)
+      .then(r => setEstados(r.data))
+      .catch(err => console.error('[Sucursales] Error estados:', err?.response?.status));
+  };
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.Nombre.trim()) { setError('El nombre es requerido'); return; }
+    if (!form.idPais)        { setError('El país es requerido');   return; }
+    if (!form.idEstado)      { setError('El estado es requerido'); return; }
     setSaving(true); setError('');
     try {
       if (isEdit) {
@@ -64,6 +82,8 @@ function ModalSucursal({ data, onClose, onSaved }) {
       setSaving(false);
     }
   }
+
+  const inputCls = 'w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue bg-white';
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -84,20 +104,17 @@ function ModalSucursal({ data, onClose, onSaved }) {
             <div>
               <label className="block text-xs font-bold text-gray-600 mb-1">Nombre interno *</label>
               <input value={form.Nombre} onChange={e => f('Nombre', e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue"
-                placeholder="Ej: Sucursal Centro" required />
+                className={inputCls} placeholder="Ej: Sucursal Centro" required />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Nombre comercial</label>
                 <input value={form.NomComercial} onChange={e => f('NomComercial', e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue"
-                  placeholder="Nombre para el cliente" />
+                  className={inputCls} placeholder="Nombre para el cliente" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Tipo</label>
-                <select value={form.TipoPuntoVenta} onChange={e => f('TipoPuntoVenta', e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue bg-white">
+                <select value={form.TipoPuntoVenta} onChange={e => f('TipoPuntoVenta', e.target.value)} className={inputCls}>
                   {TIPOS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
@@ -111,73 +128,77 @@ function ModalSucursal({ data, onClose, onSaved }) {
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Teléfono</label>
                 <input value={form.Telefono} onChange={e => f('Telefono', e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue"
-                  placeholder="+58 000 0000000" />
+                  className={inputCls} placeholder="+58 000 0000000" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Correo</label>
                 <input type="email" value={form.Correo} onChange={e => f('Correo', e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue"
-                  placeholder="sucursal@correo.com" />
+                  className={inputCls} placeholder="sucursal@correo.com" />
               </div>
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-600 mb-1">Encargado</label>
               <input value={form.Encargado} onChange={e => f('Encargado', e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue"
-                placeholder="Nombre del responsable" />
+                className={inputCls} placeholder="Nombre del responsable" />
             </div>
           </div>
 
           {/* Dirección */}
           <div className="space-y-3">
             <p className="text-xs font-black text-gray-400 uppercase tracking-wider">Dirección</p>
+
+            {/* País → Estado (catálogos) */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">País *</label>
+                <select value={form.idPais} onChange={e => handlePaisChange(e.target.value)} className={inputCls}>
+                  <option value="">— Seleccionar —</option>
+                  {paises.map(p => (
+                    <option key={p.idPais} value={p.idPais}>{p.NombrePais}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Estado *</label>
+                <select value={form.idEstado} onChange={e => f('idEstado', e.target.value)}
+                  className={inputCls} disabled={!form.idPais}>
+                  <option value="">— Seleccionar —</option>
+                  {estados.map(e => (
+                    <option key={e.idEstado} value={e.idEstado}>{e.NombreEstado}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
                 <label className="block text-xs font-bold text-gray-600 mb-1">Calle</label>
-                <input value={form.Calle} onChange={e => f('Calle', e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue"/>
+                <input value={form.Calle} onChange={e => f('Calle', e.target.value)} className={inputCls}/>
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Núm. Ext</label>
-                <input value={form.NumExt} onChange={e => f('NumExt', e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue"/>
+                <input value={form.NumExt} onChange={e => f('NumExt', e.target.value)} className={inputCls}/>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Núm. Int</label>
-                <input value={form.NumInt} onChange={e => f('NumInt', e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue"/>
+                <input value={form.NumInt} onChange={e => f('NumInt', e.target.value)} className={inputCls}/>
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-bold text-gray-600 mb-1">Colonia / Urb.</label>
-                <input value={form.Colonia} onChange={e => f('Colonia', e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue"/>
+                <input value={form.Colonia} onChange={e => f('Colonia', e.target.value)} className={inputCls}/>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">C.P.</label>
-                <input value={form.CP} onChange={e => f('CP', e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue"/>
+                <input value={form.CP} onChange={e => f('CP', e.target.value)} className={inputCls}/>
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Ciudad</label>
-                <input value={form.Ciudad} onChange={e => f('Ciudad', e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue"/>
+                <input value={form.Ciudad} onChange={e => f('Ciudad', e.target.value)} className={inputCls}/>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1">Estado</label>
-                <input value={form.Estado} onChange={e => f('Estado', e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue"/>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-600 mb-1">País</label>
-              <input value={form.Pais} onChange={e => f('Pais', e.target.value)}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue"
-                placeholder="Venezuela" />
             </div>
           </div>
         </form>
@@ -206,7 +227,7 @@ export default function Sucursales() {
 
   const [sucursales, setSucursales] = useState([]);
   const [loading, setLoading]       = useState(true);
-  const [modal, setModal]           = useState(null); // null | { data? }
+  const [modal, setModal]           = useState(null);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -223,7 +244,7 @@ export default function Sucursales() {
   async function toggleStatus(s) {
     const nuevo = s.StatusPuntoVenta === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
     try {
-      await api.patch(`/sucursales/puntos-venta/${s.idPuntoVenta}/status`, { status: nuevo });
+      await api.patch(`/sucursales/puntos-venta/${s.idPuntoVenta}/toggle`, { status: nuevo });
       toast.success(
         nuevo === 'ACTIVO' ? 'Sucursal activada' : 'Sucursal desactivada',
         s.NomComercial || s.Nombre
@@ -234,12 +255,11 @@ export default function Sucursales() {
     }
   }
 
-  // Construye texto de dirección para mostrar en la tarjeta
   function buildDireccion(s) {
     const partes = [
       s.Calle && s.NumExt ? `${s.Calle} ${s.NumExt}` : s.Calle,
       s.Colonia,
-      [s.Ciudad, s.Estado].filter(Boolean).join(', '),
+      [s.Ciudad, s.NombreEstado, s.NombrePais].filter(Boolean).join(', '),
     ].filter(Boolean);
     return partes.join(', ');
   }
@@ -268,8 +288,7 @@ export default function Sucursales() {
           <Store size={52} className="mx-auto mb-3 opacity-20"/>
           <p className="font-bold text-gray-500">No hay sucursales registradas</p>
           {puedeEscribir && (
-            <button onClick={() => setModal({})}
-              className="mt-4 text-vida-blue text-sm underline">
+            <button onClick={() => setModal({})} className="mt-4 text-vida-blue text-sm underline">
               Crear la primera sucursal
             </button>
           )}
@@ -296,13 +315,21 @@ export default function Sucursales() {
                   </div>
                 </div>
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                  s.StatusPuntoVenta === 'ACTIVO'
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-red-100 text-red-600'
+                  s.StatusPuntoVenta === 'ACTIVO' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
                 }`}>
                   {s.StatusPuntoVenta === 'ACTIVO' ? 'Activa' : 'Inactiva'}
                 </span>
               </div>
+
+              {/* Geo badge */}
+              {(s.NombreEstado || s.NombrePais) && (
+                <div className="flex items-center gap-1 mb-2">
+                  <MapPin size={11} className="text-vida-blue shrink-0"/>
+                  <span className="text-xs text-vida-blue font-semibold">
+                    {[s.NombreEstado, s.NombrePais].filter(Boolean).join(', ')}
+                  </span>
+                </div>
+              )}
 
               {/* Info */}
               <div className="space-y-1.5 text-xs text-gray-500">

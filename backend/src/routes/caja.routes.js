@@ -8,8 +8,8 @@ import {
   historialTurnos,
 } from '../controllers/caja.controller.js';
 
-const TODOS_ROLES  = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
-const ADMIN_ROLES  = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN', 'SUPERVISOR'];
+const TODOS_ROLES  = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
+const ADMIN_ROLES  = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR'];
 
 export async function cajaRoutes(fastify) {
   fastify.get('/caja/turno-activo',

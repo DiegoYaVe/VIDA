@@ -21,7 +21,7 @@ export async function login(request, reply) {
           u.Nombre, u.Apellidos, u.Correo,
           u.TipoUsuario, u.NivelAcceso,
           u.Cve, u.Pass,
-          u.idPuntoVenta, u.Status,
+          u.idPuntoVenta, u.idEstado, u.idPais, u.Status,
           u.CambiarPass,
           c.NomComercial AS NombreCuenta,
           c.logoCuenta
@@ -72,7 +72,9 @@ export async function login(request, reply) {
       TipoUsuario: usuario.TipoUsuario,
       NivelAcceso: usuario.NivelAcceso,
       idPuntoVenta:usuario.idPuntoVenta,
-      CambiarPass: usuario.CambiarPass,  // ← nuevo
+      idEstado:    usuario.idEstado,
+      idPais:      usuario.idPais,
+      CambiarPass: usuario.CambiarPass,
     };
 
     const accessToken  = await reply.jwtSign(payload, { expiresIn: '15m' });
@@ -105,7 +107,10 @@ export async function login(request, reply) {
         NivelAcceso:  usuario.NivelAcceso,
         NombreCuenta: usuario.NombreCuenta,
         logoCuenta:   usuario.logoCuenta,
-        CambiarPass:  usuario.CambiarPass,  // ← nuevo
+        CambiarPass:  usuario.CambiarPass,
+        idPuntoVenta: usuario.idPuntoVenta,
+        idEstado:     usuario.idEstado,
+        idPais:       usuario.idPais,
       },
       pantallas: pantallasResult.recordset,
     });
@@ -127,7 +132,7 @@ export async function refresh(request, reply) {
       .input('RefreshToken', sql.VarChar(500), refreshToken)
       .query(`
         SELECT s.*, u.Nombre, u.Apellidos, u.TipoUsuario,
-               u.NivelAcceso, u.idPuntoVenta, u.CambiarPass
+               u.NivelAcceso, u.idPuntoVenta, u.idEstado, u.idPais, u.CambiarPass
         FROM VIDA_SESIONES s
         INNER JOIN VIDA_CUENTA_USUARIOS u
           ON u.idBranch = s.idBranch AND u.idCuenta = s.idCuenta AND u.idUsuario = s.idUsuario
@@ -148,7 +153,9 @@ export async function refresh(request, reply) {
       TipoUsuario: sesion.TipoUsuario,
       NivelAcceso: sesion.NivelAcceso,
       idPuntoVenta:sesion.idPuntoVenta,
-      CambiarPass: sesion.CambiarPass,  // ← nuevo
+      idEstado:    sesion.idEstado,
+      idPais:      sesion.idPais,
+      CambiarPass: sesion.CambiarPass,
     };
 
     const accessToken = await reply.jwtSign(payload, { expiresIn: '15m' });

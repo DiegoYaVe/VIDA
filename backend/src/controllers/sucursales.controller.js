@@ -1,20 +1,19 @@
 // src/controllers/sucursales.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
 
-async function nextId(pool, tabla, campo, idBranch, idCuenta) {
+async function nextId(pool, idBranch, idCuenta) {
   const r = await pool.request()
     .input('idBranch', sql.BigInt, idBranch)
     .input('idCuenta', sql.BigInt, idCuenta)
-    .query(`SELECT ISNULL(MAX(${campo}), 0) + 1 AS nextId
-            FROM ${tabla}
+    .query(`SELECT ISNULL(MAX(idPuntoVenta), 0) + 1 AS nextId
+            FROM VIDA_CUENTA_PUNTOS_VENTA
             WHERE idBranch = @idBranch AND idCuenta = @idCuenta`);
   return r.recordset[0].nextId;
 }
 
+// GET /sucursales/puntos-venta
 export async function listarPuntosVenta(request, reply) {
-  const { idBranch, idCuenta, TipoUsuario, idPuntoVenta } = request.user;
-  const ROLES_ADMIN = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
-  const esAdmin = ROLES_ADMIN.includes(TipoUsuario);
+  const { idBranch, idCuenta, TipoUsuario, idPuntoVenta, idPais, idEstado } = request.user;
 
   try {
     const pool = await getPool();
@@ -23,20 +22,35 @@ export async function listarPuntosVenta(request, reply) {
       .input('idCuenta', sql.BigInt, idCuenta);
 
     let whereExtra = '';
-    if (!esAdmin) {
+
+    if (TipoUsuario === 'ADMIN_PAIS' && idPais) {
+      req.input('idPais', sql.BigInt, idPais);
+      whereExtra = 'AND pv.idPais = @idPais';
+    } else if (TipoUsuario === 'ADMIN_ESTADO' && idEstado) {
+      req.input('idEstado', sql.BigInt, idEstado);
+      whereExtra = 'AND pv.idEstado = @idEstado';
+    } else if (['ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'].includes(TipoUsuario) && idPuntoVenta) {
       req.input('idPuntoVenta', sql.BigInt, idPuntoVenta);
-      whereExtra = 'AND idPuntoVenta = @idPuntoVenta';
+      whereExtra = 'AND pv.idPuntoVenta = @idPuntoVenta';
     }
+    // SUPER_ADMIN: sin filtro, ve todo
 
     const r = await req.query(`
-      SELECT idPuntoVenta, Nombre, NomComercial, TipoPuntoVenta,
-             Correo, Telefono, Encargado,
-             Calle, NumExt, NumInt, Colonia, CP, Ciudad, Estado, Pais,
-             Latitud, Longitud, StatusPuntoVenta, Status, FechaAlta
-      FROM VIDA_CUENTA_PUNTOS_VENTA
-      WHERE idBranch = @idBranch AND idCuenta = @idCuenta
-      ${whereExtra}
-      ORDER BY NomComercial
+      SELECT pv.idPuntoVenta, pv.Nombre, pv.NomComercial, pv.TipoPuntoVenta,
+             pv.Correo, pv.Telefono, pv.Encargado,
+             pv.Calle, pv.NumExt, pv.NumInt, pv.Colonia, pv.CP,
+             pv.Ciudad, pv.idEstado, pv.idPais,
+             pv.Latitud, pv.Longitud, pv.StatusPuntoVenta, pv.Status, pv.FechaAlta,
+             e.NombreEstado, p.NombrePais
+      FROM VIDA_CUENTA_PUNTOS_VENTA pv
+      LEFT JOIN VIDA_CUENTA_ESTADOS e
+        ON e.idBranch = pv.idBranch AND e.idCuenta = pv.idCuenta AND e.idEstado = pv.idEstado
+      LEFT JOIN VIDA_CUENTA_PAISES p
+        ON p.idBranch = pv.idBranch AND p.idCuenta = pv.idCuenta AND p.idPais = pv.idPais
+      WHERE pv.idBranch = @idBranch AND pv.idCuenta = @idCuenta
+        AND pv.Status = 'ACTIVO'
+        ${whereExtra}
+      ORDER BY p.NombrePais, e.NombreEstado, pv.NomComercial
     `);
 
     return reply.send(r.recordset);
@@ -46,19 +60,23 @@ export async function listarPuntosVenta(request, reply) {
   }
 }
 
+// POST /sucursales/puntos-venta
 export async function crearPuntoVenta(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const {
     Nombre, NomComercial, TipoPuntoVenta,
     Correo, Telefono, Encargado,
-    Calle, NumExt, NumInt, Colonia, CP, Ciudad, Estado, Pais,
+    Calle, NumExt, NumInt, Colonia, CP, Ciudad,
+    idEstado, idPais,
   } = request.body;
 
   if (!Nombre) return reply.code(400).send({ error: 'El nombre es requerido' });
+  if (!idPais)   return reply.code(400).send({ error: 'El país es requerido' });
+  if (!idEstado) return reply.code(400).send({ error: 'El estado es requerido' });
 
   try {
     const pool = await getPool();
-    const nuevoId = await nextId(pool, 'VIDA_CUENTA_PUNTOS_VENTA', 'idPuntoVenta', idBranch, idCuenta);
+    const nuevoId = await nextId(pool, idBranch, idCuenta);
 
     await pool.request()
       .input('idBranch',      sql.BigInt,      idBranch)
@@ -76,17 +94,17 @@ export async function crearPuntoVenta(request, reply) {
       .input('Colonia',       sql.VarChar(100), Colonia || null)
       .input('CP',            sql.VarChar(10),  CP || null)
       .input('Ciudad',        sql.VarChar(100), Ciudad || null)
-      .input('Estado',        sql.VarChar(100), Estado || null)
-      .input('Pais',          sql.VarChar(100), Pais || null)
+      .input('idEstado',      sql.BigInt,       idEstado)
+      .input('idPais',        sql.BigInt,       idPais)
       .input('UsuAlta',       sql.VarChar(20),  String(idUsuario))
       .query(`INSERT INTO VIDA_CUENTA_PUNTOS_VENTA
                 (idBranch, idCuenta, idPuntoVenta, Nombre, NomComercial, TipoPuntoVenta,
                  Correo, Telefono, Encargado, Calle, NumExt, NumInt, Colonia, CP,
-                 Ciudad, Estado, Pais, UsuAlta)
+                 Ciudad, idEstado, idPais, UsuAlta)
               VALUES
                 (@idBranch, @idCuenta, @idPuntoVenta, @Nombre, @NomComercial, @TipoPuntoVenta,
                  @Correo, @Telefono, @Encargado, @Calle, @NumExt, @NumInt, @Colonia, @CP,
-                 @Ciudad, @Estado, @Pais, @UsuAlta)`);
+                 @Ciudad, @idEstado, @idPais, @UsuAlta)`);
 
     return reply.code(201).send({ message: 'Punto de venta creado', idPuntoVenta: nuevoId });
   } catch (err) {
@@ -95,16 +113,20 @@ export async function crearPuntoVenta(request, reply) {
   }
 }
 
+// PUT /sucursales/puntos-venta/:idPuntoVenta
 export async function editarPuntoVenta(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const { idPuntoVenta } = request.params;
   const {
     Nombre, NomComercial, TipoPuntoVenta,
     Correo, Telefono, Encargado,
-    Calle, NumExt, NumInt, Colonia, CP, Ciudad, Estado, Pais,
+    Calle, NumExt, NumInt, Colonia, CP, Ciudad,
+    idEstado, idPais,
   } = request.body;
 
-  if (!Nombre) return reply.code(400).send({ error: 'El nombre es requerido' });
+  if (!Nombre)   return reply.code(400).send({ error: 'El nombre es requerido' });
+  if (!idPais)   return reply.code(400).send({ error: 'El país es requerido' });
+  if (!idEstado) return reply.code(400).send({ error: 'El estado es requerido' });
 
   try {
     const pool = await getPool();
@@ -124,14 +146,14 @@ export async function editarPuntoVenta(request, reply) {
       .input('Colonia',       sql.VarChar(100), Colonia || null)
       .input('CP',            sql.VarChar(10),  CP || null)
       .input('Ciudad',        sql.VarChar(100), Ciudad || null)
-      .input('Estado',        sql.VarChar(100), Estado || null)
-      .input('Pais',          sql.VarChar(100), Pais || null)
+      .input('idEstado',      sql.BigInt,       idEstado)
+      .input('idPais',        sql.BigInt,       idPais)
       .input('UsuMod',        sql.VarChar(20),  String(idUsuario))
       .query(`UPDATE VIDA_CUENTA_PUNTOS_VENTA SET
                 Nombre=@Nombre, NomComercial=@NomComercial, TipoPuntoVenta=@TipoPuntoVenta,
                 Correo=@Correo, Telefono=@Telefono, Encargado=@Encargado,
                 Calle=@Calle, NumExt=@NumExt, NumInt=@NumInt, Colonia=@Colonia,
-                CP=@CP, Ciudad=@Ciudad, Estado=@Estado, Pais=@Pais,
+                CP=@CP, Ciudad=@Ciudad, idEstado=@idEstado, idPais=@idPais,
                 FechaMod=GETDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta`);
 
@@ -142,6 +164,7 @@ export async function editarPuntoVenta(request, reply) {
   }
 }
 
+// PATCH /sucursales/puntos-venta/:idPuntoVenta/toggle
 export async function togglePuntoVenta(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const { idPuntoVenta } = request.params;

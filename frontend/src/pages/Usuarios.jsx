@@ -9,11 +9,12 @@ import api from '../services/api.js';
 
 // ── Badges de rol ──────────────────────────────────────────────────────────
 const ROL_CONFIG = {
-  SUPER_ADMIN:  { label: 'Super Admin',   bg: 'bg-purple-100',  text: 'text-purple-700'  },
-  ADMIN_PAIS:   { label: 'Admin País',    bg: 'bg-blue-100',    text: 'text-blue-700'    },
-  ADMIN:        { label: 'Administrador', bg: 'bg-indigo-100',  text: 'text-indigo-700'  },
-  SUPERVISOR:   { label: 'Supervisor',    bg: 'bg-yellow-100',  text: 'text-yellow-700'  },
-  CAJERO:       { label: 'Cajero',        bg: 'bg-green-100',   text: 'text-green-700'   },
+  SUPER_ADMIN:  { label: 'Super Admin',    bg: 'bg-purple-100',  text: 'text-purple-700'  },
+  ADMIN_PAIS:   { label: 'Admin País',     bg: 'bg-blue-100',    text: 'text-blue-700'    },
+  ADMIN_ESTADO: { label: 'Admin Estado',   bg: 'bg-cyan-100',    text: 'text-cyan-700'    },
+  ADMIN:        { label: 'Admin Sucursal', bg: 'bg-indigo-100',  text: 'text-indigo-700'  },
+  SUPERVISOR:   { label: 'Supervisor',     bg: 'bg-yellow-100',  text: 'text-yellow-700'  },
+  CAJERO:       { label: 'Cajero',         bg: 'bg-green-100',   text: 'text-green-700'   },
 };
 
 const STATUS_CONFIG = {
@@ -60,11 +61,30 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
     Puesto:          usuario?.Puesto          || '',
     FechaNacimiento: usuario?.FechaNacimiento?.split('T')[0] || '',
     idPuntoVenta:    usuario?.idPuntoVenta    || '',
+    idPais:          usuario?.idPais          || '',
+    idEstado:        usuario?.idEstado        || '',
     pantallas:       [],
   });
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
   const [loadingAccesos, setLoadingAccesos] = useState(false);
+  const [paises,  setPaises]  = useState([]);
+  const [estados, setEstados] = useState([]);
+
+  useEffect(() => {
+    api.get('/paises')
+      .then(r => setPaises(r.data))
+      .catch(err => console.error('[Usuarios] Error cargando países:', err?.response?.status, err?.response?.data));
+  }, []);
+
+  const handlePaisChange = (idPais) => {
+    setForm(f => ({ ...f, idPais, idEstado: '' }));
+    setEstados([]);
+    if (!idPais) return;
+    api.get(`/estados?idPais=${idPais}`)
+      .then(r => setEstados(r.data))
+      .catch(err => console.error('[Usuarios] Error cargando estados:', err?.response?.status, err?.response?.data));
+  };
 
   // Cargar accesos actuales si es edición
   useEffect(() => {
@@ -235,10 +255,16 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
                 <select value={form.TipoUsuario}
                   onChange={e => setForm(f=>({...f,TipoUsuario:e.target.value}))}
                   className="input-field text-sm" required>
-                  <option value="ADMIN">Administrador</option>
-                  <option value="ADMIN_PAIS">Admin País</option>
-                  <option value="SUPERVISOR">Supervisor</option>
-                  <option value="CAJERO">Cajero</option>
+                  <optgroup label="Administradores">
+                    <option value="SUPER_ADMIN">Super Admin — todos los países</option>
+                    <option value="ADMIN_PAIS">Admin País — todos los estados</option>
+                    <option value="ADMIN_ESTADO">Admin Estado — todas las sucursales</option>
+                    <option value="ADMIN">Admin Sucursal — su sucursal</option>
+                  </optgroup>
+                  <optgroup label="Operativos">
+                    <option value="SUPERVISOR">Supervisor</option>
+                    <option value="CAJERO">Cajero</option>
+                  </optgroup>
                 </select>
               </div>
               <div>
@@ -246,24 +272,77 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
                 <input value={form.Puesto} onChange={e => setForm(f=>({...f,Puesto:e.target.value}))}
                   className="input-field text-sm" placeholder="Ej: Gerente de Sucursal" />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1">Sucursal</label>
-                <div className="relative">
-                  <Building size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <select value={form.idPuntoVenta}
-                    onChange={e => setForm(f=>({...f,idPuntoVenta:e.target.value}))}
-                    className="input-field text-sm pl-9">
-                    <option value="">— Sin sucursal asignada —</option>
-                    {sucursales.map(s => (
-                      <option key={s.idPuntoVenta} value={s.idPuntoVenta}>
-                        {s.NomComercial || s.Nombre}
-                      </option>
+            </div>
+          </div>
+
+          {/* Ámbito geográfico según rol */}
+          {['ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR', 'CAJERO'].includes(form.TipoUsuario) && (
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Ámbito Geográfico</p>
+
+              {paises.length === 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">
+                  <p className="text-amber-700 text-xs font-semibold">
+                    ⚠️ No hay países registrados. Ejecuta el script <code>sql/03_seed_paises_estados.sql</code> primero.
+                  </p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* País — siempre visible en roles no SUPER_ADMIN */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">País</label>
+                  <select value={form.idPais} onChange={e => handlePaisChange(e.target.value)}
+                    className="input-field text-sm">
+                    <option value="">— Seleccionar país —</option>
+                    {paises.map(p => (
+                      <option key={p.idPais} value={p.idPais}>{p.NombrePais}</option>
                     ))}
                   </select>
                 </div>
+
+                {/* Estado — visible excepto ADMIN_PAIS */}
+                {['ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR', 'CAJERO'].includes(form.TipoUsuario) && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Estado</label>
+                    <select value={form.idEstado}
+                      onChange={e => setForm(f=>({...f, idEstado:e.target.value, idPuntoVenta:''}))}
+                      className="input-field text-sm" disabled={!form.idPais}>
+                      <option value="">— Seleccionar estado —</option>
+                      {estados.map(e => (
+                        <option key={e.idEstado} value={e.idEstado}>{e.NombreEstado}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Sucursal — solo roles operativos, filtrada por estado */}
+                {['ADMIN', 'SUPERVISOR', 'CAJERO'].includes(form.TipoUsuario) && (
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Sucursal</label>
+                    <div className="relative">
+                      <Building size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <select value={form.idPuntoVenta}
+                        onChange={e => setForm(f=>({...f,idPuntoVenta:e.target.value}))}
+                        className="input-field text-sm pl-9"
+                        disabled={!form.idEstado}>
+                        <option value="">
+                          {!form.idEstado ? '— Selecciona un estado primero —' : '— Sin sucursal asignada —'}
+                        </option>
+                        {sucursales
+                          .filter(s => !form.idEstado || String(s.idEstado) === String(form.idEstado))
+                          .map(s => (
+                            <option key={s.idPuntoVenta} value={s.idPuntoVenta}>
+                              {s.NomComercial || s.Nombre}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          )}
 
           {/* Accesos a módulos */}
           <div>
@@ -452,8 +531,10 @@ export default function Usuarios() {
           <select value={rolFiltro} onChange={e => { setRolFiltro(e.target.value); setPage(1); }}
             className="input-field text-sm w-44">
             <option value="">Todos los roles</option>
-            <option value="ADMIN">Administrador</option>
+            <option value="SUPER_ADMIN">Super Admin</option>
             <option value="ADMIN_PAIS">Admin País</option>
+            <option value="ADMIN_ESTADO">Admin Estado</option>
+            <option value="ADMIN">Admin Sucursal</option>
             <option value="SUPERVISOR">Supervisor</option>
             <option value="CAJERO">Cajero</option>
           </select>
@@ -532,11 +613,14 @@ export default function Usuarios() {
                     <Badge value={u.TipoUsuario} config={ROL_CONFIG} />
                   </td>
 
-                  {/* Sucursal */}
+                  {/* Ámbito */}
                   <td className="py-3 px-4">
                     <p className="text-xs text-gray-600">
-                      {u.NombreSucursal || <span className="text-gray-300">—</span>}
+                      {u.NombreSucursal || u.NombreEstado || u.NombrePais || <span className="text-gray-300">—</span>}
                     </p>
+                    {u.NombreSucursal && u.NombreEstado && (
+                      <p className="text-xs text-gray-400">{u.NombreEstado}{u.NombrePais ? `, ${u.NombrePais}` : ''}</p>
+                    )}
                   </td>
 
                   {/* Módulos */}

@@ -30,7 +30,7 @@ import {
   setConfigDelivery,
 } from '../controllers/delivery.controller.js';
 
-const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN', 'SUPERVISOR'];
+const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR'];
 
 export async function deliveryRoutes(fastify) {
 

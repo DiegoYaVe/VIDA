@@ -4,8 +4,8 @@ import {
   listarPuntosVenta, crearPuntoVenta, editarPuntoVenta, togglePuntoVenta,
 } from '../controllers/sucursales.controller.js';
 
-const TODOS = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
-const ADMIN = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
+const TODOS = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
+const ADMIN = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN'];
 
 export async function sucursalesRoutes(fastify) {
 
@@ -21,7 +21,7 @@ export async function sucursalesRoutes(fastify) {
     { preHandler: [authenticate, requireRole(...ADMIN)] },
     editarPuntoVenta);
 
-  fastify.patch('/sucursales/puntos-venta/:idPuntoVenta/status',
+  fastify.patch('/sucursales/puntos-venta/:idPuntoVenta/toggle',
     { preHandler: [authenticate, requireRole(...ADMIN)] },
     togglePuntoVenta);
 }
