@@ -4,7 +4,7 @@ import {
   listarPedidos, obtenerPedido, crearPedido, cambiarStatusPedido,
   asignarRepartidor, subirComprobante, revisarComprobante,
   listarRepartidores, aprobarRepartidor, listarVentasPOS,
-  sincronizarVentasOffline,
+  sincronizarVentasOffline, resolverRevisionStock,
 } from '../controllers/pedidos.controller.js';
 
 const ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN'];
@@ -38,6 +38,11 @@ export async function pedidosRoutes(fastify) {
   fastify.patch('/pedidos/:idPedido/repartidor',
     { preHandler: [authenticate, requireRole(...ESCRITURA)] },
     asignarRepartidor);
+
+  // Resolver venta offline sincronizada con stock insuficiente
+  fastify.patch('/pedidos/:idPedido/revision-stock',
+    { preHandler: [authenticate, requireRole(...ESCRITURA)] },
+    resolverRevisionStock);
 
   // ── Comprobantes de pago manual ───────────────────────────────────────
   fastify.post('/pedidos/:idPedido/comprobante',

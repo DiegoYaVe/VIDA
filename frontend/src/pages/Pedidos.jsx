@@ -6,7 +6,7 @@ import { useWebSocket } from '../hooks/useWebSocket.js';
 import {
   ShoppingBag, Clock, CheckCircle, Truck, XCircle, ChevronRight,
   User, Phone, RefreshCw, Check, X, ArrowRight, Eye, AlertCircle,
-  Wifi, WifiOff,
+  Wifi, WifiOff, AlertTriangle,
 } from 'lucide-react';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
@@ -121,6 +121,20 @@ function ModalPedido({ idPedido, idBranch, idCuenta, puedeEscribir, repartidores
     }
   }
 
+  async function resolverRevision() {
+    setCambiando(true); setError('');
+    try {
+      await api.patch(`/pedidos/${idPedido}/revision-stock`, { Notas: notas || null });
+      setNotas('');
+      await cargar();
+      onActualizado();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al resolver revisión');
+    } finally {
+      setCambiando(false);
+    }
+  }
+
   if (loading) return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl p-8"><p className="text-gray-400 text-sm">Cargando...</p></div>
@@ -146,7 +160,8 @@ function ModalPedido({ idPedido, idBranch, idCuenta, puedeEscribir, repartidores
               </span>
             </div>
             <p className="text-xs text-gray-400 mt-0.5">
-              {pedido.Canal === 'APP' ? '📱 App' : '🖥️ POS'} · {new Date(pedido.FechaAlta).toLocaleString()}
+              {pedido.Canal === 'APP' ? '📱 App' : '🖥️ POS'}
+              {pedido.EsOffline ? ' · sincronizada offline' : ''} · {new Date(pedido.FechaAlta).toLocaleString()}
             </p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
@@ -154,6 +169,40 @@ function ModalPedido({ idPedido, idBranch, idCuenta, puedeEscribir, repartidores
 
         <div className="overflow-y-auto flex-1 p-5 space-y-5">
           {error && <p className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+
+          {/* Venta offline con stock insuficiente — requiere revisión */}
+          {!!pedido.RequiereRevision && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5"/>
+                <div>
+                  <p className="text-sm font-bold text-amber-800">Venta offline con stock insuficiente</p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    Esta venta se cobró sin conexión y al sincronizarla el inventario registrado era menor
+                    a lo vendido. Verifica el conteo físico del producto en la sucursal y ajusta el stock
+                    en Inventario si es necesario.
+                  </p>
+                </div>
+              </div>
+              {puedeEscribir && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={notas}
+                    onChange={e => setNotas(e.target.value)}
+                    placeholder="Nota de resolución (opcional)"
+                    className="flex-1 border border-amber-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+                  />
+                  <button
+                    onClick={resolverRevision}
+                    disabled={cambiando}
+                    className="flex items-center gap-1 bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-50">
+                    <Check size={12}/> Marcar como revisada
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Cliente y repartidor */}
           <div className="grid grid-cols-2 gap-3">
@@ -314,6 +363,8 @@ export default function Pedidos() {
   const [page, setPage]               = useState(1);
   const [filtStatus, setFiltStatus]   = useState('');
   const [filtCanal, setFiltCanal]     = useState('');
+  const [filtRevision, setFiltRevision] = useState(false);
+  const [revisionCount, setRevisionCount] = useState(0);
   const [loading, setLoading]         = useState(true);
   const [repartidores, setRepartidores] = useState([]);
   const [pedidoAbierto, setPedidoAbierto] = useState(null);
@@ -325,17 +376,29 @@ export default function Pedidos() {
     setLoading(true);
     try {
       const r = await api.get('/pedidos', {
-        params: { page: p, limit: 20, status: filtStatus, canal: filtCanal },
+        params: {
+          page: p, limit: 20, status: filtStatus, canal: filtCanal,
+          requiereRevision: filtRevision ? 1 : '',
+        },
       });
       setPedidos(r.data.data);
       setTotal(r.data.total);
     } finally {
       setLoading(false);
     }
-  }, [page, filtStatus, filtCanal]);
+  }, [page, filtStatus, filtCanal, filtRevision]);
 
-  useEffect(() => { cargar(1); setPage(1); }, [filtStatus, filtCanal]);
+  // Contador de ventas por revisar (para el badge del filtro)
+  const cargarRevisionCount = useCallback(async () => {
+    try {
+      const r = await api.get('/pedidos', { params: { page: 1, limit: 1, requiereRevision: 1 } });
+      setRevisionCount(r.data.total || 0);
+    } catch { /* sin permiso o sin red — el badge simplemente no se muestra */ }
+  }, []);
+
+  useEffect(() => { cargar(1); setPage(1); }, [filtStatus, filtCanal, filtRevision]);
   useEffect(() => { cargar(page); }, [page]);
+  useEffect(() => { cargarRevisionCount(); }, [cargarRevisionCount]);
 
   // Mantener referencia estable de cargar para el callback WS
   useEffect(() => { cargarRef.current = cargar; }, [cargar]);
@@ -347,13 +410,15 @@ export default function Pedidos() {
       // Nuevo pedido llegó → recargar desde la página 1 con los filtros actuales
       cargarRef.current?.(1);
       setPage(1);
+      // Las ventas offline sincronizadas pueden traer revisión pendiente
+      if (msg.esOffline) cargarRevisionCount();
     } else if (msg.tipo === 'pedido:actualizado') {
       // Actualizar el status del pedido en la lista sin recargar todo
       setPedidos(prev => prev.map(p =>
         p.idPedido === msg.idPedido ? { ...p, Status: msg.StatusNuevo } : p
       ));
     }
-  }, []);
+  }, [cargarRevisionCount]);
 
   useWebSocket(handleWsMensaje, true);
 
@@ -434,6 +499,24 @@ export default function Pedidos() {
             </button>
           ))}
         </div>
+
+        {/* Ventas offline con stock insuficiente pendientes de revisión */}
+        {(revisionCount > 0 || filtRevision) && (
+          <button onClick={() => setFiltRevision(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+              filtRevision
+                ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
+                : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+            }`}>
+            <AlertTriangle size={13}/>
+            Por revisar
+            {revisionCount > 0 && (
+              <span className={`rounded-full px-1.5 text-[10px] font-bold ${
+                filtRevision ? 'bg-white text-amber-600' : 'bg-amber-500 text-white'
+              }`}>{revisionCount}</span>
+            )}
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -462,7 +545,10 @@ export default function Pedidos() {
                       className="bg-white border-2 border-gray-100 rounded-2xl p-4 cursor-pointer hover:border-vida-blue hover:shadow-md transition-all">
                       <div className="flex items-start justify-between mb-3">
                         <div>
-                          <p className="font-bold text-gray-800">#{p.idPedido}</p>
+                          <p className="font-bold text-gray-800 flex items-center gap-1.5">
+                            #{p.idPedido}
+                            {!!p.RequiereRevision && <AlertTriangle size={14} className="text-amber-500" title="Requiere revisión de stock"/>}
+                          </p>
                           <p className="text-xs text-gray-400">{p.Canal === 'APP' ? '📱 App' : '🖥️ POS'}</p>
                         </div>
                         <StatusBadge status={p.Status}/>
@@ -510,9 +596,10 @@ export default function Pedidos() {
                     className="flex items-center justify-between bg-white border border-gray-100 rounded-xl px-4 py-3 cursor-pointer hover:shadow-sm transition-shadow">
                     <div className="flex items-center gap-3">
                       <StatusBadge status={p.Status}/>
-                      <div>
+                      <div className="flex items-center gap-1.5">
                         <span className="text-sm font-semibold text-gray-700">#{p.idPedido}</span>
-                        {p.NombreCliente && <span className="text-xs text-gray-400 ml-2">{p.NombreCliente}</span>}
+                        {!!p.RequiereRevision && <AlertTriangle size={13} className="text-amber-500" title="Requiere revisión de stock"/>}
+                        {p.NombreCliente && <span className="text-xs text-gray-400 ml-1">{p.NombreCliente}</span>}
                       </div>
                     </div>
                     <div className="flex items-center gap-3 text-right">
@@ -552,7 +639,7 @@ export default function Pedidos() {
           puedeEscribir={puedeEscribir}
           repartidores={repartidores}
           onClose={() => setPedidoAbierto(null)}
-          onActualizado={() => cargar(page)}
+          onActualizado={() => { cargar(page); cargarRevisionCount(); }}
         />
       )}
     </div>

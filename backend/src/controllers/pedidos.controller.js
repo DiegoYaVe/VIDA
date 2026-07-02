@@ -42,7 +42,7 @@ const TRANSICIONES = {
 // ══════════════════════════════════════════════════════════════════════════
 export async function listarPedidos(request, reply) {
   const { idBranch, idCuenta } = request.user;
-  const { page = 1, limit = 20, status = '', canal = '', idPuntoVenta = '' } = request.query;
+  const { page = 1, limit = 20, status = '', canal = '', idPuntoVenta = '', requiereRevision = '' } = request.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   try {
@@ -52,6 +52,7 @@ export async function listarPedidos(request, reply) {
     if (status)       whereExtra += ' AND p.Status = @status';
     if (canal)        whereExtra += ' AND p.Canal = @canal';
     if (idPuntoVenta) whereExtra += ' AND p.idPuntoVenta = @idPuntoVenta';
+    if (requiereRevision === '1') whereExtra += ' AND p.RequiereRevision = 1';
 
     const req = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
@@ -67,6 +68,7 @@ export async function listarPedidos(request, reply) {
       SELECT p.idPedido, p.Canal, p.Status, p.MetodoPago, p.StatusPago,
              p.TotalUSD, p.MontoEfectivo, p.MontoTarjeta, p.MontoCambio,
              p.Notas, p.FechaAlta, p.FechaExpiracion,
+             p.RequiereRevision, p.EsOffline,
              pv.NomComercial AS NombreSucursal,
              cl.Nombre AS NombreCliente, cl.Telefono AS TelefonoCliente,
              rep.Nombre AS NombreRepartidor, rep.Telefono AS TelefonoRepartidor,
@@ -129,6 +131,7 @@ export async function obtenerPedido(request, reply) {
                p.Canal, p.Status, p.MetodoPago, p.StatusPago,
                p.TotalUSD, p.MontoEfectivo, p.MontoTarjeta, p.MontoCambio,
                p.Notas, p.FechaAlta, p.FechaExpiracion,
+               p.RequiereRevision, p.EsOffline,
                pv.NomComercial AS NombreSucursal,
                cl.Nombre AS NombreCliente, cl.Telefono AS TelefonoCliente,
                cl.Direccion AS DireccionCliente,
@@ -747,6 +750,51 @@ export async function cambiarStatusPedido(request, reply) {
     }
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al cambiar status: ' + err.message });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// RESOLVER REVISIÓN DE STOCK
+// PATCH /pedidos/:idPedido/revision-stock — marca como revisada una venta
+// offline que se sincronizó con stock insuficiente
+// ══════════════════════════════════════════════════════════════════════════
+export async function resolverRevisionStock(request, reply) {
+  const { idBranch, idCuenta, idUsuario } = request.user;
+  const { idPedido } = request.params;
+  const { Notas } = request.body || {};
+
+  try {
+    const pool = await getPool();
+
+    // Guard de status: solo la primera resolución afecta filas
+    const updR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('idPedido', sql.BigInt, idPedido)
+      .query(`UPDATE VIDA_PEDIDOS SET RequiereRevision = 0, FechaMod = GETDATE()
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
+                AND RequiereRevision = 1`);
+
+    if (updR.rowsAffected[0] === 0) {
+      return reply.code(404).send({ error: 'El pedido no existe o ya fue revisado' });
+    }
+
+    const histId = await nextId(pool, 'VIDA_PEDIDOS_HISTORIAL', 'idHistorial', idBranch, idCuenta);
+    await pool.request()
+      .input('idBranch',    sql.BigInt,      idBranch)
+      .input('idCuenta',    sql.BigInt,      idCuenta)
+      .input('idHistorial', sql.BigInt,      histId)
+      .input('idPedido',    sql.BigInt,      idPedido)
+      .input('Notas',       sql.VarChar(500), Notas ? `Revisión de stock resuelta: ${Notas}`.slice(0, 500) : 'Revisión de stock resuelta')
+      .input('UsuAlta',     sql.VarChar(20), String(idUsuario))
+      .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL
+                (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, Notas, UsuAlta)
+              VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, 'ENTREGADO', 'ENTREGADO', @Notas, @UsuAlta)`);
+
+    return reply.send({ message: 'Revisión resuelta' });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al resolver revisión' });
   }
 }
 
