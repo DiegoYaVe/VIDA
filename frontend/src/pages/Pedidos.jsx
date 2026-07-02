@@ -379,6 +379,8 @@ export default function Pedidos() {
   const [filtCanal, setFiltCanal]     = useState('');
   const [filtRevision, setFiltRevision] = useState(false);
   const [revisionCount, setRevisionCount] = useState(0);
+  const [repPendientes, setRepPendientes] = useState([]);
+  const [modalReps, setModalReps] = useState(false);
   const [loading, setLoading]         = useState(true);
   const [repartidores, setRepartidores] = useState([]);
   const [pedidoAbierto, setPedidoAbierto] = useState(null);
@@ -442,12 +444,26 @@ export default function Pedidos() {
     return () => clearInterval(intervalRef.current);
   }, [page]);
 
-  // Cargar repartidores aprobados
-  useEffect(() => {
+  // Cargar repartidores aprobados + solicitudes pendientes
+  const cargarRepartidores = useCallback(() => {
     api.get('/repartidores', { params: { statusAprobacion: 'APROBADO' } })
       .then(r => setRepartidores(r.data))
       .catch(() => {});
+    api.get('/repartidores', { params: { statusAprobacion: 'PENDIENTE' } })
+      .then(r => setRepPendientes(r.data || []))
+      .catch(() => {});
   }, []);
+
+  useEffect(() => { cargarRepartidores(); }, [cargarRepartidores]);
+
+  async function resolverSolicitudRep(idRepartidor, aprobado) {
+    try {
+      await api.patch(`/repartidores/${idRepartidor}/aprobacion`, {
+        StatusAprobacion: aprobado ? 'APROBADO' : 'RECHAZADO',
+      });
+      cargarRepartidores();
+    } catch { /* recargar mostrará el estado real */ }
+  }
 
   const pages = Math.ceil(total / 20);
   const activos = pedidos.filter(p => !['ENTREGADO','CANCELADO'].includes(p.Status));
@@ -513,6 +529,18 @@ export default function Pedidos() {
             </button>
           ))}
         </div>
+
+        {/* Solicitudes de repartidores nuevas */}
+        {puedeEscribir && repPendientes.length > 0 && (
+          <button onClick={() => setModalReps(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 transition-all">
+            <Truck size={13}/>
+            Repartidores por aprobar
+            <span className="bg-blue-500 text-white rounded-full px-1.5 text-[10px] font-bold">
+              {repPendientes.length}
+            </span>
+          </button>
+        )}
 
         {/* Ventas offline con stock insuficiente pendientes de revisión */}
         {(revisionCount > 0 || filtRevision) && (
@@ -655,6 +683,46 @@ export default function Pedidos() {
           onClose={() => setPedidoAbierto(null)}
           onActualizado={() => { cargar(page); cargarRevisionCount(); }}
         />
+      )}
+
+      {/* Modal: solicitudes de repartidores */}
+      {modalReps && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b">
+              <h3 className="font-bold text-gray-800">Solicitudes de repartidores</h3>
+              <button onClick={() => setModalReps(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20}/>
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-5 space-y-3">
+              {repPendientes.length === 0 ? (
+                <p className="text-center text-gray-400 py-8 text-sm">Sin solicitudes pendientes 🎉</p>
+              ) : repPendientes.map(r => (
+                <div key={r.idRepartidor} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">{r.Nombre}</p>
+                    <p className="text-xs text-gray-500">
+                      📞 {r.Telefono || '—'}
+                      {r.Vehiculo ? ` · 🛵 ${r.Vehiculo}` : ''}
+                      {r.PlacaVehiculo ? ` · ${r.PlacaVehiculo}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => resolverSolicitudRep(r.idRepartidor, true)}
+                      className="flex items-center gap-1 bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg hover:opacity-90">
+                      <Check size={12}/> Aprobar
+                    </button>
+                    <button onClick={() => resolverSolicitudRep(r.idRepartidor, false)}
+                      className="flex items-center gap-1 bg-red-500 text-white text-xs px-3 py-1.5 rounded-lg hover:opacity-90">
+                      <X size={12}/> Rechazar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

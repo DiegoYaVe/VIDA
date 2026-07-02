@@ -19,6 +19,7 @@ import {
   crearPedidoApp,
   estadoPedidoCliente,
   // Repartidor
+  registrarRepartidor,
   loginRepartidor,
   toggleDisponible,
   actualizarUbicacion,
@@ -83,6 +84,7 @@ export async function deliveryRoutes(fastify) {
     subirComprobanteCliente);
 
   // ── Repartidor — auth ─────────────────────────────────────────────────
+  fastify.post('/delivery/repartidor/registro', registrarRepartidor);
   fastify.post('/delivery/repartidor/login', loginRepartidor);
 
   fastify.post('/delivery/repartidor/disponible',

@@ -1062,6 +1062,24 @@ export async function aprobarRepartidor(request, reply) {
       .query(`UPDATE VIDA_REPARTIDORES SET StatusAprobacion=@StatusAprobacion
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
 
+    // Avisarle al repartidor si tiene token push registrado
+    if (StatusAprobacion === 'APROBADO') {
+      const tokR = await pool.request()
+        .input('idBranch',     sql.BigInt, idBranch)
+        .input('idCuenta',     sql.BigInt, idCuenta)
+        .input('idRepartidor', sql.BigInt, idRepartidor)
+        .query(`SELECT FcmToken FROM VIDA_REPARTIDORES
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+      const token = tokR.recordset[0]?.FcmToken;
+      if (token) {
+        enviarPush(token, {
+          title: '🎉 ¡Cuenta aprobada!',
+          body: 'Ya puedes iniciar sesión y comenzar a repartir',
+          data: { tipo: 'cuenta_aprobada' },
+        }, request.log);
+      }
+    }
+
     return reply.send({ message: `Repartidor ${StatusAprobacion === 'APROBADO' ? 'aprobado' : 'rechazado'}` });
   } catch (err) {
     request.log.error(err);
