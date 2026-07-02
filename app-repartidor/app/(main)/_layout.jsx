@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Stack, useRouter, usePathname } from 'expo-router';
 import {
   View,
@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import useAuthStore from '../../store/authStore';
 import api from '../../services/api';
+import { registrarPushToken, escucharTapsNotificacion } from '../../services/push';
 
 export default function MainLayout() {
   const repartidor = useAuthStore((s) => s.repartidor);
@@ -21,6 +22,17 @@ export default function MainLayout() {
   const [toggling, setToggling] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+
+  // Push: registrar token al entrar (ya autenticado) y navegar al home
+  // cuando el repartidor toca una notificación de pedido
+  useEffect(() => {
+    registrarPushToken();
+    return escucharTapsNotificacion((data) => {
+      if (data?.tipo === 'nuevo_pedido_disponible' || data?.tipo === 'pedido_asignado') {
+        router.push('/(main)');
+      }
+    });
+  }, []);
 
   const handleToggle = useCallback(async (value) => {
     setToggling(true);

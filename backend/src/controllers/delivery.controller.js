@@ -1,6 +1,7 @@
 // src/controllers/delivery.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
 import { broadcast } from '../ws/ws.manager.js';
+import { enviarPush } from '../services/push.service.js';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { createTransport } from 'nodemailer';
@@ -491,6 +492,41 @@ export async function actualizarFcmCliente(request, reply) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// REPARTIDOR — ACTUALIZAR FCM TOKEN
+// PUT /delivery/repartidor/fcm
+// ══════════════════════════════════════════════════════════════════════════
+export async function actualizarFcmRepartidor(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  const { FcmToken } = request.body;
+  try {
+    const pool = await getPool();
+    await pool.request()
+      .input('idBranch',     sql.BigInt,    idBranch)
+      .input('idCuenta',     sql.BigInt,    idCuenta)
+      .input('idRepartidor', sql.BigInt,    idRepartidor)
+      .input('FcmToken',     sql.VarChar(500), FcmToken)
+      .query(`UPDATE VIDA_REPARTIDORES SET FcmToken=@FcmToken
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+    return reply.send({ ok: true });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al actualizar FCM token' });
+  }
+}
+
+// Token push del cliente de un pedido (para notificarle cambios de status)
+async function tokenClientePedido(pool, idBranch, idCuenta, idCliente) {
+  if (!idCliente) return null;
+  const r = await pool.request()
+    .input('idBranch',  sql.BigInt, idBranch)
+    .input('idCuenta',  sql.BigInt, idCuenta)
+    .input('idCliente', sql.BigInt, idCliente)
+    .query(`SELECT FcmToken FROM VIDA_APP_CLIENTES
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+  return r.recordset[0]?.FcmToken || null;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // SUCURSALES ACTIVAS (sin auth)
 // GET /delivery/sucursales?idBranch=1&idCuenta=1
 // ══════════════════════════════════════════════════════════════════════════
@@ -731,6 +767,18 @@ export async function crearPedidoApp(request, reply) {
       items,
       repartidores:    repartidores.recordset.map(r => r.idRepartidor),
     });
+
+    // Push a repartidores disponibles — les llega aunque tengan la app
+    // en background o el teléfono bloqueado (el WS solo funciona en foreground)
+    enviarPush(
+      repartidores.recordset.map(r => r.FcmToken),
+      {
+        title: '🛵 Nuevo pedido disponible',
+        body: `${pv?.NomComercial ?? 'Sucursal'} — $${TotalUSD.toFixed(2)} · ${DireccionEntrega || 'ver dirección en la app'}`,
+        data: { tipo: 'nuevo_pedido_disponible', idPedido },
+      },
+      request.log,
+    );
 
     return reply.code(201).send({ idPedido, status: 'BUSCANDO_REPARTIDOR' });
   } catch (err) {
@@ -995,6 +1043,15 @@ export async function aceptarPedido(request, reply) {
                 ON p.idBranch=d.idBranch AND p.idCuenta=d.idCuenta AND p.idProducto=d.idProducto
               WHERE d.idBranch=@idBranch AND d.idCuenta=@idCuenta AND d.idPedido=@idPedido`);
 
+    // Push al cliente: su pedido fue aceptado
+    tokenClientePedido(pool, idBranch, idCuenta, pedido.idCliente)
+      .then(token => token && enviarPush(token, {
+        title: '✅ Pedido aceptado',
+        body: `${rep?.Nombre || 'Un repartidor'} va por tu pedido #${idPedido}`,
+        data: { tipo: 'status_pedido', idPedido, status: 'REPARTIDOR_ASIGNADO' },
+      }, request.log))
+      .catch(() => {});
+
     broadcast(idBranch, idCuenta, {
       tipo:             'pedido_asignado',
       idPedido,
@@ -1045,7 +1102,7 @@ export async function actualizarStatusPedido(request, reply) {
       .input('idCuenta',     sql.BigInt, idCuenta)
       .input('idPedido',     sql.BigInt, idPedido)
       .input('idRepartidor', sql.BigInt, idRepartidor)
-      .query(`SELECT p.Status, p.MetodoPago, p.TotalUSD, p.idPuntoVenta, r.ComisionPct
+      .query(`SELECT p.Status, p.MetodoPago, p.TotalUSD, p.idPuntoVenta, p.idCliente, r.ComisionPct
               FROM VIDA_PEDIDOS p
               LEFT JOIN VIDA_REPARTIDORES r
                 ON r.idBranch=p.idBranch AND r.idCuenta=p.idCuenta AND r.idRepartidor=p.idRepartidor
@@ -1203,6 +1260,21 @@ export async function actualizarStatusPedido(request, reply) {
       idRepartidor,
       nuevoStatus,
     });
+
+    // Push al cliente en los hitos que le importan
+    const MENSAJES_CLIENTE = {
+      EN_CAMINO: { title: '🛵 Tu pedido va en camino', body: `El repartidor salió con tu pedido #${idPedido}` },
+      ENTREGADO: { title: '📦 Pedido entregado', body: `Tu pedido #${idPedido} fue entregado. ¡Gracias por tu compra!` },
+      CANCELADO: { title: '❌ Pedido cancelado', body: `Tu pedido #${idPedido} fue cancelado` },
+    };
+    if (MENSAJES_CLIENTE[nuevoStatus]) {
+      tokenClientePedido(pool, idBranch, idCuenta, pedido.idCliente)
+        .then(token => token && enviarPush(token, {
+          ...MENSAJES_CLIENTE[nuevoStatus],
+          data: { tipo: 'status_pedido', idPedido, status: nuevoStatus },
+        }, request.log))
+        .catch(() => {});
+    }
 
     return reply.send({ ok: true, nuevoStatus });
   } catch (err) {

@@ -17,6 +17,7 @@ import {
   loginRepartidor,
   toggleDisponible,
   actualizarUbicacion,
+  actualizarFcmRepartidor,
   aceptarPedido,
   actualizarStatusPedido,
   pedidosActivos,
@@ -68,6 +69,10 @@ export async function deliveryRoutes(fastify) {
   fastify.post('/delivery/repartidor/ubicacion',
     { preHandler: [authenticateRepartidor] },
     actualizarUbicacion);
+
+  fastify.put('/delivery/repartidor/fcm',
+    { preHandler: [authenticateRepartidor] },
+    actualizarFcmRepartidor);
 
   fastify.post('/delivery/repartidor/aceptar',
     { preHandler: [authenticateRepartidor] },

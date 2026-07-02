@@ -1,6 +1,7 @@
 // src/controllers/pedidos.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
 import { broadcast } from '../ws/ws.manager.js';
+import { enviarPush } from '../services/push.service.js';
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
@@ -882,6 +883,22 @@ export async function asignarRepartidor(request, reply) {
       .input('idRepartidor',sql.BigInt, idRepartidor)
       .query(`UPDATE VIDA_PEDIDOS SET idRepartidor=@idRepartidor, FechaMod=GETDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
+
+    // Push al repartidor asignado manualmente desde el panel
+    const repR = await pool.request()
+      .input('idBranch',     sql.BigInt, idBranch)
+      .input('idCuenta',     sql.BigInt, idCuenta)
+      .input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`SELECT FcmToken FROM VIDA_REPARTIDORES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+    const token = repR.recordset[0]?.FcmToken;
+    if (token) {
+      enviarPush(token, {
+        title: '📋 Pedido asignado',
+        body: `Te asignaron el pedido #${idPedido} desde el panel`,
+        data: { tipo: 'pedido_asignado', idPedido: parseInt(idPedido) },
+      }, request.log);
+    }
 
     return reply.send({ message: 'Repartidor asignado' });
   } catch (err) {

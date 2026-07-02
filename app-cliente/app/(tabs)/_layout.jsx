@@ -1,7 +1,10 @@
-import { Tabs } from 'expo-router';
+import { useEffect } from 'react';
+import { Tabs, useRouter } from 'expo-router';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import useCarritoStore from '../../store/carritoStore';
+import useAuthStore from '../../store/authStore';
+import { registrarPushToken, escucharTapsNotificacion } from '../../services/push';
 
 function CartTabIcon({ color, focused }) {
   const items = useCarritoStore((s) => s.items);
@@ -20,6 +23,20 @@ function CartTabIcon({ color, focused }) {
 }
 
 export default function TabsLayout() {
+  const token = useAuthStore((s) => s.token);
+  const router = useRouter();
+
+  // Push: registrar token con sesión activa; al tocar una notificación de
+  // status, abrir el tracking del pedido
+  useEffect(() => {
+    if (token) registrarPushToken();
+    return escucharTapsNotificacion((data) => {
+      if (data?.tipo === 'status_pedido' && data?.idPedido) {
+        router.push(`/pedido/${data.idPedido}`);
+      }
+    });
+  }, [token]);
+
   return (
     <Tabs
       screenOptions={{
