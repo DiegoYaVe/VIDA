@@ -47,6 +47,12 @@
           "locationAlwaysAndWhenInUsePermission": "Necesitamos tu ubicación para el seguimiento del pedido."
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Necesitamos acceso a tus fotos para adjuntar el comprobante de pago."
+        }
+      ],
       "expo-router",
       "expo-status-bar",
       "expo-web-browser"

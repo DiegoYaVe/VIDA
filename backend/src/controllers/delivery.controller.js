@@ -5,6 +5,8 @@ import { enviarPush } from '../services/push.service.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
+import path from 'path';
+import fs from 'fs';
 import { createTransport } from 'nodemailer';
 
 // URL pública del backend — se usa en links de confirmación de email y OAuth.
@@ -512,6 +514,104 @@ export async function actualizarFcmRepartidor(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al actualizar FCM token' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// DATOS DE PAGO MÓVIL (públicos — la app los muestra en el checkout)
+// GET /delivery/pago-movil?idBranch=1&idCuenta=1
+// Se configuran desde el panel admin (claves PagoMovil* en config delivery)
+// ══════════════════════════════════════════════════════════════════════════
+export async function datosPagoMovil(request, reply) {
+  const { idBranch, idCuenta } = request.query;
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .query(`SELECT Clave, Valor FROM VIDA_CONFIG_DELIVERY
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                AND Clave IN ('PagoMovilBanco','PagoMovilTelefono','PagoMovilCedula','PagoMovilTitular')`);
+
+    const cfg = Object.fromEntries(r.recordset.map(x => [x.Clave, x.Valor]));
+    return reply.send({
+      Banco:    cfg.PagoMovilBanco    || null,
+      Telefono: cfg.PagoMovilTelefono || null,
+      Cedula:   cfg.PagoMovilCedula   || null,
+      Titular:  cfg.PagoMovilTitular  || null,
+      disponible: !!(cfg.PagoMovilBanco && cfg.PagoMovilTelefono),
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener datos de Pago Móvil' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — SUBIR COMPROBANTE DE PAGO (multipart)
+// POST /delivery/pedido/:idPedido/comprobante
+// ══════════════════════════════════════════════════════════════════════════
+export async function subirComprobanteCliente(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  const { idPedido } = request.params;
+
+  try {
+    const pool = await getPool();
+
+    // El pedido debe ser de este cliente
+    const pedR = await pool.request()
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idPedido',  sql.BigInt, idPedido)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT idPedido FROM VIDA_PEDIDOS
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                AND idPedido=@idPedido AND idCliente=@idCliente`);
+    if (!pedR.recordset.length) {
+      return reply.code(404).send({ error: 'Pedido no encontrado' });
+    }
+
+    const data = await request.file();
+    if (!data) return reply.code(400).send({ error: 'No se recibió el comprobante' });
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(data.mimetype)) {
+      return reply.code(400).send({ error: 'Solo se permiten imágenes JPG, PNG o WebP' });
+    }
+
+    const referencia = (data.fields?.Referencia?.value || '').slice(0, 100) || null;
+
+    const uploadDir = path.join(process.cwd(), 'uploads', 'comprobantes');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+    const ext = (data.filename.split('.').pop() || 'jpg').toLowerCase();
+    const filename = `comp_${idBranch}_${idCuenta}_${idPedido}_${Date.now()}.${ext}`;
+    fs.writeFileSync(path.join(uploadDir, filename), await data.toBuffer());
+    const urlImagen = `/uploads/comprobantes/${filename}`;
+
+    const idR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .query(`SELECT ISNULL(MAX(idComprobante),0)+1 AS next FROM VIDA_PEDIDOS_COMPROBANTES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+    const idComprobante = idR.recordset[0].next;
+
+    await pool.request()
+      .input('idBranch',      sql.BigInt,       idBranch)
+      .input('idCuenta',      sql.BigInt,       idCuenta)
+      .input('idComprobante', sql.BigInt,       idComprobante)
+      .input('idPedido',      sql.BigInt,       idPedido)
+      .input('ImagenURL',     sql.VarChar(500), urlImagen)
+      .input('Referencia',    sql.VarChar(100), referencia)
+      .input('UsuAlta',       sql.VarChar(20),  `CLI:${idCliente}`)
+      .query(`INSERT INTO VIDA_PEDIDOS_COMPROBANTES
+                (idBranch, idCuenta, idComprobante, idPedido, ImagenURL, Referencia, StatusRevision, UsuAlta)
+              VALUES (@idBranch, @idCuenta, @idComprobante, @idPedido, @ImagenURL, @Referencia, 'PENDIENTE', @UsuAlta)`);
+
+    return reply.code(201).send({ idComprobante, url: urlImagen });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al subir comprobante' });
   }
 }
 

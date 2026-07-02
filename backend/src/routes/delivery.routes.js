@@ -12,6 +12,8 @@ import {
   listarDireccionesCliente,
   guardarDireccionCliente,
   eliminarDireccionCliente,
+  datosPagoMovil,
+  subirComprobanteCliente,
   listarSucursales,
   listarProductosApp,
   crearPedidoApp,
@@ -41,6 +43,7 @@ export async function deliveryRoutes(fastify) {
   // ── Sin auth (app pública) ────────────────────────────────────────────
   fastify.get('/delivery/sucursales',   listarSucursales);
   fastify.get('/delivery/productos',    listarProductosApp);
+  fastify.get('/delivery/pago-movil',   datosPagoMovil);
 
   // ── Registro / login de cliente ───────────────────────────────────────
   fastify.post('/delivery/cliente/registro',        registrarCliente);
@@ -73,6 +76,10 @@ export async function deliveryRoutes(fastify) {
   fastify.get('/delivery/pedido/:idPedido/estado',
     { preHandler: [authenticateCliente] },
     estadoPedidoCliente);
+
+  fastify.post('/delivery/pedido/:idPedido/comprobante',
+    { preHandler: [authenticateCliente] },
+    subirComprobanteCliente);
 
   // ── Repartidor — auth ─────────────────────────────────────────────────
   fastify.post('/delivery/repartidor/login', loginRepartidor);
