@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import useAuthStore from '../store/authStore';
+// Importa el módulo para que TaskManager registre la tarea de ubicación
+// en background al arrancar la app (requisito de expo-task-manager)
+import '../services/backgroundLocation';
 
 function AuthGuard({ children }) {
   const token = useAuthStore((s) => s.token);

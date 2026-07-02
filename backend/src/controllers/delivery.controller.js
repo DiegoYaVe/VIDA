@@ -1529,6 +1529,61 @@ export async function actualizarStatusPedido(request, reply) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// REPARTIDOR — SUBIR EVIDENCIA DE ENTREGA (foto, multipart)
+// POST /delivery/repartidor/pedido/:idPedido/evidencia
+// ══════════════════════════════════════════════════════════════════════════
+export async function subirEvidenciaEntrega(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  const { idPedido } = request.params;
+
+  try {
+    const pool = await getPool();
+
+    // El pedido debe estar asignado a este repartidor
+    const pedR = await pool.request()
+      .input('idBranch',     sql.BigInt, idBranch)
+      .input('idCuenta',     sql.BigInt, idCuenta)
+      .input('idPedido',     sql.BigInt, idPedido)
+      .input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`SELECT idPedido FROM VIDA_PEDIDOS
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                AND idPedido=@idPedido AND idRepartidor=@idRepartidor`);
+    if (!pedR.recordset.length) {
+      return reply.code(404).send({ error: 'Pedido no encontrado o no asignado' });
+    }
+
+    const data = await request.file();
+    if (!data) return reply.code(400).send({ error: 'No se recibió la foto' });
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(data.mimetype)) {
+      return reply.code(400).send({ error: 'Solo se permiten imágenes JPG, PNG o WebP' });
+    }
+
+    const uploadDir = path.join(process.cwd(), 'uploads', 'evidencias');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+    const ext = (data.filename.split('.').pop() || 'jpg').toLowerCase();
+    const filename = `entrega_${idBranch}_${idCuenta}_${idPedido}_${Date.now()}.${ext}`;
+    fs.writeFileSync(path.join(uploadDir, filename), await data.toBuffer());
+    const url = `/uploads/evidencias/${filename}`;
+
+    await pool.request()
+      .input('idBranch', sql.BigInt,       idBranch)
+      .input('idCuenta', sql.BigInt,       idCuenta)
+      .input('idPedido', sql.BigInt,       idPedido)
+      .input('url',      sql.VarChar(300), url)
+      .query(`UPDATE VIDA_PEDIDOS SET EvidenciaEntregaURL=@url, FechaMod=GETDATE()
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
+
+    return reply.code(201).send({ url });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al subir evidencia' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // REPARTIDOR — PEDIDOS ACTIVOS
 // GET /delivery/repartidor/pedidos-activos
 // ══════════════════════════════════════════════════════════════════════════

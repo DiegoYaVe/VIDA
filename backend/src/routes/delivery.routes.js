@@ -23,6 +23,7 @@ import {
   toggleDisponible,
   actualizarUbicacion,
   actualizarFcmRepartidor,
+  subirEvidenciaEntrega,
   aceptarPedido,
   actualizarStatusPedido,
   pedidosActivos,
@@ -103,6 +104,10 @@ export async function deliveryRoutes(fastify) {
   fastify.post('/delivery/repartidor/status-pedido',
     { preHandler: [authenticateRepartidor] },
     actualizarStatusPedido);
+
+  fastify.post('/delivery/repartidor/pedido/:idPedido/evidencia',
+    { preHandler: [authenticateRepartidor] },
+    subirEvidenciaEntrega);
 
   fastify.get('/delivery/repartidor/pedidos-activos',
     { preHandler: [authenticateRepartidor] },

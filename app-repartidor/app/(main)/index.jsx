@@ -20,6 +20,8 @@ import api from '../../services/api';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useLocation } from '../../hooks/useLocation';
 import MapaPedido from '../../components/MapaPedido';
+import * as ImagePicker from 'expo-image-picker';
+import { iniciarUbicacionBackground, detenerUbicacionBackground } from '../../services/backgroundLocation';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -254,6 +256,8 @@ export default function IndexScreen() {
         Longitud: loc.coords.longitude,
       });
       setDisponible(true);
+      // GPS en background: el cliente te sigue viendo con el teléfono bloqueado
+      iniciarUbicacionBackground();
     } catch (e) {
       Alert.alert('Error', e.message || 'No se pudo conectar');
     } finally {
@@ -285,15 +289,51 @@ export default function IndexScreen() {
     if (nuevoStatus === 'ENTREGADO') {
       Alert.alert(
         'Confirmar entrega',
-        '¿Confirmas que el pedido fue entregado al cliente?',
+        'Toma una foto del pedido entregado como evidencia.',
         [
           { text: 'Cancelar', style: 'cancel' },
-          { text: 'Confirmar', onPress: () => doCambiarStatus(nuevoStatus) },
+          { text: '📷 Tomar foto', onPress: entregarConFoto },
+          { text: 'Entregar sin foto', style: 'destructive', onPress: () => doCambiarStatus('ENTREGADO') },
         ]
       );
       return;
     }
     doCambiarStatus(nuevoStatus);
+  };
+
+  // Prueba de entrega: foto → subir evidencia → marcar ENTREGADO
+  const entregarConFoto = async () => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (perm.status !== 'granted') {
+        Alert.alert('Sin permiso de cámara', '¿Entregar sin foto?', [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Entregar', onPress: () => doCambiarStatus('ENTREGADO') },
+        ]);
+        return;
+      }
+      const res = await ImagePicker.launchCameraAsync({ quality: 0.6 });
+      if (res.canceled || !res.assets?.[0]) return; // volvió atrás: no entregar aún
+
+      const foto = res.assets[0];
+      const idPedido = pedidoActivo.idPedido || pedidoActivo.id;
+      const fd = new FormData();
+      fd.append('file', {
+        uri: foto.uri,
+        name: `entrega_${idPedido}.jpg`,
+        type: foto.mimeType || 'image/jpeg',
+      });
+      try {
+        await api.post(`/delivery/repartidor/pedido/${idPedido}/evidencia`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } catch {
+        // la evidencia no debe bloquear la entrega
+      }
+      doCambiarStatus('ENTREGADO');
+    } catch {
+      doCambiarStatus('ENTREGADO');
+    }
   };
 
   const doCambiarStatus = async (nuevoStatus) => {

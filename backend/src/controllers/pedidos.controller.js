@@ -133,7 +133,7 @@ export async function obtenerPedido(request, reply) {
                p.Canal, p.Status, p.MetodoPago, p.StatusPago,
                p.TotalUSD, p.MontoEfectivo, p.MontoTarjeta, p.MontoCambio,
                p.Notas, p.FechaAlta, p.FechaExpiracion,
-               p.RequiereRevision, p.EsOffline,
+               p.RequiereRevision, p.EsOffline, p.EvidenciaEntregaURL,
                pv.NomComercial AS NombreSucursal,
                cl.Nombre AS NombreCliente, cl.Telefono AS TelefonoCliente,
                cl.Direccion AS DireccionCliente,

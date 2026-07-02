@@ -15,6 +15,7 @@ import * as Location from 'expo-location';
 import useAuthStore from '../../store/authStore';
 import api from '../../services/api';
 import { registrarPushToken, escucharTapsNotificacion } from '../../services/push';
+import { iniciarUbicacionBackground, detenerUbicacionBackground } from '../../services/backgroundLocation';
 
 export default function MainLayout() {
   const repartidor = useAuthStore((s) => s.repartidor);
@@ -51,8 +52,10 @@ export default function MainLayout() {
           Latitud: loc.coords.latitude,
           Longitud: loc.coords.longitude,
         });
+        iniciarUbicacionBackground();
       } else {
         await api.post('/delivery/repartidor/disponible', { disponible: false });
+        detenerUbicacionBackground();
       }
       setDisponible(value);
     } catch (e) {

@@ -1,7 +1,7 @@
 // src/pages/Pedidos.jsx
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore } from '../store/authStore.js';
-import api from '../services/api.js';
+import api, { API_ORIGIN } from '../services/api.js';
 import { useWebSocket } from '../hooks/useWebSocket.js';
 import {
   ShoppingBag, Clock, CheckCircle, Truck, XCircle, ChevronRight,
@@ -233,6 +233,20 @@ function ModalPedido({ idPedido, idBranch, idCuenta, puedeEscribir, repartidores
             </div>
           </div>
 
+          {/* Evidencia de entrega (foto del repartidor) */}
+          {pedido.EvidenciaEntregaURL && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Prueba de entrega</h4>
+              <a href={`${API_ORIGIN}${pedido.EvidenciaEntregaURL}`} target="_blank" rel="noreferrer">
+                <img
+                  src={`${API_ORIGIN}${pedido.EvidenciaEntregaURL}`}
+                  alt="Evidencia de entrega"
+                  className="w-32 h-32 object-cover rounded-xl border border-gray-200 hover:opacity-90 transition"
+                />
+              </a>
+            </div>
+          )}
+
           {/* Productos */}
           <div>
             <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Productos</h4>
@@ -264,7 +278,7 @@ function ModalPedido({ idPedido, idBranch, idCuenta, puedeEscribir, repartidores
                   <div>
                     {c.Referencia && <p className="text-sm font-medium">Ref: {c.Referencia}</p>}
                     <p className="text-xs text-gray-400">{new Date(c.FechaAlta).toLocaleString()}</p>
-                    <a href={c.ImagenURL} target="_blank" rel="noreferrer"
+                    <a href={c.ImagenURL?.startsWith('http') ? c.ImagenURL : `${API_ORIGIN}${c.ImagenURL}`} target="_blank" rel="noreferrer"
                       className="text-xs text-vida-blue underline">Ver comprobante</a>
                   </div>
                   {c.StatusRevision === 'PENDIENTE' && puedeEscribir ? (

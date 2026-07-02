@@ -58,9 +58,17 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Necesitamos tu ubicación para pedidos cercanos y rastreo en tiempo real.",
-          "isAndroidBackgroundLocationEnabled": true
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Necesitamos la cámara para tomar la foto de evidencia de entrega."
+        }
+      ],
+      "expo-task-manager",
       "expo-router"
     ],
     "scheme": "vida-repartidor",
