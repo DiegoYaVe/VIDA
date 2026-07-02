@@ -2,6 +2,7 @@
 import { getPool, sql } from '../db/sqlserver.js';
 import { broadcast } from '../ws/ws.manager.js';
 import { enviarPush } from '../services/push.service.js';
+import { registrarAuditoria } from '../services/audit.service.js';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { createTransport } from 'nodemailer';
@@ -1252,6 +1253,19 @@ export async function actualizarStatusPedido(request, reply) {
                 (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, UsuAlta)
               VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, @StatusAnterior, @StatusNuevo, @UsuAlta)`);
 
+    if (['ENTREGADO', 'CANCELADO'].includes(nuevoStatus)) {
+      await registrarAuditoria(transaction, {
+        idBranch, idCuenta,
+        entityType: 'PEDIDO', entityId: idPedido,
+        accion: nuevoStatus, actor: `REP:${idRepartidor}`,
+        data: {
+          StatusAnterior: statusActual, TotalUSD: parseFloat(pedido.TotalUSD),
+          MetodoPago: pedido.MetodoPago,
+          ...(esEntregaEfectivo ? { ComisionRepartidor: comision, EfectivoARendir: efectivoARendir } : {}),
+        },
+      }, request.log);
+    }
+
     await transaction.commit();
     enTransaccion = false;
 
@@ -1540,6 +1554,17 @@ export async function liquidarRepartidor(request, reply) {
       .input('idRepartidor', sql.BigInt, idRepartidor)
       .query(`UPDATE VIDA_REPARTIDORES SET SaldoPendiente=0
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+
+    await registrarAuditoria(pool, {
+      idBranch, idCuenta,
+      entityType: 'LIQUIDACION', entityId: idLiquidacion,
+      accion: 'LIQUIDACION_REPARTIDOR', actor: idUsuario,
+      data: {
+        idRepartidor: parseInt(idRepartidor), MontoLiquidado: saldo,
+        MontoEfectivo: parseFloat(stats.MontoEfectivo), Comision: parseFloat(stats.Comision),
+        NumPedidos: stats.NumPedidos, Observaciones: Observaciones || null,
+      },
+    }, request.log);
 
     return reply.send({
       ok:             true,

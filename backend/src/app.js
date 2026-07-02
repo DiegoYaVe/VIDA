@@ -19,6 +19,7 @@ import { cajaRoutes }       from './routes/caja.routes.js';
 import { deliveryRoutes }   from './routes/delivery.routes.js';
 import { paisesRoutes }     from './routes/paises.routes.js';
 import { estadosRoutes }    from './routes/estados.routes.js';
+import { auditRoutes }      from './routes/audit.routes.js';
 import { marcarInactivos }  from './controllers/heartbeat.controller.js';
 import { expirarPedidosVencidos } from './controllers/pedidos.controller.js';
 import { wsRoutes } from './ws/ws.routes.js';
@@ -85,6 +86,7 @@ fastify.register(cajaRoutes,       { prefix: '/api' });
 fastify.register(deliveryRoutes,   { prefix: '/api' });
 fastify.register(paisesRoutes,     { prefix: '/api' });
 fastify.register(estadosRoutes,    { prefix: '/api' });
+fastify.register(auditRoutes,      { prefix: '/api' });
 fastify.register(wsRoutes,         { prefix: '/api' });
 
 // Job: expirar pedidos vencidos cada 60 segundos

@@ -2,6 +2,7 @@
 import { getPool, sql } from '../db/sqlserver.js';
 import { broadcast } from '../ws/ws.manager.js';
 import { enviarPush } from '../services/push.service.js';
+import { registrarAuditoria } from '../services/audit.service.js';
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
@@ -331,6 +332,13 @@ export async function crearPedido(request, reply) {
                 (idBranch, idCuenta, idHistorial, idPedido, StatusNuevo, UsuAlta)
               VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, @StatusNuevo, @UsuAlta)`);
 
+    await registrarAuditoria(transaction, {
+      idBranch, idCuenta,
+      entityType: 'PEDIDO', entityId: nuevoId,
+      accion: 'VENTA_CREADA', actor: idUsuario,
+      data: { Canal, idPuntoVenta, TotalUSD: totalUSD, MetodoPago: MetodoPago || null, numItems: items.length },
+    }, request.log);
+
     await transaction.commit();
     enTransaccion = false;
 
@@ -489,6 +497,17 @@ async function procesarVentaOffline(pool, { venta, idBranch, idCuenta, idUsuario
       .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL
                 (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, Notas, UsuAlta)
               VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, 'NUEVO', 'ENTREGADO', @Notas, @UsuAlta)`);
+
+    await registrarAuditoria(transaction, {
+      idBranch, idCuenta,
+      entityType: 'PEDIDO', entityId: idPedido,
+      accion: 'VENTA_OFFLINE_SINCRONIZADA', actor: idUsuario,
+      data: {
+        ClienteUUID: venta.ClienteUUID, idPuntoVenta: venta.idPuntoVenta,
+        TotalUSD: totalUSD, MetodoPago: venta.MetodoPago || null,
+        FechaVenta: venta.FechaVenta || null, requiereRevision,
+      },
+    });
 
     await transaction.commit();
     return { idPedido, requiereRevision };
@@ -731,6 +750,15 @@ export async function cambiarStatusPedido(request, reply) {
       .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL
                 (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, Notas, UsuAlta)
               VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, @StatusAnterior, @StatusNuevo, @Notas, @UsuAlta)`);
+
+    if (['ENTREGADO', 'CANCELADO'].includes(StatusNuevo)) {
+      await registrarAuditoria(transaction, {
+        idBranch, idCuenta,
+        entityType: 'PEDIDO', entityId: idPedido,
+        accion: StatusNuevo, actor: idUsuario,
+        data: { StatusAnterior: pedido.Status, Canal: pedido.Canal, idPuntoVenta: pedido.idPuntoVenta, Notas: Notas || null },
+      }, request.log);
+    }
 
     await transaction.commit();
     enTransaccion = false;

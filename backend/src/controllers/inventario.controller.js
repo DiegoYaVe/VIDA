@@ -1,5 +1,6 @@
 // src/controllers/inventario.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
+import { registrarAuditoria } from '../services/audit.service.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -549,6 +550,18 @@ export async function registrarMovimiento(request, reply) {
                 (@idBranch, @idCuenta, @idMovimiento, @idPuntoVenta, @idProducto,
                  @TipoMovimiento, @Cantidad, @CantidadAntes, @CantidadDespues,
                  @Motivo, @Referencia, @UsuAlta)`);
+
+    await registrarAuditoria(pool, {
+      idBranch, idCuenta,
+      entityType: 'INVENTARIO', entityId: nuevoId,
+      accion: `MOVIMIENTO_${TipoMovimiento}`, actor: idUsuario,
+      data: {
+        idPuntoVenta: Number(idPuntoVenta), idProducto: Number(idProducto),
+        Cantidad: parseFloat(Cantidad), CantidadAntes: parseFloat(cantidadAntes),
+        CantidadDespues: parseFloat(cantidadDespues),
+        Motivo: Motivo || null, Referencia: Referencia || null,
+      },
+    }, request.log);
 
     return reply.code(201).send({
       message: 'Movimiento registrado',

@@ -1,5 +1,6 @@
 // src/controllers/caja.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
+import { registrarAuditoria } from '../services/audit.service.js';
 
 // ── Helper ──────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
@@ -187,6 +188,13 @@ export async function abrirCaja(request, reply) {
            @NombreUsuario, @NombreSucursal, @MontoApertura,
            @Observaciones, 'ABIERTO', @UsuAlta, GETDATE(), GETDATE())
       `);
+
+    await registrarAuditoria(transaction, {
+      idBranch, idCuenta,
+      entityType: 'CAJA_TURNO', entityId: idTurno,
+      accion: 'CAJA_APERTURA', actor: idUsuario,
+      data: { idPuntoVenta: Number(pvId), MontoApertura: parseFloat(MontoApertura) },
+    }, request.log);
 
     await transaction.commit();
     enTransaccion = false;
@@ -381,6 +389,20 @@ export async function cerrarCaja(request, reply) {
     if (cierreR.rowsAffected[0] === 0) {
       return reply.code(409).send({ error: 'El turno ya fue cerrado por otra operación' });
     }
+
+    await registrarAuditoria(pool, {
+      idBranch, idCuenta,
+      entityType: 'CAJA_TURNO', entityId: idTurno,
+      accion: 'CAJA_CIERRE', actor: request.user.idUsuario,
+      data: {
+        idPuntoVenta: Number(turno.idPuntoVenta),
+        MontoApertura: montoAp, MontoCierre: montoCi,
+        TotalVentas: parseFloat(totales.TotalVentas),
+        TotalEfectivo: totalEf, TotalTarjeta: parseFloat(totales.TotalTarjeta),
+        NumTransacciones: parseInt(totales.NumTransacciones),
+        Diferencia: diferencia,
+      },
+    }, request.log);
 
     // Retornar el turno cerrado
     const cerradoR = await pool.request()
