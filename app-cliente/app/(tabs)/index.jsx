@@ -23,8 +23,25 @@ import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import useCarritoStore from '../../store/carritoStore';
 import { absImg } from '../../constants/config';
+import DetalleProducto from '../../components/DetalleProducto';
 
 const PLACEHOLDER = 'https://via.placeholder.com/150/EBF8FF/1A6A9A?text=VIDA';
+
+// Emoji por nombre de categoría (estilo Uber Eats/DiDi)
+function emojiCategoria(nombre = '') {
+  const n = nombre.toLowerCase();
+  if (n.includes('bebida') || n.includes('refresco') || n.includes('jugo')) return '🥤';
+  if (n.includes('snack') || n.includes('botana')) return '🍿';
+  if (n.includes('lácteo') || n.includes('lacteo') || n.includes('leche')) return '🥛';
+  if (n.includes('limpieza') || n.includes('hogar')) return '🧼';
+  if (n.includes('pan') || n.includes('bagel') || n.includes('reposter')) return '🥐';
+  if (n.includes('dulce') || n.includes('chocolate') || n.includes('postre')) return '🍬';
+  if (n.includes('carne') || n.includes('charcuter')) return '🥩';
+  if (n.includes('fruta') || n.includes('verdura')) return '🍎';
+  if (n.includes('comida') || n.includes('sandwich') || n.includes('sánd')) return '🥪';
+  if (n.includes('licor') || n.includes('cerveza') || n.includes('vino')) return '🍺';
+  return '🛒';
+}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -38,6 +55,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [productoAbierto, setProductoAbierto] = useState(null);
 
   const items = useCarritoStore((s) => s.items);
   const idPVCarrito = useCarritoStore((s) => s.idPuntoVenta);
@@ -100,7 +118,7 @@ export default function HomeScreen() {
     return items.find((i) => i.idProducto === p.idProducto)?.Cantidad ?? 0;
   };
 
-  const handleAgregar = (p) => {
+  const handleAgregar = (p, cantidad = 1) => {
     const doAgregar = () => {
       if (!useCarritoStore.getState().idPuntoVenta) {
         setSucursal(p.idPuntoVenta, p.NombreSucursal || '');
@@ -110,7 +128,7 @@ export default function HomeScreen() {
         Nombre: p.Nombre,
         PrecioUSD: parseFloat(p.PrecioUSD || 0),
         ImagenProducto: p.ImagenProducto || '',
-      });
+      }, cantidad);
     };
 
     // Un carrito por sucursal (como Uber Eats: un restaurante a la vez)
@@ -142,22 +160,20 @@ export default function HomeScreen() {
 
     return (
       <View style={styles.prodCard}>
-        <Image
-          source={{ uri: absImg(p.ImagenProducto) || PLACEHOLDER }}
-          style={styles.prodImg}
-          defaultSource={{ uri: PLACEHOLDER }}
-        />
-        {/* Chip de sucursal — tap lleva al catálogo de esa tienda */}
-        <TouchableOpacity
-          style={styles.sucChip}
-          onPress={() => router.push(`/sucursal/${p.idPuntoVenta}`)}
-        >
-          <Ionicons name="storefront-outline" size={11} color="#1A6A9A" />
-          <Text style={styles.sucChipText} numberOfLines={1}>{p.NombreSucursal}</Text>
+        {/* Tap en la tarjeta → detalle estilo Uber Eats */}
+        <TouchableOpacity activeOpacity={0.85} onPress={() => setProductoAbierto(p)} style={{ width: '100%', alignItems: 'center' }}>
+          <Image
+            source={{ uri: absImg(p.ImagenProducto) || PLACEHOLDER }}
+            style={styles.prodImg}
+            defaultSource={{ uri: PLACEHOLDER }}
+          />
+          <View style={styles.sucChip}>
+            <Ionicons name="storefront-outline" size={11} color="#1A6A9A" />
+            <Text style={styles.sucChipText} numberOfLines={1}>{p.NombreSucursal}</Text>
+          </View>
+          <Text style={styles.prodNombre} numberOfLines={2}>{p.Nombre}</Text>
+          <Text style={styles.prodPrecio}>${precio.toFixed(2)}</Text>
         </TouchableOpacity>
-
-        <Text style={styles.prodNombre} numberOfLines={2}>{p.Nombre}</Text>
-        <Text style={styles.prodPrecio}>${precio.toFixed(2)}</Text>
 
         {cant === 0 ? (
           <TouchableOpacity style={styles.addBtn} onPress={() => handleAgregar(p)}>
@@ -242,27 +258,33 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Chips de categoría */}
+      {/* Categorías circulares estilo Uber Eats */}
       {categorias.length > 0 && (
         <View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            <TouchableOpacity
-              style={[styles.catChip, !categoriaActiva && styles.catChipActive]}
-              onPress={() => setCategoriaActiva(null)}
-            >
-              <Text style={[styles.catChipText, !categoriaActiva && styles.catChipTextActive]}>Todo</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
+            <TouchableOpacity style={styles.catItem} onPress={() => setCategoriaActiva(null)}>
+              <View style={[styles.catCircle, !categoriaActiva && styles.catCircleActive]}>
+                <Text style={styles.catEmoji}>✨</Text>
+              </View>
+              <Text style={[styles.catLabel, !categoriaActiva && styles.catLabelActive]}>Todo</Text>
             </TouchableOpacity>
-            {categorias.map((c) => (
-              <TouchableOpacity
-                key={c.id}
-                style={[styles.catChip, categoriaActiva === c.id && styles.catChipActive]}
-                onPress={() => setCategoriaActiva(categoriaActiva === c.id ? null : c.id)}
-              >
-                <Text style={[styles.catChipText, categoriaActiva === c.id && styles.catChipTextActive]}>
-                  {c.nombre}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {categorias.map((c) => {
+              const activa = categoriaActiva === c.id;
+              return (
+                <TouchableOpacity
+                  key={c.id}
+                  style={styles.catItem}
+                  onPress={() => setCategoriaActiva(activa ? null : c.id)}
+                >
+                  <View style={[styles.catCircle, activa && styles.catCircleActive]}>
+                    <Text style={styles.catEmoji}>{emojiCategoria(c.nombre)}</Text>
+                  </View>
+                  <Text style={[styles.catLabel, activa && styles.catLabelActive]} numberOfLines={1}>
+                    {c.nombre}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
       )}
@@ -293,6 +315,15 @@ export default function HomeScreen() {
               <Text style={styles.emptyText}>No encontramos productos</Text>
             </View>
           }
+        />
+      )}
+
+      {/* Detalle de producto (estilo Uber Eats) */}
+      {productoAbierto && (
+        <DetalleProducto
+          producto={productoAbierto}
+          onClose={() => setProductoAbierto(null)}
+          onAgregar={handleAgregar}
         />
       )}
 
@@ -353,16 +384,19 @@ const styles = StyleSheet.create({
   sucFiltroChipActive: { backgroundColor: '#1A6A9A', borderColor: '#1A6A9A' },
   sucFiltroText: { color: '#1A6A9A', fontSize: 13, fontWeight: '700' },
   sucFiltroTextActive: { color: '#fff' },
-  catChip: {
-    paddingHorizontal: 13,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#EDF2F7',
-    marginRight: 8,
+  catRow: { paddingHorizontal: 16, paddingVertical: 6, flexDirection: 'row', gap: 14 },
+  catItem: { alignItems: 'center', width: 62 },
+  catCircle: {
+    width: 54, height: 54, borderRadius: 27,
+    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: 'transparent',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
   },
-  catChipActive: { backgroundColor: '#27AE60' },
-  catChipText: { color: '#718096', fontSize: 12, fontWeight: '600' },
-  catChipTextActive: { color: '#fff' },
+  catCircleActive: { borderColor: '#27AE60', backgroundColor: '#F0FFF4' },
+  catEmoji: { fontSize: 24 },
+  catLabel: { fontSize: 11, color: '#718096', fontWeight: '600', marginTop: 5, textAlign: 'center' },
+  catLabelActive: { color: '#27AE60', fontWeight: '800' },
   grid: { paddingHorizontal: 10, paddingTop: 6, paddingBottom: 100 },
   row: { justifyContent: 'space-between', paddingHorizontal: 2 },
   prodCard: {

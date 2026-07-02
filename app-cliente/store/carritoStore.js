@@ -12,15 +12,15 @@ const useCarritoStore = create(
       idPuntoVenta: null,
       nombreSucursal: '',
 
-      agregarItem: (producto) => {
+      agregarItem: (producto, cantidad = 1) => {
         const { items } = get();
         const idx = items.findIndex((i) => i.idProducto === producto.idProducto);
         if (idx >= 0) {
           const updated = [...items];
-          updated[idx] = { ...updated[idx], Cantidad: updated[idx].Cantidad + 1 };
+          updated[idx] = { ...updated[idx], Cantidad: updated[idx].Cantidad + cantidad };
           set({ items: updated });
         } else {
-          set({ items: [...items, { ...producto, Cantidad: 1 }] });
+          set({ items: [...items, { ...producto, Cantidad: cantidad }] });
         }
       },
 
