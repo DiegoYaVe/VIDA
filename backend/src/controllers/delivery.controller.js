@@ -515,6 +515,102 @@ export async function actualizarFcmRepartidor(request, reply) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — DIRECCIONES GUARDADAS
+// ══════════════════════════════════════════════════════════════════════════
+export async function listarDireccionesCliente(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT idDireccion, Alias, Direccion, Latitud, Longitud, EsPrincipal
+              FROM VIDA_APP_CLIENTES_DIRECCIONES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente
+                AND Status='ACTIVO'
+              ORDER BY EsPrincipal DESC, idDireccion DESC`);
+    return reply.send(r.recordset);
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener direcciones' });
+  }
+}
+
+export async function guardarDireccionCliente(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  const { Alias, Direccion, Latitud, Longitud, EsPrincipal = false } = request.body || {};
+
+  if (!Direccion?.trim()) {
+    return reply.code(400).send({ error: 'Direccion es requerida' });
+  }
+  const lat = parseFloat(Latitud), lon = parseFloat(Longitud);
+  const coordsValidas = Number.isFinite(lat) && Number.isFinite(lon)
+    && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+
+  try {
+    const pool = await getPool();
+
+    if (EsPrincipal) {
+      await pool.request()
+        .input('idBranch',  sql.BigInt, idBranch)
+        .input('idCuenta',  sql.BigInt, idCuenta)
+        .input('idCliente', sql.BigInt, idCliente)
+        .query(`UPDATE VIDA_APP_CLIENTES_DIRECCIONES SET EsPrincipal=0
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+    }
+
+    const idR = await pool.request()
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT ISNULL(MAX(idDireccion),0)+1 AS next FROM VIDA_APP_CLIENTES_DIRECCIONES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+    const idDireccion = idR.recordset[0].next;
+
+    await pool.request()
+      .input('idBranch',    sql.BigInt,        idBranch)
+      .input('idCuenta',    sql.BigInt,        idCuenta)
+      .input('idCliente',   sql.BigInt,        idCliente)
+      .input('idDireccion', sql.BigInt,        idDireccion)
+      .input('Alias',       sql.VarChar(100),  Alias?.trim() || null)
+      .input('Direccion',   sql.VarChar(500),  Direccion.trim())
+      .input('Latitud',     sql.Decimal(10,7), coordsValidas ? lat : null)
+      .input('Longitud',    sql.Decimal(10,7), coordsValidas ? lon : null)
+      .input('EsPrincipal', sql.Bit,           EsPrincipal ? 1 : 0)
+      .query(`INSERT INTO VIDA_APP_CLIENTES_DIRECCIONES
+                (idBranch, idCuenta, idCliente, idDireccion, Alias, Direccion, Latitud, Longitud, EsPrincipal)
+              VALUES
+                (@idBranch, @idCuenta, @idCliente, @idDireccion, @Alias, @Direccion, @Latitud, @Longitud, @EsPrincipal)`);
+
+    return reply.code(201).send({ idDireccion });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al guardar dirección' });
+  }
+}
+
+export async function eliminarDireccionCliente(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  const { idDireccion } = request.params;
+  try {
+    const pool = await getPool();
+    await pool.request()
+      .input('idBranch',    sql.BigInt, idBranch)
+      .input('idCuenta',    sql.BigInt, idCuenta)
+      .input('idCliente',   sql.BigInt, idCliente)
+      .input('idDireccion', sql.BigInt, idDireccion)
+      .query(`UPDATE VIDA_APP_CLIENTES_DIRECCIONES SET Status='INACTIVO'
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                AND idCliente=@idCliente AND idDireccion=@idDireccion`);
+    return reply.send({ ok: true });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al eliminar dirección' });
+  }
+}
+
 // Token push del cliente de un pedido (para notificarle cambios de status)
 async function tokenClientePedido(pool, idBranch, idCuenta, idCliente) {
   if (!idCliente) return null;

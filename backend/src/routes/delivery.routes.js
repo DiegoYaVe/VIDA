@@ -9,6 +9,9 @@ import {
   googleOAuthStart,
   googleOAuthCallback,
   actualizarFcmCliente,
+  listarDireccionesCliente,
+  guardarDireccionCliente,
+  eliminarDireccionCliente,
   listarSucursales,
   listarProductosApp,
   crearPedidoApp,
@@ -50,6 +53,18 @@ export async function deliveryRoutes(fastify) {
   fastify.put('/delivery/cliente/fcm',
     { preHandler: [authenticateCliente] },
     actualizarFcmCliente);
+
+  fastify.get('/delivery/cliente/direcciones',
+    { preHandler: [authenticateCliente] },
+    listarDireccionesCliente);
+
+  fastify.post('/delivery/cliente/direcciones',
+    { preHandler: [authenticateCliente] },
+    guardarDireccionCliente);
+
+  fastify.delete('/delivery/cliente/direcciones/:idDireccion',
+    { preHandler: [authenticateCliente] },
+    eliminarDireccionCliente);
 
   fastify.post('/delivery/pedido',
     { preHandler: [authenticateCliente] },

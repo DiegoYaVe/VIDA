@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import api from '../../services/api';
 import useCarritoStore from '../../store/carritoStore';
 import useAuthStore from '../../store/authStore';
 import { absImg } from '../../constants/config';
+import SelectorUbicacion from '../../components/SelectorUbicacion';
 
 const PLACEHOLDER = 'https://via.placeholder.com/80/EBF8FF/1A6A9A?text=+';
 
@@ -38,9 +39,45 @@ export default function CarritoScreen() {
   );
 
   const [direccion, setDireccion] = useState('');
+  const [ubicacion, setUbicacion] = useState(null);       // { Latitud, Longitud }
+  const [selectorVisible, setSelectorVisible] = useState(false);
+  const [direcciones, setDirecciones] = useState([]);     // guardadas del cliente
   const [notas, setNotas] = useState('');
   const [metodoPago, setMetodoPago] = useState('EFECTIVO');
   const [loading, setLoading] = useState(false);
+
+  // Direcciones guardadas (solo con sesión)
+  useEffect(() => {
+    if (!token) { setDirecciones([]); return; }
+    api.get('/delivery/cliente/direcciones')
+      .then(r => setDirecciones(r.data || []))
+      .catch(() => {});
+  }, [token]);
+
+  const usarDireccionGuardada = (d) => {
+    setDireccion(d.Direccion || '');
+    if (d.Latitud != null && d.Longitud != null) {
+      setUbicacion({ Latitud: parseFloat(d.Latitud), Longitud: parseFloat(d.Longitud) });
+    } else {
+      setUbicacion(null);
+    }
+  };
+
+  const onUbicacionConfirmada = async ({ Latitud, Longitud, guardar, alias }) => {
+    setUbicacion({ Latitud, Longitud });
+    setSelectorVisible(false);
+    if (guardar && token) {
+      try {
+        await api.post('/delivery/cliente/direcciones', {
+          Alias: alias || 'Mi dirección',
+          Direccion: direccion.trim() || alias || 'Ubicación en mapa',
+          Latitud, Longitud,
+        });
+        const r = await api.get('/delivery/cliente/direcciones');
+        setDirecciones(r.data || []);
+      } catch { /* no bloquear el flujo por esto */ }
+    }
+  };
 
   const handlePedido = async () => {
     // Explorar y llenar el carrito no requiere cuenta; pedir sí.
@@ -78,14 +115,15 @@ export default function CarritoScreen() {
           PrecioUSD: i.PrecioUSD,
         })),
         DireccionEntrega: direccion.trim(),
-        UbicacionEntregaLat: null,
-        UbicacionEntregaLon: null,
+        UbicacionEntregaLat: ubicacion?.Latitud ?? null,
+        UbicacionEntregaLon: ubicacion?.Longitud ?? null,
         NotasCliente: notas.trim(),
         MetodoPago: metodoPago,
       };
       const res = await api.post('/delivery/pedido', payload);
       const idPedido = res.data?.idPedido ?? res.data?.pedido?.idPedido;
       limpiarCarrito();
+      setUbicacion(null);
       router.push(`/pedido/${idPedido}`);
     } catch (e) {
       Alert.alert('Error al hacer el pedido', e.message);
@@ -162,6 +200,27 @@ export default function CarritoScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Entrega</Text>
 
+          {/* Direcciones guardadas */}
+          {direcciones.length > 0 && (
+            <View style={styles.dirGuardadasRow}>
+              {direcciones.map((d) => (
+                <TouchableOpacity
+                  key={d.idDireccion}
+                  style={styles.dirChip}
+                  onPress={() => usarDireccionGuardada(d)}
+                >
+                  <Ionicons
+                    name={(d.Alias || '').toLowerCase().includes('casa') ? 'home' : 'bookmark'}
+                    size={13} color="#1A6A9A"
+                  />
+                  <Text style={styles.dirChipText} numberOfLines={1}>
+                    {d.Alias || d.Direccion}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
           <Text style={styles.inputLabel}>Dirección de entrega *</Text>
           <TextInput
             style={styles.input}
@@ -171,6 +230,18 @@ export default function CarritoScreen() {
             onChangeText={setDireccion}
             multiline
           />
+
+          {/* Ubicación en mapa — el repartidor llega directo al pin */}
+          <TouchableOpacity style={styles.mapaBtn} onPress={() => setSelectorVisible(true)}>
+            <Ionicons
+              name={ubicacion ? 'checkmark-circle' : 'location-outline'}
+              size={18}
+              color={ubicacion ? '#27AE60' : '#1A6A9A'}
+            />
+            <Text style={[styles.mapaBtnText, ubicacion && { color: '#27AE60' }]}>
+              {ubicacion ? 'Ubicación fijada en el mapa ✓ (tocar para cambiar)' : 'Fijar mi ubicación en el mapa'}
+            </Text>
+          </TouchableOpacity>
 
           <Text style={styles.inputLabel}>Método de pago</Text>
           <View style={styles.metodoRow}>
@@ -231,12 +302,32 @@ export default function CarritoScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      <SelectorUbicacion
+        visible={selectorVisible}
+        onClose={() => setSelectorVisible(false)}
+        onConfirmar={onUbicacionConfirmada}
+        puedeGuardar={!!token}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
+  dirGuardadasRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  dirChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#EBF8FF', borderWidth: 1, borderColor: '#BEE3F8',
+    borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7, maxWidth: 180,
+  },
+  dirChipText: { color: '#1A6A9A', fontSize: 12.5, fontWeight: '700' },
+  mapaBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#EBF8FF', borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12, marginTop: 8, marginBottom: 4,
+  },
+  mapaBtnText: { color: '#1A6A9A', fontSize: 13.5, fontWeight: '700', flex: 1 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
