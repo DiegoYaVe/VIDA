@@ -32,7 +32,9 @@ export default function CarritoScreen() {
   const agregarItem = useCarritoStore((s) => s.agregarItem);
   const quitarItem = useCarritoStore((s) => s.quitarItem);
   const limpiarCarrito = useCarritoStore((s) => s.limpiarCarrito);
-  const total = useCarritoStore((s) => s.total);
+  const total = useCarritoStore((s) =>
+    s.items.reduce((acc, item) => acc + item.PrecioUSD * item.Cantidad, 0)
+  );
 
   const [direccion, setDireccion] = useState('');
   const [notas, setNotas] = useState('');

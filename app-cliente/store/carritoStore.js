@@ -34,13 +34,6 @@ const useCarritoStore = create((set, get) => ({
 
   setSucursal: (idPuntoVenta, nombre) =>
     set({ idPuntoVenta, nombreSucursal: nombre }),
-
-  get total() {
-    return get().items.reduce(
-      (acc, item) => acc + item.PrecioUSD * item.Cantidad,
-      0
-    );
-  },
 }));
 
 export default useCarritoStore;

@@ -39,7 +39,9 @@ export default function CatalogoScreen() {
   const quitarItem = useCarritoStore((s) => s.quitarItem);
   const limpiarCarrito = useCarritoStore((s) => s.limpiarCarrito);
   const setSucursal = useCarritoStore((s) => s.setSucursal);
-  const totalCarrito = useCarritoStore((s) => s.total);
+  const totalCarrito = useCarritoStore((s) =>
+    s.items.reduce((acc, item) => acc + item.PrecioUSD * item.Cantidad, 0)
+  );
   const totalItems = items.reduce((acc, i) => acc + i.Cantidad, 0);
 
   const fetchProductos = useCallback(async () => {
