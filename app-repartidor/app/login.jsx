@@ -1,17 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Dimensions,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ActivityIndicator, KeyboardAvoidingView, Platform,
+  ScrollView, Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
 import { ID_BRANCH, ID_CUENTA } from '../constants/config';
@@ -44,174 +39,195 @@ export default function LoginScreen() {
       await AsyncStorage.setItem('vida_repartidor_token', token);
       login({ repartidor, token });
     } catch (e) {
-      setError(e.message);
+      setError(e.response?.data?.error || e.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <View style={styles.root}>
       <StatusBar style="light" />
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+
+      {/* Fondo degradado con adornos */}
+      <LinearGradient
+        colors={['#0D1B2A', '#11304A', '#14507A']}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0.7, y: 1 }}
+      />
+      <View style={[styles.deco, styles.decoUno]} />
+      <View style={[styles.deco, styles.decoDos]} />
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Gradient hero */}
-        <View style={styles.hero}>
-          <View style={styles.logoBadge}>
-            <Text style={styles.logoIcon}>🛵</Text>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Hero */}
+          <View style={styles.hero}>
+            <LinearGradient
+              colors={['#27AE60', '#1A6A9A']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.logoBadge}
+            >
+              <Ionicons name="bicycle" size={42} color="#fff" />
+            </LinearGradient>
+            <Text style={styles.logoText}>VIDA</Text>
+            <View style={styles.repartidorChip}>
+              <Text style={styles.repartidorChipText}>REPARTIDOR</Text>
+            </View>
+            <Text style={styles.tagline}>Entrega. Gana. Repite.</Text>
           </View>
-          <Text style={styles.logoText}>VIDA</Text>
-          <Text style={styles.logoSub}>Repartidor</Text>
-          <Text style={styles.logoTagline}>Panel del conductor</Text>
-        </View>
 
-        {/* Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Iniciar sesión</Text>
-          <Text style={styles.cardSubtitle}>Ingresa tu número de teléfono registrado</Text>
+          {/* Tarjeta */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Bienvenido de vuelta 👋</Text>
+            <Text style={styles.cardSubtitle}>
+              Ingresa con el teléfono que registró tu administrador
+            </Text>
 
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {error ? (
+              <View style={styles.alertError}>
+                <Ionicons name="alert-circle" size={16} color="#E53E3E" />
+                <Text style={styles.alertErrorText}>{error}</Text>
+              </View>
+            ) : null}
 
-          <Text style={styles.label}>Número de teléfono</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="04XX-XXXXXXX"
-            placeholderTextColor="#A0AEC0"
-            keyboardType="phone-pad"
-            value={telefono}
-            onChangeText={setTelefono}
-            autoFocus
-            returnKeyType="done"
-            onSubmitEditing={handleLogin}
-          />
+            <View style={styles.campo}>
+              <Ionicons name="call-outline" size={19} color="#94A3B8" style={{ marginRight: 8 }} />
+              <TextInput
+                style={styles.campoInput}
+                placeholder="04XX-XXXXXXX"
+                placeholderTextColor="#A0AEC0"
+                keyboardType="phone-pad"
+                value={telefono}
+                onChangeText={setTelefono}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+              />
+            </View>
 
-          <TouchableOpacity
-            style={[styles.primaryBtn, loading && styles.btnDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryBtnText}>Entrar</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            <TouchableOpacity
+              onPress={handleLogin}
+              disabled={loading}
+              activeOpacity={0.9}
+              style={loading ? { opacity: 0.7 } : null}
+            >
+              <LinearGradient
+                colors={['#27AE60', '#1F9E56']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.primaryBtn}
+              >
+                {loading
+                  ? <ActivityIndicator color="#fff" />
+                  : <>
+                      <Text style={styles.primaryBtnText}>Comenzar a repartir</Text>
+                      <Ionicons name="arrow-forward" size={18} color="#fff" />
+                    </>
+                }
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <View style={styles.footerInfo}>
+              <Ionicons name="information-circle-outline" size={15} color="#94A3B8" />
+              <Text style={styles.footerInfoText}>
+                ¿No tienes cuenta? Pídele al administrador que te registre.
+              </Text>
+            </View>
+          </View>
+
+          {/* Beneficios */}
+          <View style={styles.beneficios}>
+            {[
+              { icon: 'cash-outline', texto: 'Gana comisión por entrega' },
+              { icon: 'notifications-outline', texto: 'Pedidos cercanos al instante' },
+              { icon: 'map-outline', texto: 'Navegación integrada' },
+            ].map((b) => (
+              <View key={b.icon} style={styles.beneficioRow}>
+                <View style={styles.beneficioIcon}>
+                  <Ionicons name={b.icon} size={16} color="#7FDCA4" />
+                </View>
+                <Text style={styles.beneficioText}>{b.texto}</Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
-const HERO_HEIGHT = SCREEN_HEIGHT * 0.42;
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0D3D5C' },
-  scroll: { flexGrow: 1 },
-  hero: {
-    height: HERO_HEIGHT,
-    backgroundColor: '#1A6A9A',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: 50,
-  },
+  root: { flex: 1, backgroundColor: '#0D1B2A' },
+  scroll: { flexGrow: 1, paddingBottom: 30 },
+
+  deco: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.05)' },
+  decoUno: { width: 300, height: 300, top: -110, left: -90 },
+  decoDos: { width: 220, height: 220, top: SCREEN_HEIGHT * 0.3, right: -110, backgroundColor: 'rgba(39,174,96,0.12)' },
+
+  hero: { alignItems: 'center', paddingTop: SCREEN_HEIGHT * 0.09, paddingBottom: 30 },
   logoBadge: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
+    width: 88, height: 88, borderRadius: 44,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+    shadowColor: '#27AE60', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45, shadowRadius: 16, elevation: 10,
   },
-  logoIcon: { fontSize: 36 },
-  logoText: {
-    fontSize: 52,
-    fontWeight: '900',
-    color: '#fff',
-    letterSpacing: 10,
+  logoText: { fontSize: 42, fontWeight: '900', color: '#fff', letterSpacing: 12, marginLeft: 12 },
+  repartidorChip: {
+    backgroundColor: 'rgba(39,174,96,0.2)',
+    borderWidth: 1, borderColor: 'rgba(39,174,96,0.5)',
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 4, marginTop: 8,
   },
-  logoSub: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: 4,
-    marginTop: 2,
-  },
-  logoTagline: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.75)',
-    marginTop: 8,
-  },
+  repartidorChipText: { color: '#7FDCA4', fontSize: 12, fontWeight: '800', letterSpacing: 3 },
+  tagline: { color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 10, fontWeight: '600' },
+
   card: {
-    marginHorizontal: 20,
-    marginTop: -40,
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 28,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 10,
-    marginBottom: 40,
+    marginHorizontal: 18, backgroundColor: '#fff', borderRadius: 28, padding: 24,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.3, shadowRadius: 32, elevation: 14,
   },
-  cardTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#1A202C',
-    marginBottom: 4,
+  cardTitle: { fontSize: 21, fontWeight: '800', color: '#1A202C', marginBottom: 4 },
+  cardSubtitle: { fontSize: 13.5, color: '#718096', marginBottom: 18, lineHeight: 19 },
+
+  alertError: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FFF5F5', borderRadius: 12, padding: 11,
+    borderWidth: 1, borderColor: '#FED7D7', marginBottom: 12,
   },
-  cardSubtitle: {
-    fontSize: 14,
-    color: '#718096',
-    marginBottom: 20,
+  alertErrorText: { color: '#C53030', fontSize: 13, flex: 1 },
+
+  campo: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F7FAFC', borderWidth: 1.5, borderColor: '#E8EEF4',
+    borderRadius: 14, paddingHorizontal: 12,
   },
-  label: {
-    color: '#4A5568',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 6,
-    marginTop: 4,
-  },
-  input: {
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: '#1A202C',
-    backgroundColor: '#FAFAFA',
-  },
+  campoInput: { flex: 1, paddingVertical: 14, fontSize: 16, color: '#1A202C' },
+
   primaryBtn: {
-    backgroundColor: '#27AE60',
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 24,
-    shadowColor: '#27AE60',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 5,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderRadius: 16, paddingVertical: 16, marginTop: 18,
+    shadowColor: '#27AE60', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
   },
-  btnDisabled: { opacity: 0.6 },
-  primaryBtnText: { color: '#fff', fontSize: 17, fontWeight: '700', letterSpacing: 0.5 },
-  errorText: {
-    color: '#E53E3E',
-    fontSize: 13,
-    textAlign: 'center',
-    marginBottom: 12,
-    backgroundColor: '#FFF5F5',
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#FED7D7',
+  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
+
+  footerInfo: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 16, justifyContent: 'center' },
+  footerInfoText: { color: '#94A3B8', fontSize: 12 },
+
+  beneficios: { marginTop: 26, paddingHorizontal: 40, gap: 12 },
+  beneficioRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  beneficioIcon: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: 'rgba(39,174,96,0.15)',
+    alignItems: 'center', justifyContent: 'center',
   },
+  beneficioText: { color: 'rgba(255,255,255,0.75)', fontSize: 13.5, fontWeight: '600' },
 });

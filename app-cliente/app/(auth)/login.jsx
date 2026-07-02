@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform,
-  ScrollView, Dimensions,
+  ScrollView, Dimensions, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -17,8 +17,26 @@ import useAuthStore from '../../store/authStore';
 import { API_URL, ID_BRANCH, ID_CUENTA } from '../../constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Campo de texto con ícono a la izquierda
+function Campo({ icon, rightIcon, onRightPress, ...props }) {
+  return (
+    <View style={styles.campo}>
+      <Ionicons name={icon} size={19} color="#94A3B8" style={styles.campoIcon} />
+      <TextInput
+        style={styles.campoInput}
+        placeholderTextColor="#A0AEC0"
+        {...props}
+      />
+      {rightIcon ? (
+        <TouchableOpacity onPress={onRightPress} style={styles.campoRight}>
+          <Ionicons name={rightIcon} size={20} color="#94A3B8" />
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -123,202 +141,267 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <View style={styles.root}>
       <StatusBar style="light" />
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+
+      {/* Fondo degradado a pantalla completa con adornos */}
+      <LinearGradient
+        colors={['#0D1B2A', '#14507A', '#1A6A9A']}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0.8, y: 1 }}
+      />
+      <View style={[styles.deco, styles.decoUno]} />
+      <View style={[styles.deco, styles.decoDos]} />
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <LinearGradient
-          colors={['#1A6A9A', '#27AE60']}
-          style={styles.hero}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.logoText}>VIDA</Text>
-          <Text style={styles.logoSub}>Tu tienda favorita, a tu puerta</Text>
-        </LinearGradient>
-
-        <View style={styles.card}>
-          <View style={styles.tabs}>
-            {['login', 'registro'].map(t => (
-              <TouchableOpacity
-                key={t}
-                style={[styles.tabBtn, tab === t && styles.tabBtnActive]}
-                onPress={() => { setTab(t); setError(''); setSuccessMsg(''); }}
-              >
-                <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
-                  {t === 'login' ? 'Iniciar sesión' : 'Registrarse'}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {/* Hero con logo */}
+          <View style={styles.hero}>
+            <View style={styles.logoRing}>
+              <Image source={require('../../assets/icon.png')} style={styles.logoImg} />
+            </View>
+            <Text style={styles.logoText}>VIDA</Text>
+            <View style={styles.taglinePill}>
+              <Ionicons name="bicycle" size={14} color="#7FDCA4" />
+              <Text style={styles.taglineText}>Tu tienda favorita, a tu puerta</Text>
+            </View>
           </View>
 
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          {successMsg ? <Text style={styles.successText}>{successMsg}</Text> : null}
+          {/* Tarjeta */}
+          <View style={styles.card}>
+            {/* Tabs */}
+            <View style={styles.tabs}>
+              {['login', 'registro'].map(t => (
+                <TouchableOpacity
+                  key={t}
+                  style={[styles.tabBtn, tab === t && styles.tabBtnActive]}
+                  onPress={() => { setTab(t); setError(''); setSuccessMsg(''); }}
+                >
+                  <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
+                    {t === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-          {/* Google button */}
-          <TouchableOpacity
-            style={styles.googleBtn}
-            onPress={handleGoogleSignIn}
-            disabled={googleLoading}
-          >
-            {googleLoading
-              ? <ActivityIndicator color="#555" />
-              : <>
-                  <Text style={styles.googleIcon}>G</Text>
-                  <Text style={styles.googleBtnText}>Continuar con Google</Text>
-                </>
-            }
-          </TouchableOpacity>
+            {error ? (
+              <View style={styles.alertError}>
+                <Ionicons name="alert-circle" size={16} color="#E53E3E" />
+                <Text style={styles.alertErrorText}>{error}</Text>
+              </View>
+            ) : null}
+            {successMsg ? (
+              <View style={styles.alertOk}>
+                <Text style={styles.alertOkText}>{successMsg}</Text>
+              </View>
+            ) : null}
 
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>o</Text>
-            <View style={styles.dividerLine} />
-          </View>
+            {/* Google */}
+            <TouchableOpacity
+              style={styles.googleBtn}
+              onPress={handleGoogleSignIn}
+              disabled={googleLoading}
+              activeOpacity={0.85}
+            >
+              {googleLoading
+                ? <ActivityIndicator color="#555" />
+                : <>
+                    <Text style={styles.googleIcon}>G</Text>
+                    <Text style={styles.googleBtnText}>Continuar con Google</Text>
+                  </>
+              }
+            </TouchableOpacity>
 
-          {tab === 'login' ? (
-            <View>
-              <Text style={styles.label}>Teléfono *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="04XX-XXXXXXX"
-                placeholderTextColor="#A0AEC0"
-                keyboardType="phone-pad"
-                value={telefono}
-                onChangeText={setTelefono}
-              />
-              <Text style={styles.label}>Contraseña</Text>
-              <View style={styles.inputRow}>
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="Tu contraseña (opcional si no la configuraste)"
-                  placeholderTextColor="#A0AEC0"
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>o con tu teléfono</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {tab === 'login' ? (
+              <View style={styles.form}>
+                <Campo
+                  icon="call-outline"
+                  placeholder="Teléfono (04XX-XXXXXXX)"
+                  keyboardType="phone-pad"
+                  value={telefono}
+                  onChangeText={setTelefono}
+                />
+                <Campo
+                  icon="lock-closed-outline"
+                  placeholder="Contraseña (si la configuraste)"
                   secureTextEntry={!showPass}
                   value={password}
                   onChangeText={setPassword}
+                  rightIcon={showPass ? 'eye-off-outline' : 'eye-outline'}
+                  onRightPress={() => setShowPass(v => !v)}
                 />
-                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPass(v => !v)}>
-                  <Ionicons name={showPass ? 'eye-off-outline' : 'eye-outline'} size={20} color="#718096" />
-                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={[styles.primaryBtn, loading && styles.btnDisabled]}
-                onPress={handleLogin}
-                disabled={loading}
-              >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Entrar</Text>}
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View>
-              <Text style={styles.label}>Nombre *</Text>
-              <TextInput style={styles.input} placeholder="Tu nombre" placeholderTextColor="#A0AEC0" value={nombre} onChangeText={setNombre} />
-              <Text style={styles.label}>Apellidos</Text>
-              <TextInput style={styles.input} placeholder="Tus apellidos" placeholderTextColor="#A0AEC0" value={apellidos} onChangeText={setApellidos} />
-              <Text style={styles.label}>Teléfono *</Text>
-              <TextInput style={styles.input} placeholder="04XX-XXXXXXX" placeholderTextColor="#A0AEC0" keyboardType="phone-pad" value={telefonoReg} onChangeText={setTelefonoReg} />
-              <Text style={styles.label}>Correo electrónico</Text>
-              <TextInput style={styles.input} placeholder="correo@ejemplo.com" placeholderTextColor="#A0AEC0" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
-              <Text style={styles.label}>Contraseña</Text>
-              <View style={styles.inputRow}>
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="Mínimo 6 caracteres"
-                  placeholderTextColor="#A0AEC0"
+            ) : (
+              <View style={styles.form}>
+                <Campo icon="person-outline" placeholder="Nombre *" value={nombre} onChangeText={setNombre} />
+                <Campo icon="people-outline" placeholder="Apellidos" value={apellidos} onChangeText={setApellidos} />
+                <Campo icon="call-outline" placeholder="Teléfono * (04XX-XXXXXXX)" keyboardType="phone-pad" value={telefonoReg} onChangeText={setTelefonoReg} />
+                <Campo icon="mail-outline" placeholder="Correo electrónico" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
+                <Campo
+                  icon="lock-closed-outline"
+                  placeholder="Contraseña (mínimo 6 caracteres)"
                   secureTextEntry={!showPassReg}
                   value={passwordReg}
                   onChangeText={setPasswordReg}
+                  rightIcon={showPassReg ? 'eye-off-outline' : 'eye-outline'}
+                  onRightPress={() => setShowPassReg(v => !v)}
                 />
-                <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPassReg(v => !v)}>
-                  <Ionicons name={showPassReg ? 'eye-off-outline' : 'eye-outline'} size={20} color="#718096" />
-                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={[styles.primaryBtn, loading && styles.btnDisabled]}
-                onPress={handleRegistro}
-                disabled={loading}
-              >
-                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Crear cuenta</Text>}
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+            )}
 
-        {/* Guest-first: se puede explorar el catálogo sin cuenta */}
-        <TouchableOpacity
-          style={{ alignItems: 'center', paddingVertical: 18 }}
-          onPress={() => router.replace('/(tabs)')}
-        >
-          <Text style={{ color: '#1A6A9A', fontWeight: '700', fontSize: 14 }}>
-            Explorar sin cuenta →
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            {/* Botón principal con gradiente */}
+            <TouchableOpacity
+              onPress={tab === 'login' ? handleLogin : handleRegistro}
+              disabled={loading}
+              activeOpacity={0.9}
+              style={loading ? { opacity: 0.7 } : null}
+            >
+              <LinearGradient
+                colors={['#27AE60', '#1F9E56']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.primaryBtn}
+              >
+                {loading
+                  ? <ActivityIndicator color="#fff" />
+                  : <>
+                      <Text style={styles.primaryBtnText}>
+                        {tab === 'login' ? 'Entrar' : 'Crear mi cuenta'}
+                      </Text>
+                      <Ionicons name="arrow-forward" size={18} color="#fff" />
+                    </>
+                }
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {tab === 'registro' && (
+              <Text style={styles.microcopy}>
+                Al crear tu cuenta aceptas nuestros términos y condiciones
+              </Text>
+            )}
+          </View>
+
+          {/* Guest-first */}
+          <TouchableOpacity
+            style={styles.guestBtn}
+            onPress={() => router.replace('/(tabs)')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="storefront-outline" size={16} color="#fff" />
+            <Text style={styles.guestBtnText}>Explorar la tienda sin cuenta</Text>
+            <Ionicons name="chevron-forward" size={15} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
-const HERO_HEIGHT = SCREEN_HEIGHT * 0.32;
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
-  scroll: { flexGrow: 1 },
-  hero: { height: HERO_HEIGHT, justifyContent: 'center', alignItems: 'center', paddingBottom: 40 },
-  logoText: { fontSize: 64, fontWeight: '900', color: '#fff', letterSpacing: 12 },
-  logoSub: { fontSize: 14, color: 'rgba(255,255,255,0.85)', marginTop: 8, textAlign: 'center', paddingHorizontal: 24 },
-  card: {
-    marginHorizontal: 20, marginTop: -50, backgroundColor: '#fff',
-    borderRadius: 20, padding: 24,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12, shadowRadius: 24, elevation: 8, marginBottom: 40,
+  root: { flex: 1, backgroundColor: '#0D1B2A' },
+  scroll: { flexGrow: 1, paddingBottom: 30 },
+
+  // Adornos del fondo
+  deco: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.05)' },
+  decoUno: { width: 280, height: 280, top: -90, right: -80 },
+  decoDos: { width: 200, height: 200, top: SCREEN_HEIGHT * 0.28, left: -100, backgroundColor: 'rgba(39,174,96,0.12)' },
+
+  // Hero
+  hero: { alignItems: 'center', paddingTop: SCREEN_HEIGHT * 0.075, paddingBottom: 28 },
+  logoRing: {
+    width: 92, height: 92, borderRadius: 46,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
   },
-  tabs: { flexDirection: 'row', backgroundColor: '#F5F7FA', borderRadius: 12, padding: 4, marginBottom: 16 },
-  tabBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center' },
-  tabBtnActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 2 },
-  tabText: { color: '#718096', fontWeight: '500', fontSize: 14 },
-  tabTextActive: { color: '#1A6A9A', fontWeight: '700' },
+  logoImg: { width: 62, height: 62, borderRadius: 31 },
+  logoText: { fontSize: 44, fontWeight: '900', color: '#fff', letterSpacing: 14, marginLeft: 14 },
+  taglinePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, marginTop: 10,
+  },
+  taglineText: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600' },
+
+  // Tarjeta
+  card: {
+    marginHorizontal: 18, backgroundColor: '#fff', borderRadius: 28, padding: 22,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.25, shadowRadius: 32, elevation: 14,
+  },
+  tabs: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 14, padding: 4, marginBottom: 16 },
+  tabBtn: { flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: 'center' },
+  tabBtnActive: {
+    backgroundColor: '#fff',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 6, elevation: 2,
+  },
+  tabText: { color: '#94A3B8', fontWeight: '600', fontSize: 14 },
+  tabTextActive: { color: '#1A6A9A', fontWeight: '800' },
+
+  alertError: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#FFF5F5', borderRadius: 12, padding: 11,
+    borderWidth: 1, borderColor: '#FED7D7', marginBottom: 12,
+  },
+  alertErrorText: { color: '#C53030', fontSize: 13, flex: 1 },
+  alertOk: {
+    backgroundColor: '#F0FFF4', borderRadius: 12, padding: 11,
+    borderWidth: 1, borderColor: '#9AE6B4', marginBottom: 12,
+  },
+  alertOkText: { color: '#276749', fontSize: 13, textAlign: 'center' },
+
   googleBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 14,
     paddingVertical: 13, gap: 10, backgroundColor: '#fff',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
   },
   googleIcon: { fontSize: 18, fontWeight: '900', color: '#EA4335' },
-  googleBtnText: { fontSize: 15, fontWeight: '600', color: '#374151' },
+  googleBtnText: { fontSize: 15, fontWeight: '700', color: '#374151' },
+
   dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, gap: 10 },
   dividerLine: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
-  dividerText: { color: '#A0AEC0', fontSize: 13 },
-  label: { color: '#4A5568', fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 10 },
-  input: {
-    borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 12, fontSize: 15,
-    color: '#1A202C', backgroundColor: '#FAFAFA',
+  dividerText: { color: '#A0AEC0', fontSize: 12, fontWeight: '600' },
+
+  form: { gap: 10 },
+  campo: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F7FAFC', borderWidth: 1.5, borderColor: '#E8EEF4',
+    borderRadius: 14, paddingHorizontal: 12,
   },
-  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  eyeBtn: { padding: 12 },
+  campoIcon: { marginRight: 8 },
+  campoInput: { flex: 1, paddingVertical: 13, fontSize: 15, color: '#1A202C' },
+  campoRight: { padding: 6 },
+
   primaryBtn: {
-    backgroundColor: '#27AE60', borderRadius: 14, paddingVertical: 15,
-    alignItems: 'center', marginTop: 20,
-    shadowColor: '#27AE60', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderRadius: 16, paddingVertical: 16, marginTop: 18,
+    shadowColor: '#27AE60', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
   },
-  btnDisabled: { opacity: 0.6 },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  errorText: {
-    color: '#E53E3E', fontSize: 13, textAlign: 'center', marginBottom: 10,
-    backgroundColor: '#FFF5F5', borderRadius: 8, padding: 10,
-    borderWidth: 1, borderColor: '#FED7D7',
+  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
+  microcopy: { color: '#A0AEC0', fontSize: 11.5, textAlign: 'center', marginTop: 12 },
+
+  guestBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+    alignSelf: 'center', marginTop: 20,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 24, paddingHorizontal: 20, paddingVertical: 12,
   },
-  successText: {
-    color: '#276749', fontSize: 13, textAlign: 'center', marginBottom: 10,
-    backgroundColor: '#F0FFF4', borderRadius: 8, padding: 10,
-    borderWidth: 1, borderColor: '#9AE6B4',
-  },
+  guestBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 });
