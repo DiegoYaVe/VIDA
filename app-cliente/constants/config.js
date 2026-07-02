@@ -8,6 +8,13 @@ export const WS_URL  = process.env.EXPO_PUBLIC_WS_URL  || 'ws://localhost:3001/a
 export const ID_BRANCH = parseInt(process.env.EXPO_PUBLIC_ID_BRANCH || '1', 10);
 export const ID_CUENTA = parseInt(process.env.EXPO_PUBLIC_ID_CUENTA || '1', 10);
 
+// Origen del servidor (sin /api) — para construir URLs de imágenes subidas
+export const API_ORIGIN = API_URL.replace(/\/api\/?$/, '');
+
+// Convierte rutas relativas del backend (/uploads/...) en URL absoluta
+export const absImg = (ruta) =>
+  !ruta ? null : (String(ruta).startsWith('http') ? ruta : API_ORIGIN + ruta);
+
 // Google OAuth — crea un Web Client ID en console.cloud.google.com
 // OAuth 2.0 > Web > Authorized redirect URIs: https://auth.expo.io/@<tu-usuario>/vida-cliente
 // (Client ID es un identificador público, no un secreto)

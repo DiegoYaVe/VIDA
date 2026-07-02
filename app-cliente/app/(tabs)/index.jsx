@@ -22,6 +22,7 @@ import { StatusBar } from 'expo-status-bar';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import useCarritoStore from '../../store/carritoStore';
+import { absImg } from '../../constants/config';
 
 const PLACEHOLDER = 'https://via.placeholder.com/150/EBF8FF/1A6A9A?text=VIDA';
 
@@ -142,7 +143,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.prodCard}>
         <Image
-          source={{ uri: p.ImagenProducto || PLACEHOLDER }}
+          source={{ uri: absImg(p.ImagenProducto) || PLACEHOLDER }}
           style={styles.prodImg}
           defaultSource={{ uri: PLACEHOLDER }}
         />

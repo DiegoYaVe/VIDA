@@ -1,4 +1,6 @@
 // src/controllers/inventario.controller.js
+import path from 'path';
+import fs from 'fs';
 import { getPool, sql } from '../db/sqlserver.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 
@@ -617,5 +619,57 @@ export async function listarMovimientos(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener movimientos' });
+  }
+}
+
+// ── POST /api/inventario/productos/:idProducto/imagen ──────────────────────
+// Sube la foto del producto (multipart) y actualiza ImagenProducto
+export async function subirImagenProducto(request, reply) {
+  const { idBranch, idCuenta, idUsuario } = request.user;
+  const { idProducto } = request.params;
+
+  try {
+    const data = await request.file();
+    if (!data) return reply.code(400).send({ error: 'No se recibió ningún archivo' });
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(data.mimetype)) {
+      return reply.code(400).send({ error: 'Solo se permiten imágenes JPG, PNG o WebP' });
+    }
+
+    const uploadDir = path.join(process.cwd(), 'uploads', 'productos');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const ext = (data.filename.split('.').pop() || 'jpg').toLowerCase();
+    const filename = `prod_${idBranch}_${idCuenta}_${idProducto}_${Date.now()}.${ext}`;
+    const filepath = path.join(uploadDir, filename);
+
+    const buffer = await data.toBuffer();
+    fs.writeFileSync(filepath, buffer);
+
+    const urlImagen = `/uploads/productos/${filename}`;
+
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch',       sql.BigInt,       idBranch)
+      .input('idCuenta',       sql.BigInt,       idCuenta)
+      .input('idProducto',     sql.BigInt,       idProducto)
+      .input('ImagenProducto', sql.VarChar(300), urlImagen)
+      .input('UsuMod',         sql.VarChar(20),  String(idUsuario))
+      .query(`UPDATE VIDA_INVENTARIO_PRODUCTOS SET
+                ImagenProducto=@ImagenProducto, FechaMod=GETDATE(), UsuMod=@UsuMod
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProducto=@idProducto`);
+
+    if (r.rowsAffected[0] === 0) {
+      fs.unlinkSync(filepath);
+      return reply.code(404).send({ error: 'Producto no encontrado' });
+    }
+
+    return reply.send({ url: urlImagen });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al subir imagen del producto' });
   }
 }

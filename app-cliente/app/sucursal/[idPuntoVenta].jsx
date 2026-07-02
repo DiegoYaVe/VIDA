@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import useCarritoStore from '../../store/carritoStore';
+import { absImg } from '../../constants/config';
 
 const PLACEHOLDER = 'https://via.placeholder.com/150/EBF8FF/1A6A9A?text=VIDA';
 
@@ -146,7 +147,7 @@ export default function CatalogoScreen() {
     return (
       <View style={styles.prodCard}>
         <Image
-          source={{ uri: imagen || PLACEHOLDER }}
+          source={{ uri: absImg(imagen) || PLACEHOLDER }}
           style={styles.prodImg}
           defaultSource={{ uri: PLACEHOLDER }}
         />

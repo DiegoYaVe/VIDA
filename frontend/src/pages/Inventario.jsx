@@ -1,7 +1,7 @@
 // src/pages/Inventario.jsx
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore.js';
-import api from '../services/api.js';
+import api, { API_ORIGIN } from '../services/api.js';
 import { useToast } from '../components/Toast.jsx';
 import {
   Plus, Search, Package, Tag, ArrowDownCircle, ArrowUpCircle,
@@ -151,6 +151,10 @@ function ModalCategoria({ data, onClose, onSaved }) {
 // ══════════════════════════════════════════════════════════════════════════
 function ModalProducto({ data, categorias, onClose, onSaved }) {
   const toast = useToast();
+  const [imagenFile, setImagenFile] = useState(null);
+  const [preview, setPreview] = useState(
+    data?.ImagenProducto ? `${API_ORIGIN}${data.ImagenProducto}` : null
+  );
   const [form, setForm] = useState({
     idCategoria:     data?.idCategoria     || '',
     Nombre:          data?.Nombre          || '',
@@ -189,12 +193,27 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
         UnidadesPorCaja: form.UnidadMedida === 'Caja' && form.UnidadesPorCaja !== ''
                            ? parseInt(form.UnidadesPorCaja) : null,
       };
-      if (data?.idProducto) {
-        await api.put(`/inventario/productos/${data.idProducto}`, body);
+      let idProducto = data?.idProducto;
+      if (idProducto) {
+        await api.put(`/inventario/productos/${idProducto}`, body);
         toast.success('Producto actualizado', form.Nombre);
       } else {
-        await api.post('/inventario/productos', body);
+        const res = await api.post('/inventario/productos', body);
+        idProducto = res.data?.idProducto;
         toast.success('Producto creado', form.Nombre);
+      }
+
+      // Subir la foto si se seleccionó una nueva
+      if (imagenFile && idProducto) {
+        const fd = new FormData();
+        fd.append('file', imagenFile);
+        try {
+          await api.post(`/inventario/productos/${idProducto}/imagen`, fd, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } catch {
+          toast.error('Producto guardado, pero la imagen no se pudo subir');
+        }
       }
       onSaved();
     } catch (err) {
@@ -214,6 +233,37 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
             {errors.general}
           </div>
         )}
+
+        {/* Foto del producto — es lo que ven los clientes en la app */}
+        <div className="flex items-center gap-4">
+          <label className="relative w-24 h-24 rounded-2xl border-2 border-dashed border-gray-300 hover:border-[#1A6A9A] cursor-pointer overflow-hidden flex items-center justify-center bg-gray-50 transition shrink-0">
+            {preview ? (
+              <img src={preview} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-3xl text-gray-300">📷</span>
+            )}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 5 * 1024 * 1024) {
+                  setErrors(p => ({ ...p, general: 'La imagen no debe superar 5MB' }));
+                  return;
+                }
+                setImagenFile(file);
+                setPreview(URL.createObjectURL(file));
+              }}
+            />
+          </label>
+          <div className="text-xs text-gray-400">
+            <p className="font-semibold text-gray-600 text-sm mb-0.5">Foto del producto</p>
+            <p>JPG, PNG o WebP · máx 5MB.</p>
+            <p>Se muestra en la app de clientes — una buena foto vende más.</p>
+          </div>
+        </div>
 
         <SelectField label="Categoría *" value={form.idCategoria} error={errors.idCategoria}
           onChange={e => f('idCategoria', e.target.value)}>
@@ -671,8 +721,18 @@ function TabProductos({ puedeEscribir }) {
               {productos.map(p => (
                 <tr key={p.idProducto} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3">
-                    <p className="font-bold text-gray-800">{p.Nombre}</p>
-                    {p.Descripcion && <p className="text-xs text-gray-400 truncate max-w-48">{p.Descripcion}</p>}
+                    <div className="flex items-center gap-3">
+                      {p.ImagenProducto ? (
+                        <img src={`${API_ORIGIN}${p.ImagenProducto}`} alt=""
+                          className="w-10 h-10 rounded-lg object-cover shrink-0 border border-gray-100" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-300 shrink-0 text-lg">📷</div>
+                      )}
+                      <div>
+                        <p className="font-bold text-gray-800">{p.Nombre}</p>
+                        {p.Descripcion && <p className="text-xs text-gray-400 truncate max-w-48">{p.Descripcion}</p>}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-gray-500 font-mono text-xs">{p.SKU || '—'}</td>
                   <td className="px-4 py-3">

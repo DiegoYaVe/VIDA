@@ -18,6 +18,7 @@ import { StatusBar } from 'expo-status-bar';
 import api from '../../services/api';
 import useCarritoStore from '../../store/carritoStore';
 import useAuthStore from '../../store/authStore';
+import { absImg } from '../../constants/config';
 
 const PLACEHOLDER = 'https://via.placeholder.com/80/EBF8FF/1A6A9A?text=+';
 
@@ -132,7 +133,7 @@ export default function CarritoScreen() {
         {items.map((item) => (
           <View key={item.idProducto} style={styles.itemCard}>
             <Image
-              source={{ uri: item.ImagenProducto || PLACEHOLDER }}
+              source={{ uri: absImg(item.ImagenProducto) || PLACEHOLDER }}
               style={styles.itemImg}
             />
             <View style={styles.itemInfo}>

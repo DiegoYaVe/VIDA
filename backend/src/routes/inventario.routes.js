@@ -5,6 +5,7 @@ import {
   listarProductos, obtenerProducto, crearProducto, editarProducto, toggleProducto,
   verStock,
   registrarMovimiento, listarMovimientos,
+  subirImagenProducto,
 } from '../controllers/inventario.controller.js';
 
 // Roles que pueden escribir (alta/edición)
@@ -43,6 +44,9 @@ export async function inventarioRoutes(fastify) {
 
   fastify.patch('/inventario/productos/:idProducto/status',
     { preHandler: [requireRole(...ESCRITURA)] }, toggleProducto);
+
+  fastify.post('/inventario/productos/:idProducto/imagen',
+    { preHandler: [requireRole(...ESCRITURA)] }, subirImagenProducto);
 
   // ── STOCK ─────────────────────────────────────────────────────────────
   fastify.get('/inventario/stock',
