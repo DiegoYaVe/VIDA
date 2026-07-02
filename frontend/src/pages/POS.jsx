@@ -3,6 +3,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore.js';
 import { useHeartbeat } from '../hooks/useHeartbeat.js';
 import api from '../services/api.js';
+import { addToQueue, buscarEnCatalogo, genUUID } from '../services/offlineQueue.js';
+import { startSyncEngine, syncNow } from '../services/syncEngine.js';
+import SyncStatusBar from '../components/SyncStatusBar.jsx';
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, CreditCard,
   DollarSign, Layers, Check, X,
@@ -28,8 +31,14 @@ function Ticket({ venta, onCerrar }) {
           <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
             <Check size={24} className="text-green-600"/>
           </div>
-          <h3 className="font-bold text-gray-800 text-lg">¡Venta completada!</h3>
-          <p className="text-gray-400 text-sm mt-1">Pedido #{venta.idPedido}</p>
+          <h3 className="font-bold text-gray-800 text-lg">
+            {venta.offline ? 'Venta guardada (sin conexión)' : '¡Venta completada!'}
+          </h3>
+          <p className="text-gray-400 text-sm mt-1">
+            {venta.offline
+              ? `Ref. ${venta.refOffline} — se sincronizará al volver la conexión`
+              : `Pedido #${venta.idPedido}`}
+          </p>
         </div>
 
         {/* Ticket imprimible */}
@@ -392,6 +401,10 @@ export default function POS() {
   // Heartbeat: notifica al servidor que esta sucursal está online
   useHeartbeat(true);
 
+  // Motor de sincronización offline: recupera ventas pendientes de sesiones
+  // anteriores y refresca el catálogo local para búsqueda sin red
+  useEffect(() => { startSyncEngine(); }, []);
+
   // Búsqueda y catálogo
   const [busqueda, setBusqueda]         = useState('');
   const [productos, setProductos]       = useState([]);
@@ -430,6 +443,10 @@ export default function POS() {
           params: { search: busqueda, limit: 20, page: 1 },
         });
         setProductos(r.data.data || []);
+      } catch {
+        // Sin red: buscar en el catálogo cacheado en IndexedDB
+        const locales = await buscarEnCatalogo(busqueda, 20);
+        setProductos(locales);
       } finally {
         setBuscando(false);
       }
@@ -487,42 +504,57 @@ export default function POS() {
 
   // ── Confirmar venta ──────────────────────────────────────────────────────
   // pagoInfo: { metodo, efectivo, tarjeta, cambio }
+  // Patrón offline-first: la venta SIEMPRE se guarda primero en IndexedDB con
+  // un UUID y se sincroniza vía /pedidos/sync (idempotente, crea y entrega en
+  // una sola transacción). Con red sincroniza al instante; sin red queda en
+  // cola y el motor la envía cuando vuelva la conexión.
   async function confirmarVenta(pagoInfo) {
     if (!idPuntoVenta) { setError('Selecciona un punto de venta'); return; }
     if (carrito.length === 0) return;
     setProcesando(true); setError('');
-    try {
-      const r = await api.post('/pedidos', {
-        idPuntoVenta:  parseInt(idPuntoVenta),
-        Canal:         'POS',
-        MetodoPago:    pagoInfo.metodo,
-        StatusPago:    'PAGADO',
-        MontoEfectivo: pagoInfo.efectivo || null,
-        MontoTarjeta:  pagoInfo.tarjeta  || null,
-        MontoCambio:   pagoInfo.cambio   || null,
-        items: carrito.map(i => ({
-          idProducto:     i.idProducto,
-          Cantidad:       i.Cantidad,
-          PrecioUnitario: i.PrecioUnitario,
-        })),
-      });
 
-      // Marcar como entregado inmediatamente (venta en mostrador)
-      await api.patch(`/pedidos/${r.data.idPedido}/status`, {
-        StatusNuevo: 'ENTREGADO',
-        Notas: 'Venta en punto de venta',
-      });
+    const clienteUUID = genUUID();
+    const venta = {
+      ClienteUUID:   clienteUUID,
+      idPuntoVenta:  parseInt(idPuntoVenta),
+      MetodoPago:    pagoInfo.metodo,
+      MontoEfectivo: pagoInfo.efectivo || null,
+      MontoTarjeta:  pagoInfo.tarjeta  || null,
+      MontoCambio:   pagoInfo.cambio   || null,
+      FechaVenta:    new Date().toISOString(),
+      items: carrito.map(i => ({
+        idProducto:     i.idProducto,
+        Cantidad:       i.Cantidad,
+        PrecioUnitario: i.PrecioUnitario,
+      })),
+    };
+
+    try {
+      await addToQueue(venta);
+      const resultado = await syncNow();
+
+      const sincronizada = resultado?.synced?.find(s => s.ClienteUUID === clienteUUID);
+      const rechazada    = resultado?.failed?.find(f => f.ClienteUUID === clienteUUID);
+
+      if (rechazada) {
+        // El servidor la rechazó por datos inválidos — no es un problema de red
+        setError(rechazada.motivo || 'Error al procesar la venta');
+        setModalPago(false);
+        return;
+      }
 
       setTicket({
-        idPedido: r.data.idPedido,
-        items:    carrito,
+        idPedido:   sincronizada?.idPedido ?? null,
+        offline:    !sincronizada,
+        refOffline: clienteUUID.slice(-8).toUpperCase(),
+        items:      carrito,
         total,
-        pago:     pagoInfo,
+        pago:       pagoInfo,
       });
       setModalPago(false);
       setCarrito([]);
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al procesar la venta');
+      setError('Error al guardar la venta: ' + (err.message || 'desconocido'));
       setModalPago(false);
     } finally {
       setProcesando(false);
@@ -536,7 +568,10 @@ export default function POS() {
       <div className="flex-1 flex flex-col p-4 gap-3 overflow-hidden">
 
         {/* Barra superior */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {/* Estado de conexión y sincronización */}
+          <SyncStatusBar />
+
           {/* Punto de venta */}
           {puntos.length > 1 && (
             <div className="relative">

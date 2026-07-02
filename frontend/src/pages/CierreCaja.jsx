@@ -111,6 +111,7 @@ function KpiCard({ icon: Icon, label, value, color = 'text-[#1A6A9A]', sub }) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 function ModalCierre({ turno, ventas, efectivoEsperado, onClose, onCerrado }) {
+  const toast = useToast();
   const [montoCierre, setMontoCierre] = useState('');
   const [observaciones, setObservaciones] = useState('');
   const [loading, setLoading] = useState(false);
