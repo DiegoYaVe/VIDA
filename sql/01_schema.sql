@@ -1,0 +1,748 @@
+-- ============================================================================
+-- POS VENEZUELA — Schema completo de SQL Server
+-- Generado automáticamente desde db_a3fa0b_vidaqa el 2026-07-02
+-- Idempotente: usa IF NOT EXISTS, se puede correr múltiples veces
+-- ============================================================================
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('HW_BRANCH','U') IS NULL
+CREATE TABLE HW_BRANCH (
+  idBranch BIGINT NOT NULL,
+  Nombre VARCHAR(200) NULL,
+  Apellidos VARCHAR(200) NULL,
+  NomComercial VARCHAR(200) NULL,
+  Referencia VARCHAR(200) NULL,
+  Correo VARCHAR(100) NULL,
+  Telefono VARCHAR(50) NULL,
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  FechaMod DATETIME NULL,
+  UsuAlta VARCHAR(10) NULL,
+  UsuMod VARCHAR(10) NULL,
+  Status VARCHAR(50) NULL DEFAULT ('ACTIVO'),
+  CONSTRAINT PK_HW_BRANCH PRIMARY KEY CLUSTERED (idBranch)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('HW_BRANCH_CUENTA','U') IS NULL
+CREATE TABLE HW_BRANCH_CUENTA (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  Nombre VARCHAR(200) NULL,
+  Apellidos VARCHAR(200) NULL,
+  NomComercial VARCHAR(200) NULL,
+  TipoCuenta VARCHAR(50) NULL,
+  Correo VARCHAR(100) NULL,
+  Telefono VARCHAR(50) NULL,
+  Encargado VARCHAR(200) NULL,
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  FechaMod DATETIME NULL,
+  UsuAlta VARCHAR(10) NULL,
+  UsuMod VARCHAR(10) NULL,
+  Status VARCHAR(50) NULL DEFAULT ('ACTIVO'),
+  logoCuenta VARCHAR(300) NULL,
+  CONSTRAINT PK_HW_BRANCH_CUENTA PRIMARY KEY CLUSTERED (idBranch, idCuenta)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_APP_CLIENTES','U') IS NULL
+CREATE TABLE VIDA_APP_CLIENTES (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idCliente BIGINT NOT NULL,
+  Nombre VARCHAR(200) NOT NULL,
+  Apellidos VARCHAR(200) NULL,
+  Telefono NVARCHAR(30) NULL,
+  Email VARCHAR(100) NULL,
+  FcmToken VARCHAR(500) NULL,
+  Status VARCHAR(20) NOT NULL DEFAULT ('ACTIVO'),
+  FechaAlta DATETIME NOT NULL DEFAULT (getdate()),
+  Contrasena NVARCHAR(200) NULL,
+  GoogleId NVARCHAR(200) NULL,
+  EmailConfirmado BIT NOT NULL DEFAULT ((0)),
+  TokenConfirmacion NVARCHAR(100) NULL,
+  TokenExpira DATETIME NULL,
+  CONSTRAINT PK_APP_CLIENTES PRIMARY KEY CLUSTERED (idBranch, idCuenta, idCliente)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_APP_CLIENTES_DIRECCIONES','U') IS NULL
+CREATE TABLE VIDA_APP_CLIENTES_DIRECCIONES (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idCliente BIGINT NOT NULL,
+  idDireccion BIGINT NOT NULL,
+  Alias VARCHAR(100) NULL,
+  Direccion VARCHAR(500) NOT NULL,
+  Latitud DECIMAL(10,7) NULL,
+  Longitud DECIMAL(10,7) NULL,
+  EsPrincipal BIT NOT NULL DEFAULT ((0)),
+  Status VARCHAR(20) NOT NULL DEFAULT ('ACTIVO'),
+  CONSTRAINT PK_APP_DIRECCIONES PRIMARY KEY CLUSTERED (idBranch, idCuenta, idCliente, idDireccion)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_CAJA_TURNOS','U') IS NULL
+CREATE TABLE VIDA_CAJA_TURNOS (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idTurno BIGINT NOT NULL,
+  idPuntoVenta BIGINT NOT NULL,
+  idUsuario BIGINT NOT NULL,
+  NombreUsuario VARCHAR(200) NULL,
+  NombreSucursal VARCHAR(200) NULL,
+  FechaApertura DATETIME NOT NULL DEFAULT (getdate()),
+  FechaCierre DATETIME NULL,
+  MontoApertura DECIMAL(18,4) NOT NULL DEFAULT ((0)),
+  TotalVentasEfectivo DECIMAL(18,4) NOT NULL DEFAULT ((0)),
+  TotalVentasTarjeta DECIMAL(18,4) NOT NULL DEFAULT ((0)),
+  TotalVentas DECIMAL(18,4) NOT NULL DEFAULT ((0)),
+  NumTransacciones INT NOT NULL DEFAULT ((0)),
+  MontoCierre DECIMAL(18,4) NULL,
+  Diferencia DECIMAL(18,4) NULL,
+  Observaciones VARCHAR(500) NULL,
+  Status VARCHAR(20) NOT NULL DEFAULT ('ABIERTO'),
+  UsuAlta VARCHAR(10) NULL,
+  FechaAlta DATETIME NOT NULL DEFAULT (getdate()),
+  CONSTRAINT PK_VIDA_CAJA_TURNOS PRIMARY KEY CLUSTERED (idBranch, idCuenta, idTurno)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_CLIENTES','U') IS NULL
+CREATE TABLE VIDA_CLIENTES (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idCliente BIGINT NOT NULL,
+  Nombre VARCHAR(200) NOT NULL,
+  Email VARCHAR(100) NULL,
+  Telefono VARCHAR(50) NULL,
+  Direccion VARCHAR(500) NULL,
+  Latitud DECIMAL(10,7) NULL,
+  Longitud DECIMAL(10,7) NULL,
+  Status VARCHAR(20) NOT NULL DEFAULT ('ACTIVO'),
+  FechaAlta DATETIME NOT NULL DEFAULT (getdate()),
+  CONSTRAINT PK__VIDA_CLI__770A7660EEBEA497 PRIMARY KEY CLUSTERED (idBranch, idCuenta, idCliente)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_CONFIG_DELIVERY','U') IS NULL
+CREATE TABLE VIDA_CONFIG_DELIVERY (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  Clave VARCHAR(100) NOT NULL,
+  Valor VARCHAR(500) NOT NULL,
+  Descripcion VARCHAR(300) NULL,
+  CONSTRAINT PK_CONFIG_DELIVERY PRIMARY KEY CLUSTERED (idBranch, idCuenta, Clave)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_CONFIGURACION','U') IS NULL
+CREATE TABLE VIDA_CONFIGURACION (
+  idConfiguracion BIGINT IDENTITY(1,1) NOT NULL,
+  idBranch BIGINT NOT NULL,
+  Clave VARCHAR(100) NOT NULL,
+  Valor VARCHAR(500) NULL,
+  Descripcion VARCHAR(300) NULL,
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  FechaMod DATETIME NULL,
+  UsuAlta VARCHAR(10) NULL,
+  UsuMod VARCHAR(10) NULL,
+  Status VARCHAR(50) NULL DEFAULT ('ACTIVO'),
+  CONSTRAINT PK_VIDA_CONFIGURACION PRIMARY KEY CLUSTERED (idConfiguracion)
+);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UQ_VIDA_CONFIGURACION' AND object_id=OBJECT_ID('VIDA_CONFIGURACION'))
+CREATE UNIQUE NONCLUSTERED INDEX UQ_VIDA_CONFIGURACION ON VIDA_CONFIGURACION (idBranch, Clave);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_CUENTA_ESTADOS','U') IS NULL
+CREATE TABLE VIDA_CUENTA_ESTADOS (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idEstado BIGINT NOT NULL,
+  idPais BIGINT NOT NULL,
+  NombreEstado VARCHAR(100) NOT NULL,
+  Status VARCHAR(20) NOT NULL DEFAULT ('ACTIVO'),
+  FechaAlta DATETIME NOT NULL DEFAULT (getdate()),
+  UsuAlta VARCHAR(20) NULL,
+  FechaMod DATETIME NULL,
+  UsuMod VARCHAR(20) NULL,
+  CONSTRAINT PK_VIDA_CUENTA_ESTADOS PRIMARY KEY CLUSTERED (idBranch, idCuenta, idEstado)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_CUENTA_PAISES','U') IS NULL
+CREATE TABLE VIDA_CUENTA_PAISES (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idPais BIGINT NOT NULL,
+  NombrePais VARCHAR(100) NOT NULL,
+  CodigoISO VARCHAR(3) NULL,
+  Status VARCHAR(20) NOT NULL DEFAULT ('ACTIVO'),
+  FechaAlta DATETIME NOT NULL DEFAULT (getdate()),
+  UsuAlta VARCHAR(20) NULL,
+  FechaMod DATETIME NULL,
+  UsuMod VARCHAR(20) NULL,
+  CONSTRAINT PK_VIDA_CUENTA_PAISES PRIMARY KEY CLUSTERED (idBranch, idCuenta, idPais)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_CUENTA_PANTALLAS','U') IS NULL
+CREATE TABLE VIDA_CUENTA_PANTALLAS (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idPantalla BIGINT NOT NULL,
+  Nombre VARCHAR(300) NULL,
+  Descripcion VARCHAR(400) NULL,
+  Modulo VARCHAR(100) NULL,
+  Link VARCHAR(400) NULL,
+  Icono VARCHAR(400) NULL,
+  OrdenPantalla BIGINT NULL,
+  StatusPantalla VARCHAR(50) NULL DEFAULT ('ACTIVO'),
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  FechaMod DATETIME NULL,
+  UsuAlta VARCHAR(10) NULL,
+  UsuMod VARCHAR(10) NULL,
+  Status VARCHAR(50) NULL DEFAULT ('ACTIVO'),
+  CONSTRAINT PK_VIDA_CUENTA_PANTALLAS PRIMARY KEY CLUSTERED (idBranch, idCuenta, idPantalla)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO','U') IS NULL
+CREATE TABLE VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idPantalla BIGINT NOT NULL,
+  idUsuario BIGINT NOT NULL,
+  StatusAcceso VARCHAR(50) NULL DEFAULT ('ACTIVO'),
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  FechaMod DATETIME NULL,
+  UsuAlta VARCHAR(10) NULL,
+  UsuMod VARCHAR(10) NULL,
+  Status VARCHAR(50) NULL DEFAULT ('ACTIVO'),
+  CONSTRAINT PK_VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO PRIMARY KEY CLUSTERED (idBranch, idCuenta, idPantalla, idUsuario)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_CUENTA_PUNTOS_VENTA','U') IS NULL
+CREATE TABLE VIDA_CUENTA_PUNTOS_VENTA (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idPuntoVenta BIGINT NOT NULL,
+  Nombre VARCHAR(200) NULL,
+  NomComercial VARCHAR(200) NULL,
+  TipoPuntoVenta VARCHAR(50) NULL,
+  Correo VARCHAR(100) NULL,
+  Telefono VARCHAR(50) NULL,
+  Encargado VARCHAR(200) NULL,
+  Calle VARCHAR(200) NULL,
+  NumExt VARCHAR(50) NULL,
+  NumInt VARCHAR(50) NULL,
+  Colonia VARCHAR(200) NULL,
+  CP VARCHAR(20) NULL,
+  Ciudad VARCHAR(200) NULL,
+  Estado VARCHAR(200) NULL,
+  Pais VARCHAR(200) NULL,
+  Latitud VARCHAR(50) NULL,
+  Longitud VARCHAR(50) NULL,
+  LogoPuntoVenta VARCHAR(300) NULL,
+  StatusPuntoVenta VARCHAR(50) NULL DEFAULT ('ACTIVO'),
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  FechaMod DATETIME NULL,
+  UsuAlta VARCHAR(10) NULL,
+  UsuMod VARCHAR(10) NULL,
+  Status VARCHAR(50) NULL DEFAULT ('ACTIVO'),
+  UltimoHeartbeat DATETIME NULL,
+  StatusConexion VARCHAR(10) NOT NULL DEFAULT ('OFFLINE'),
+  idPais BIGINT NULL,
+  idEstado BIGINT NULL,
+  CONSTRAINT PK_VIDA_CUENTA_PUNTOS_VENTA PRIMARY KEY CLUSTERED (idBranch, idCuenta, idPuntoVenta)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_CUENTA_USUARIOS','U') IS NULL
+CREATE TABLE VIDA_CUENTA_USUARIOS (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idUsuario BIGINT NOT NULL,
+  idPuntoVenta BIGINT NULL,
+  Nombre VARCHAR(200) NULL,
+  Apellidos VARCHAR(200) NULL,
+  NomComercial VARCHAR(200) NULL,
+  TipoUsuario VARCHAR(50) NULL,
+  Correo VARCHAR(100) NULL,
+  Telefono VARCHAR(50) NULL,
+  Puesto VARCHAR(200) NULL,
+  NivelAcceso INT NULL,
+  Cve VARCHAR(50) NULL,
+  Pass VARCHAR(255) NULL,
+  NumInterno BIGINT NULL,
+  ImagenUsuario VARCHAR(100) NULL,
+  ImagenFirma VARCHAR(100) NULL,
+  PassCorreo VARCHAR(50) NULL,
+  FechaNacimiento DATE NULL,
+  Extension VARCHAR(20) NULL,
+  Comision DECIMAL(12,4) NULL DEFAULT ((0)),
+  Cuota DECIMAL(12,4) NULL DEFAULT ((0)),
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  FechaMod DATETIME NULL,
+  UsuAlta VARCHAR(50) NULL,
+  UsuMod VARCHAR(50) NULL,
+  Status VARCHAR(50) NULL DEFAULT ('ACTIVO'),
+  NumInternoSirscom BIGINT NULL,
+  CambiarPass BIT NOT NULL DEFAULT ((0)),
+  idPais BIGINT NULL,
+  idEstado BIGINT NULL,
+  CONSTRAINT PK_VIDA_CUENTA_USUARIOS PRIMARY KEY CLUSTERED (idBranch, idCuenta, idUsuario)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_INVENTARIO_CATEGORIAS','U') IS NULL
+CREATE TABLE VIDA_INVENTARIO_CATEGORIAS (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idCategoria BIGINT NOT NULL,
+  Nombre VARCHAR(100) NOT NULL,
+  Descripcion VARCHAR(300) NULL,
+  Icono VARCHAR(100) NULL,
+  OrdenCategoria INT NULL DEFAULT ((0)),
+  Status VARCHAR(20) NULL DEFAULT ('ACTIVO'),
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  UsuAlta VARCHAR(20) NULL,
+  FechaMod DATETIME NULL,
+  UsuMod VARCHAR(20) NULL,
+  CONSTRAINT PK_INVENTARIO_CATEGORIAS PRIMARY KEY CLUSTERED (idBranch, idCuenta, idCategoria)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_INVENTARIO_MOVIMIENTOS','U') IS NULL
+CREATE TABLE VIDA_INVENTARIO_MOVIMIENTOS (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idMovimiento BIGINT NOT NULL,
+  idPuntoVenta BIGINT NOT NULL,
+  idProducto BIGINT NOT NULL,
+  TipoMovimiento VARCHAR(20) NOT NULL,
+  Cantidad DECIMAL(18,4) NOT NULL,
+  CantidadAntes DECIMAL(18,4) NOT NULL,
+  CantidadDespues DECIMAL(18,4) NOT NULL,
+  Motivo VARCHAR(300) NULL,
+  Referencia VARCHAR(100) NULL,
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  UsuAlta VARCHAR(20) NULL,
+  CONSTRAINT PK_INVENTARIO_MOVIMIENTOS PRIMARY KEY CLUSTERED (idBranch, idCuenta, idMovimiento)
+);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_MOV_PRODUCTO' AND object_id=OBJECT_ID('VIDA_INVENTARIO_MOVIMIENTOS'))
+CREATE NONCLUSTERED INDEX IX_MOV_PRODUCTO ON VIDA_INVENTARIO_MOVIMIENTOS (idBranch, idCuenta, idProducto);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_MOV_PUNTOVENTA' AND object_id=OBJECT_ID('VIDA_INVENTARIO_MOVIMIENTOS'))
+CREATE NONCLUSTERED INDEX IX_MOV_PUNTOVENTA ON VIDA_INVENTARIO_MOVIMIENTOS (idBranch, idCuenta, idPuntoVenta);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_INVENTARIO_PRODUCTOS','U') IS NULL
+CREATE TABLE VIDA_INVENTARIO_PRODUCTOS (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idProducto BIGINT NOT NULL,
+  idCategoria BIGINT NOT NULL,
+  Nombre VARCHAR(200) NOT NULL,
+  Descripcion VARCHAR(500) NULL,
+  SKU VARCHAR(100) NULL,
+  CodigoBarras VARCHAR(100) NULL,
+  UnidadMedida VARCHAR(50) NOT NULL,
+  PrecioUSD DECIMAL(18,4) NOT NULL DEFAULT ((0)),
+  CostoUSD DECIMAL(18,4) NULL,
+  StockMinimo DECIMAL(18,4) NULL DEFAULT ((0)),
+  ImagenProducto VARCHAR(300) NULL,
+  Notas VARCHAR(500) NULL,
+  Status VARCHAR(20) NULL DEFAULT ('ACTIVO'),
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  UsuAlta VARCHAR(20) NULL,
+  FechaMod DATETIME NULL,
+  UsuMod VARCHAR(20) NULL,
+  UnidadesPorCaja INT NULL,
+  CONSTRAINT PK_INVENTARIO_PRODUCTOS PRIMARY KEY CLUSTERED (idBranch, idCuenta, idProducto)
+);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UQ_PROD_SKU' AND object_id=OBJECT_ID('VIDA_INVENTARIO_PRODUCTOS'))
+CREATE UNIQUE NONCLUSTERED INDEX UQ_PROD_SKU ON VIDA_INVENTARIO_PRODUCTOS (idBranch, idCuenta, SKU);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_PROD_NOMBRE' AND object_id=OBJECT_ID('VIDA_INVENTARIO_PRODUCTOS'))
+CREATE NONCLUSTERED INDEX IX_PROD_NOMBRE ON VIDA_INVENTARIO_PRODUCTOS (idBranch, idCuenta, Nombre);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_PROD_BARRAS' AND object_id=OBJECT_ID('VIDA_INVENTARIO_PRODUCTOS'))
+CREATE NONCLUSTERED INDEX IX_PROD_BARRAS ON VIDA_INVENTARIO_PRODUCTOS (idBranch, idCuenta, CodigoBarras);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_INVENTARIO_STOCK','U') IS NULL
+CREATE TABLE VIDA_INVENTARIO_STOCK (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idPuntoVenta BIGINT NOT NULL,
+  idProducto BIGINT NOT NULL,
+  Cantidad DECIMAL(18,4) NOT NULL DEFAULT ((0)),
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  FechaMod DATETIME NULL,
+  StockReservado DECIMAL(18,4) NOT NULL DEFAULT ((0)),
+  CONSTRAINT PK_INVENTARIO_STOCK PRIMARY KEY CLUSTERED (idBranch, idCuenta, idPuntoVenta, idProducto)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_ORDENES_COMPRA','U') IS NULL
+CREATE TABLE VIDA_ORDENES_COMPRA (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idOrden BIGINT NOT NULL,
+  idProveedor BIGINT NOT NULL,
+  idPuntoVenta BIGINT NOT NULL,
+  Folio VARCHAR(50) NULL,
+  Status VARCHAR(30) NULL DEFAULT ('BORRADOR'),
+  TotalUSD DECIMAL(18,4) NULL DEFAULT ((0)),
+  Notas VARCHAR(500) NULL,
+  FechaEstimada DATE NULL,
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  UsuAlta VARCHAR(20) NULL,
+  FechaMod DATETIME NULL,
+  UsuMod VARCHAR(20) NULL,
+  CONSTRAINT PK_ORDENES_COMPRA PRIMARY KEY CLUSTERED (idBranch, idCuenta, idOrden)
+);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_OC_PROVEEDOR' AND object_id=OBJECT_ID('VIDA_ORDENES_COMPRA'))
+CREATE NONCLUSTERED INDEX IX_OC_PROVEEDOR ON VIDA_ORDENES_COMPRA (idBranch, idCuenta, idProveedor);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_OC_STATUS' AND object_id=OBJECT_ID('VIDA_ORDENES_COMPRA'))
+CREATE NONCLUSTERED INDEX IX_OC_STATUS ON VIDA_ORDENES_COMPRA (idBranch, idCuenta, Status);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_ORDENES_COMPRA_DETALLE','U') IS NULL
+CREATE TABLE VIDA_ORDENES_COMPRA_DETALLE (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idOrden BIGINT NOT NULL,
+  idDetalle BIGINT NOT NULL,
+  idProducto BIGINT NOT NULL,
+  CantidadOrdenada DECIMAL(18,4) NOT NULL,
+  CantidadRecibida DECIMAL(18,4) NULL DEFAULT ((0)),
+  PrecioUnitario DECIMAL(18,4) NOT NULL,
+  Subtotal DECIMAL(37,8) NULL,
+  Notas VARCHAR(300) NULL,
+  CONSTRAINT PK_OC_DETALLE PRIMARY KEY CLUSTERED (idBranch, idCuenta, idOrden, idDetalle)
+);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_OCD_ORDEN' AND object_id=OBJECT_ID('VIDA_ORDENES_COMPRA_DETALLE'))
+CREATE NONCLUSTERED INDEX IX_OCD_ORDEN ON VIDA_ORDENES_COMPRA_DETALLE (idBranch, idCuenta, idOrden);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_ORDENES_COMPRA_HISTORIAL','U') IS NULL
+CREATE TABLE VIDA_ORDENES_COMPRA_HISTORIAL (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idHistorial BIGINT NOT NULL,
+  idOrden BIGINT NOT NULL,
+  StatusAnterior VARCHAR(30) NULL,
+  StatusNuevo VARCHAR(30) NOT NULL,
+  Notas VARCHAR(500) NULL,
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  UsuAlta VARCHAR(20) NULL,
+  CONSTRAINT PK_OC_HISTORIAL PRIMARY KEY CLUSTERED (idBranch, idCuenta, idHistorial)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_PEDIDOS','U') IS NULL
+CREATE TABLE VIDA_PEDIDOS (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idPedido BIGINT NOT NULL,
+  idPuntoVenta BIGINT NOT NULL,
+  idCliente BIGINT NULL,
+  idRepartidor BIGINT NULL,
+  Canal VARCHAR(10) NOT NULL,
+  Status VARCHAR(20) NOT NULL DEFAULT ('NUEVO'),
+  MetodoPago VARCHAR(20) NULL,
+  StatusPago VARCHAR(20) NOT NULL DEFAULT ('PENDIENTE'),
+  TotalUSD DECIMAL(18,4) NOT NULL,
+  Notas VARCHAR(500) NULL,
+  FechaReserva DATETIME NULL,
+  FechaExpiracion DATETIME NULL,
+  FechaAlta DATETIME NOT NULL DEFAULT (getdate()),
+  FechaMod DATETIME NULL,
+  UsuAlta VARCHAR(20) NULL,
+  MontoEfectivo DECIMAL(18,4) NULL,
+  MontoTarjeta DECIMAL(18,4) NULL,
+  MontoCambio DECIMAL(18,4) NULL,
+  UbicacionEntregaLat DECIMAL(10,7) NULL,
+  UbicacionEntregaLon DECIMAL(10,7) NULL,
+  DireccionEntrega VARCHAR(500) NULL,
+  NotasCliente VARCHAR(500) NULL,
+  ComisionRepartidor DECIMAL(18,4) NULL,
+  MontoEfectivoRepartidor DECIMAL(18,4) NULL,
+  CONSTRAINT PK__VIDA_PED__2E2BD42E0513CDDD PRIMARY KEY CLUSTERED (idBranch, idCuenta, idPedido)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_PEDIDOS_COMPROBANTES','U') IS NULL
+CREATE TABLE VIDA_PEDIDOS_COMPROBANTES (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idComprobante BIGINT NOT NULL,
+  idPedido BIGINT NOT NULL,
+  ImagenURL VARCHAR(500) NOT NULL,
+  Referencia VARCHAR(100) NULL,
+  StatusRevision VARCHAR(20) NOT NULL DEFAULT ('PENDIENTE'),
+  Notas VARCHAR(300) NULL,
+  FechaAlta DATETIME NOT NULL DEFAULT (getdate()),
+  UsuRevision VARCHAR(20) NULL,
+  CONSTRAINT PK__VIDA_PED__6A3D6FBBAD6600FB PRIMARY KEY CLUSTERED (idBranch, idCuenta, idComprobante)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_PEDIDOS_DETALLE','U') IS NULL
+CREATE TABLE VIDA_PEDIDOS_DETALLE (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idPedido BIGINT NOT NULL,
+  idDetalle BIGINT NOT NULL,
+  idProducto BIGINT NOT NULL,
+  Cantidad DECIMAL(18,4) NOT NULL,
+  PrecioUnitario DECIMAL(18,4) NOT NULL,
+  CONSTRAINT PK__VIDA_PED__018F4880AB2DA35A PRIMARY KEY CLUSTERED (idBranch, idCuenta, idPedido, idDetalle)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_PEDIDOS_HISTORIAL','U') IS NULL
+CREATE TABLE VIDA_PEDIDOS_HISTORIAL (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idHistorial BIGINT NOT NULL,
+  idPedido BIGINT NOT NULL,
+  StatusAnterior VARCHAR(20) NULL,
+  StatusNuevo VARCHAR(20) NOT NULL,
+  Notas VARCHAR(500) NULL,
+  FechaAlta DATETIME NOT NULL DEFAULT (getdate()),
+  UsuAlta VARCHAR(20) NULL,
+  CONSTRAINT PK__VIDA_PED__AAC530CCE083FDE3 PRIMARY KEY CLUSTERED (idBranch, idCuenta, idHistorial)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_PROVEEDORES','U') IS NULL
+CREATE TABLE VIDA_PROVEEDORES (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idProveedor BIGINT NOT NULL,
+  Nombre VARCHAR(200) NOT NULL,
+  RIF VARCHAR(50) NULL,
+  Contacto VARCHAR(200) NULL,
+  Email VARCHAR(100) NULL,
+  Telefono VARCHAR(50) NULL,
+  Direccion VARCHAR(500) NULL,
+  Ciudad VARCHAR(100) NULL,
+  Notas VARCHAR(500) NULL,
+  Status VARCHAR(20) NULL DEFAULT ('ACTIVO'),
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  UsuAlta VARCHAR(20) NULL,
+  FechaMod DATETIME NULL,
+  UsuMod VARCHAR(20) NULL,
+  CONSTRAINT PK_PROVEEDORES PRIMARY KEY CLUSTERED (idBranch, idCuenta, idProveedor)
+);
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_PROV_NOMBRE' AND object_id=OBJECT_ID('VIDA_PROVEEDORES'))
+CREATE NONCLUSTERED INDEX IX_PROV_NOMBRE ON VIDA_PROVEEDORES (idBranch, idCuenta, Nombre);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_PROVEEDORES_PRODUCTOS','U') IS NULL
+CREATE TABLE VIDA_PROVEEDORES_PRODUCTOS (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idProveedor BIGINT NOT NULL,
+  idProducto BIGINT NOT NULL,
+  PrecioCosto DECIMAL(18,4) NULL,
+  CodigoProveedor VARCHAR(100) NULL,
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  UsuAlta VARCHAR(20) NULL,
+  CONSTRAINT PK_PROV_PRODUCTOS PRIMARY KEY CLUSTERED (idBranch, idCuenta, idProveedor, idProducto)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_REPARTIDOR_LIQUIDACIONES','U') IS NULL
+CREATE TABLE VIDA_REPARTIDOR_LIQUIDACIONES (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idLiquidacion BIGINT NOT NULL,
+  idRepartidor BIGINT NOT NULL,
+  FechaLiquidacion DATETIME NOT NULL DEFAULT (getdate()),
+  MontoEfectivo DECIMAL(18,4) NOT NULL DEFAULT ((0)),
+  Comision DECIMAL(18,4) NOT NULL DEFAULT ((0)),
+  MontoALiquidar DECIMAL(18,4) NOT NULL DEFAULT ((0)),
+  NumPedidos INT NOT NULL DEFAULT ((0)),
+  Observaciones VARCHAR(500) NULL,
+  idUsuarioLiquida BIGINT NULL,
+  Status VARCHAR(20) NOT NULL DEFAULT ('PENDIENTE'),
+  FechaAlta DATETIME NOT NULL DEFAULT (getdate()),
+  CONSTRAINT PK_LIQUIDACIONES PRIMARY KEY CLUSTERED (idBranch, idCuenta, idLiquidacion)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_REPARTIDORES','U') IS NULL
+CREATE TABLE VIDA_REPARTIDORES (
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idRepartidor BIGINT NOT NULL,
+  Nombre VARCHAR(200) NOT NULL,
+  Telefono VARCHAR(30) NULL,
+  Vehiculo VARCHAR(100) NULL,
+  PlacaVehiculo VARCHAR(20) NULL,
+  ComisionPct DECIMAL(5,2) NULL,
+  SaldoPendiente DECIMAL(18,4) NOT NULL DEFAULT ((0)),
+  FcmToken VARCHAR(500) NULL,
+  StatusRepartidor VARCHAR(20) NOT NULL DEFAULT ('INACTIVO'),
+  UltimaLatitud DECIMAL(10,7) NULL,
+  UltimaLongitud DECIMAL(10,7) NULL,
+  UltimaUbicacion DATETIME NULL,
+  Status VARCHAR(20) NOT NULL DEFAULT ('ACTIVO'),
+  FechaAlta DATETIME NOT NULL DEFAULT (getdate()),
+  CONSTRAINT PK_REPARTIDORES PRIMARY KEY CLUSTERED (idBranch, idCuenta, idRepartidor)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_SESIONES','U') IS NULL
+CREATE TABLE VIDA_SESIONES (
+  idSesion BIGINT IDENTITY(1,1) NOT NULL,
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idUsuario BIGINT NOT NULL,
+  RefreshToken VARCHAR(500) NULL,
+  FechaExpira DATETIME NULL,
+  IpOrigen VARCHAR(50) NULL,
+  UserAgent VARCHAR(300) NULL,
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  Status VARCHAR(50) NULL DEFAULT ('ACTIVO'),
+  CONSTRAINT PK_VIDA_SESIONES PRIMARY KEY CLUSTERED (idSesion)
+);
+GO
+
+-- ────────────────────────────────────────────────────────────────────────────
+IF OBJECT_ID('VIDA_TOKENS_INVITACION','U') IS NULL
+CREATE TABLE VIDA_TOKENS_INVITACION (
+  idToken BIGINT IDENTITY(1,1) NOT NULL,
+  idBranch BIGINT NOT NULL,
+  idCuenta BIGINT NOT NULL,
+  idUsuario BIGINT NOT NULL,
+  Token VARCHAR(200) NOT NULL,
+  FechaExpira DATETIME NOT NULL,
+  Usado BIT NOT NULL DEFAULT ((0)),
+  FechaAlta DATETIME NULL DEFAULT (getdate()),
+  FechaMod DATETIME NULL,
+  Status VARCHAR(50) NULL DEFAULT ('ACTIVO'),
+  CONSTRAINT PK_VIDA_TOKENS_INVITACION PRIMARY KEY CLUSTERED (idToken)
+);
+GO
+
+-- ── FOREIGN KEYS ────────────────────────────────────────────────────────────
+
+IF OBJECT_ID('FK_HW_BRANCH_CUENTA','F') IS NULL
+ALTER TABLE HW_BRANCH_CUENTA ADD CONSTRAINT FK_HW_BRANCH_CUENTA FOREIGN KEY (idBranch) REFERENCES HW_BRANCH (idBranch);
+GO
+
+IF OBJECT_ID('FK_MOV_PRODUCTO','F') IS NULL
+ALTER TABLE VIDA_INVENTARIO_MOVIMIENTOS ADD CONSTRAINT FK_MOV_PRODUCTO FOREIGN KEY (idBranch, idCuenta, idProducto) REFERENCES VIDA_INVENTARIO_PRODUCTOS (idBranch, idCuenta, idProducto);
+GO
+
+IF OBJECT_ID('FK_OC_PROVEEDOR','F') IS NULL
+ALTER TABLE VIDA_ORDENES_COMPRA ADD CONSTRAINT FK_OC_PROVEEDOR FOREIGN KEY (idBranch, idCuenta, idProveedor) REFERENCES VIDA_PROVEEDORES (idBranch, idCuenta, idProveedor);
+GO
+
+IF OBJECT_ID('FK_OCD_ORDEN','F') IS NULL
+ALTER TABLE VIDA_ORDENES_COMPRA_DETALLE ADD CONSTRAINT FK_OCD_ORDEN FOREIGN KEY (idBranch, idCuenta, idOrden) REFERENCES VIDA_ORDENES_COMPRA (idBranch, idCuenta, idOrden);
+GO
+
+IF OBJECT_ID('FK_OCD_PRODUCTO','F') IS NULL
+ALTER TABLE VIDA_ORDENES_COMPRA_DETALLE ADD CONSTRAINT FK_OCD_PRODUCTO FOREIGN KEY (idBranch, idCuenta, idProducto) REFERENCES VIDA_INVENTARIO_PRODUCTOS (idBranch, idCuenta, idProducto);
+GO
+
+IF OBJECT_ID('FK_OCH_ORDEN','F') IS NULL
+ALTER TABLE VIDA_ORDENES_COMPRA_HISTORIAL ADD CONSTRAINT FK_OCH_ORDEN FOREIGN KEY (idBranch, idCuenta, idOrden) REFERENCES VIDA_ORDENES_COMPRA (idBranch, idCuenta, idOrden);
+GO
+
+IF OBJECT_ID('FK_PROD_CATEGORIA','F') IS NULL
+ALTER TABLE VIDA_INVENTARIO_PRODUCTOS ADD CONSTRAINT FK_PROD_CATEGORIA FOREIGN KEY (idBranch, idCuenta, idCategoria) REFERENCES VIDA_INVENTARIO_CATEGORIAS (idBranch, idCuenta, idCategoria);
+GO
+
+IF OBJECT_ID('FK_PROVPROD_PRODUCTO','F') IS NULL
+ALTER TABLE VIDA_PROVEEDORES_PRODUCTOS ADD CONSTRAINT FK_PROVPROD_PRODUCTO FOREIGN KEY (idBranch, idCuenta, idProducto) REFERENCES VIDA_INVENTARIO_PRODUCTOS (idBranch, idCuenta, idProducto);
+GO
+
+IF OBJECT_ID('FK_PROVPROD_PROVEEDOR','F') IS NULL
+ALTER TABLE VIDA_PROVEEDORES_PRODUCTOS ADD CONSTRAINT FK_PROVPROD_PROVEEDOR FOREIGN KEY (idBranch, idCuenta, idProveedor) REFERENCES VIDA_PROVEEDORES (idBranch, idCuenta, idProveedor);
+GO
+
+IF OBJECT_ID('FK_STOCK_PRODUCTO','F') IS NULL
+ALTER TABLE VIDA_INVENTARIO_STOCK ADD CONSTRAINT FK_STOCK_PRODUCTO FOREIGN KEY (idBranch, idCuenta, idProducto) REFERENCES VIDA_INVENTARIO_PRODUCTOS (idBranch, idCuenta, idProducto);
+GO
+
+IF OBJECT_ID('FK_VIDA_ACCESOS_PANTALLA','F') IS NULL
+ALTER TABLE VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO ADD CONSTRAINT FK_VIDA_ACCESOS_PANTALLA FOREIGN KEY (idBranch, idCuenta, idPantalla) REFERENCES VIDA_CUENTA_PANTALLAS (idBranch, idCuenta, idPantalla);
+GO
+
+IF OBJECT_ID('FK_VIDA_ACCESOS_USUARIO','F') IS NULL
+ALTER TABLE VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO ADD CONSTRAINT FK_VIDA_ACCESOS_USUARIO FOREIGN KEY (idBranch, idCuenta, idUsuario) REFERENCES VIDA_CUENTA_USUARIOS (idBranch, idCuenta, idUsuario);
+GO
+
+IF OBJECT_ID('FK_VIDA_CONFIGURACION','F') IS NULL
+ALTER TABLE VIDA_CONFIGURACION ADD CONSTRAINT FK_VIDA_CONFIGURACION FOREIGN KEY (idBranch) REFERENCES HW_BRANCH (idBranch);
+GO
+
+IF OBJECT_ID('FK_VIDA_CUENTA_PANTALLAS','F') IS NULL
+ALTER TABLE VIDA_CUENTA_PANTALLAS ADD CONSTRAINT FK_VIDA_CUENTA_PANTALLAS FOREIGN KEY (idBranch, idCuenta) REFERENCES HW_BRANCH_CUENTA (idBranch, idCuenta);
+GO
+
+IF OBJECT_ID('FK_VIDA_CUENTA_PUNTOS_VENTA','F') IS NULL
+ALTER TABLE VIDA_CUENTA_PUNTOS_VENTA ADD CONSTRAINT FK_VIDA_CUENTA_PUNTOS_VENTA FOREIGN KEY (idBranch, idCuenta) REFERENCES HW_BRANCH_CUENTA (idBranch, idCuenta);
+GO
+
+IF OBJECT_ID('FK_VIDA_CUENTA_USUARIOS','F') IS NULL
+ALTER TABLE VIDA_CUENTA_USUARIOS ADD CONSTRAINT FK_VIDA_CUENTA_USUARIOS FOREIGN KEY (idBranch, idCuenta) REFERENCES HW_BRANCH_CUENTA (idBranch, idCuenta);
+GO
+
+IF OBJECT_ID('FK_VIDA_TOKENS_INVITACION','F') IS NULL
+ALTER TABLE VIDA_TOKENS_INVITACION ADD CONSTRAINT FK_VIDA_TOKENS_INVITACION FOREIGN KEY (idBranch, idCuenta, idUsuario) REFERENCES VIDA_CUENTA_USUARIOS (idBranch, idCuenta, idUsuario);
+GO
+

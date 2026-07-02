@@ -1,5 +1,5 @@
 // src/routes/usuarios.routes.js
-import { authenticate } from '../middlewares/auth.js';
+import { authenticate, requireRole } from '../middlewares/auth.js';
 import { getPool, sql } from '../db/sqlserver.js';
 import {
   listarUsuarios,
@@ -10,18 +10,25 @@ import {
   getPantallas,
 } from '../controllers/usuarios.controller.js';
 
+// Solo administradores pueden gestionar usuarios
+const ADMIN = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN'];
+
+// SUPERVISOR puede consultar el listado de su ámbito, sin escritura
+const LECTURA = [...ADMIN, 'SUPERVISOR'];
+
 export async function usuariosRoutes(fastify) {
 
   // ── Rutas fijas primero ──────────────────────────────
-  fastify.get('/usuarios',           { preHandler: [authenticate] }, listarUsuarios);
-  fastify.post('/usuarios',          { preHandler: [authenticate] }, crearUsuario);
-  fastify.get('/usuarios/pantallas', { preHandler: [authenticate] }, getPantallas);
+  fastify.get('/usuarios',           { preHandler: [requireRole(...LECTURA)] }, listarUsuarios);
+  fastify.post('/usuarios',          { preHandler: [requireRole(...ADMIN)] }, crearUsuario);
+  fastify.get('/usuarios/pantallas', { preHandler: [requireRole(...LECTURA)] }, getPantallas);
+  // Cambio de contraseña propia: disponible para cualquier usuario autenticado
   fastify.post('/usuarios/cambiar-pass', { preHandler: [authenticate] }, cambiarPassword);
 
   // ── Rutas dinámicas después ──────────────────────────
-  fastify.put('/usuarios/:idUsuario',           { preHandler: [authenticate] }, editarUsuario);
-  fastify.patch('/usuarios/:idUsuario/status',  { preHandler: [authenticate] }, toggleStatus);
-  fastify.get('/usuarios/:idUsuario/accesos',   { preHandler: [authenticate] }, async (request, reply) => {
+  fastify.put('/usuarios/:idUsuario',           { preHandler: [requireRole(...ADMIN)] }, editarUsuario);
+  fastify.patch('/usuarios/:idUsuario/status',  { preHandler: [requireRole(...ADMIN)] }, toggleStatus);
+  fastify.get('/usuarios/:idUsuario/accesos',   { preHandler: [requireRole(...LECTURA)] }, async (request, reply) => {
     const { idBranch, idCuenta } = request.user;
     const { idUsuario } = request.params;
     try {

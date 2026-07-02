@@ -5,7 +5,12 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { createTransport } from 'nodemailer';
 
-const BASE_URL = process.env.BASE_URL || 'http://192.168.0.102:3001';
+// URL pública del backend — se usa en links de confirmación de email y OAuth.
+// Debe definirse en .env; el fallback a localhost solo sirve en desarrollo local.
+const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
+if (!process.env.BASE_URL) {
+  console.warn('[delivery] BASE_URL no definido en .env — links de email/OAuth usarán ' + BASE_URL);
+}
 
 // ── Helper — página HTML que redirige al deep link via JS ──────────────────
 function buildDeepLinkPage(deepLink) {
@@ -28,6 +33,17 @@ async function nextId(pool, tabla, campo, idBranch, idCuenta) {
     .input('idCuenta', sql.BigInt, idCuenta)
     .query(`SELECT ISNULL(MAX(${campo}),0)+1 AS next
             FROM ${tabla}
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+  return r.recordset[0].next;
+}
+
+// Variante transaccional: UPDLOCK+HOLDLOCK serializa la obtención del ID
+async function nextIdTx(transaction, tabla, campo, idBranch, idCuenta) {
+  const r = await new sql.Request(transaction)
+    .input('idBranch', sql.BigInt, idBranch)
+    .input('idCuenta', sql.BigInt, idCuenta)
+    .query(`SELECT ISNULL(MAX(${campo}),0)+1 AS next
+            FROM ${tabla} WITH (UPDLOCK, HOLDLOCK)
             WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
   return r.recordset[0].next;
 }
@@ -316,7 +332,6 @@ export async function confirmarEmailCliente(request, reply) {
 // ══════════════════════════════════════════════════════════════════════════
 export async function googleOAuthStart(request, reply) {
   const { idBranch = 1, idCuenta = 1, appRedirectUri = 'vida-cliente://google-auth' } = request.query;
-  const BASE_URL = process.env.BASE_URL || 'http://192.168.0.102:3001';
   const redirectUri = `${BASE_URL}/api/delivery/cliente/google/callback`;
 
   // Guardar la URI de retorno a la app en el state para recuperarla en el callback
@@ -340,7 +355,6 @@ export async function googleOAuthStart(request, reply) {
 // ══════════════════════════════════════════════════════════════════════════
 export async function googleOAuthCallback(request, reply) {
   const { code, state, error } = request.query;
-  const BASE_URL = process.env.BASE_URL || 'http://192.168.0.102:3001';
   const redirectUri = `${BASE_URL}/api/delivery/cliente/google/callback`;
 
   // Decodificar state: "idBranch:idCuenta:appRedirectUri"
@@ -526,16 +540,16 @@ export async function listarProductosApp(request, reply) {
     const r = await req.query(`
       SELECT p.idProducto, p.Nombre, p.Descripcion, p.PrecioUSD, p.ImagenProducto,
              c.Nombre AS NombreCategoria,
-             ISNULL(inv.Stock, 0) AS StockDisponible
-      FROM VIDA_PRODUCTOS p
-      LEFT JOIN VIDA_CATEGORIAS c
+             ISNULL(inv.Cantidad, 0) AS StockDisponible
+      FROM VIDA_INVENTARIO_PRODUCTOS p
+      LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
         ON c.idBranch=p.idBranch AND c.idCuenta=p.idCuenta AND c.idCategoria=p.idCategoria
-      LEFT JOIN VIDA_INVENTARIO inv
+      LEFT JOIN VIDA_INVENTARIO_STOCK inv
         ON inv.idBranch=p.idBranch AND inv.idCuenta=p.idCuenta
            AND inv.idProducto=p.idProducto AND inv.idPuntoVenta=@idPuntoVenta
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
         AND p.Status='ACTIVO'
-        AND ISNULL(inv.Stock, 0) > 0
+        AND ISNULL(inv.Cantidad, 0) > 0
         ${whereExtra}
       ORDER BY c.Nombre, p.Nombre
     `);
@@ -559,6 +573,17 @@ export async function crearPedidoApp(request, reply) {
     NotasCliente, MetodoPago = 'EFECTIVO',
   } = request.body;
 
+  if (!idPuntoVenta || !items?.length) {
+    return reply.code(400).send({ error: 'idPuntoVenta e items son requeridos' });
+  }
+  for (const item of items) {
+    const cant   = parseFloat(item.Cantidad);
+    const precio = parseFloat(item.PrecioUnitario);
+    if (!item.idProducto || !(cant > 0) || !(precio >= 0)) {
+      return reply.code(400).send({ error: 'Cada item requiere idProducto, Cantidad mayor a 0 y PrecioUnitario válido' });
+    }
+  }
+
   try {
     const pool = await getPool();
 
@@ -569,10 +594,10 @@ export async function crearPedidoApp(request, reply) {
         .input('idCuenta',     sql.BigInt, idCuenta)
         .input('idProducto',   sql.BigInt, item.idProducto)
         .input('idPuntoVenta', sql.BigInt, idPuntoVenta)
-        .query(`SELECT ISNULL(Stock,0) AS Stock FROM VIDA_INVENTARIO
+        .query(`SELECT ISNULL(Cantidad,0) AS Cantidad FROM VIDA_INVENTARIO_STOCK
                 WHERE idBranch=@idBranch AND idCuenta=@idCuenta
                   AND idProducto=@idProducto AND idPuntoVenta=@idPuntoVenta`);
-      const stock = stockR.recordset[0]?.Stock ?? 0;
+      const stock = stockR.recordset[0]?.Cantidad ?? 0;
       if (stock < item.Cantidad) {
         return reply.code(409).send({
           error: `Stock insuficiente para producto ${item.idProducto}`,
@@ -594,49 +619,60 @@ export async function crearPedidoApp(request, reply) {
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta`);
     const pv = pvR.recordset[0];
 
-    // ── Insertar cabecera del pedido ──────────────────────────────────────
-    const idPedido = await nextId(pool, 'VIDA_PEDIDOS', 'idPedido', idBranch, idCuenta);
+    // ── Insertar cabecera + detalles en una transacción ──────────────────
+    // Si falla cualquier INSERT, no queda pedido a medias en la BD
+    const transaction = new sql.Transaction(pool);
+    let idPedido;
+    try {
+      await transaction.begin();
 
-    await pool.request()
-      .input('idBranch',            sql.BigInt,      idBranch)
-      .input('idCuenta',            sql.BigInt,      idCuenta)
-      .input('idPedido',            sql.BigInt,      idPedido)
-      .input('idPuntoVenta',        sql.BigInt,      idPuntoVenta)
-      .input('idCliente',           sql.BigInt,      idCliente)
-      .input('Canal',               sql.VarChar(10), 'APP')
-      .input('Status',              sql.VarChar(40), 'BUSCANDO_REPARTIDOR')
-      .input('MetodoPago',          sql.VarChar(20), MetodoPago)
-      .input('StatusPago',          sql.VarChar(20), 'PENDIENTE')
-      .input('TotalUSD',            sql.Decimal(18,4), TotalUSD)
-      .input('DireccionEntrega',    sql.VarChar(500), DireccionEntrega    || null)
-      .input('UbicacionEntregaLat', sql.Decimal(10,7), UbicacionEntregaLat ?? null)
-      .input('UbicacionEntregaLon', sql.Decimal(10,7), UbicacionEntregaLon ?? null)
-      .input('NotasCliente',        sql.VarChar(500), NotasCliente        || null)
-      .query(`INSERT INTO VIDA_PEDIDOS
-                (idBranch,idCuenta,idPedido,idPuntoVenta,idCliente,Canal,Status,
-                 MetodoPago,StatusPago,TotalUSD,DireccionEntrega,
-                 UbicacionEntregaLat,UbicacionEntregaLon,NotasCliente,FechaAlta)
-              VALUES
-                (@idBranch,@idCuenta,@idPedido,@idPuntoVenta,@idCliente,@Canal,@Status,
-                 @MetodoPago,@StatusPago,@TotalUSD,@DireccionEntrega,
-                 @UbicacionEntregaLat,@UbicacionEntregaLon,@NotasCliente,GETDATE())`);
+      idPedido = await nextIdTx(transaction, 'VIDA_PEDIDOS', 'idPedido', idBranch, idCuenta);
 
-    // ── Insertar detalles ─────────────────────────────────────────────────
-    for (const item of items) {
-      const idDetalle = await nextId(pool, 'VIDA_PEDIDOS_DETALLE', 'idDetalle', idBranch, idCuenta);
-      await pool.request()
-        .input('idBranch',       sql.BigInt,      idBranch)
-        .input('idCuenta',       sql.BigInt,      idCuenta)
-        .input('idPedido',       sql.BigInt,      idPedido)
-        .input('idDetalle',      sql.BigInt,      idDetalle)
-        .input('idProducto',     sql.BigInt,      item.idProducto)
-        .input('Cantidad',       sql.Decimal(18,4), item.Cantidad)
-        .input('PrecioUnitario', sql.Decimal(18,4), item.PrecioUnitario)
-        .input('Subtotal',       sql.Decimal(18,4), item.PrecioUnitario * item.Cantidad)
-        .query(`INSERT INTO VIDA_PEDIDOS_DETALLE
-                  (idBranch,idCuenta,idPedido,idDetalle,idProducto,Cantidad,PrecioUnitario,Subtotal)
+      await new sql.Request(transaction)
+        .input('idBranch',            sql.BigInt,      idBranch)
+        .input('idCuenta',            sql.BigInt,      idCuenta)
+        .input('idPedido',            sql.BigInt,      idPedido)
+        .input('idPuntoVenta',        sql.BigInt,      idPuntoVenta)
+        .input('idCliente',           sql.BigInt,      idCliente)
+        .input('Canal',               sql.VarChar(10), 'APP')
+        .input('Status',              sql.VarChar(40), 'BUSCANDO_REPARTIDOR')
+        .input('MetodoPago',          sql.VarChar(20), MetodoPago)
+        .input('StatusPago',          sql.VarChar(20), 'PENDIENTE')
+        .input('TotalUSD',            sql.Decimal(18,4), TotalUSD)
+        .input('DireccionEntrega',    sql.VarChar(500), DireccionEntrega    || null)
+        .input('UbicacionEntregaLat', sql.Decimal(10,7), UbicacionEntregaLat ?? null)
+        .input('UbicacionEntregaLon', sql.Decimal(10,7), UbicacionEntregaLon ?? null)
+        .input('NotasCliente',        sql.VarChar(500), NotasCliente        || null)
+        .query(`INSERT INTO VIDA_PEDIDOS
+                  (idBranch,idCuenta,idPedido,idPuntoVenta,idCliente,Canal,Status,
+                   MetodoPago,StatusPago,TotalUSD,DireccionEntrega,
+                   UbicacionEntregaLat,UbicacionEntregaLon,NotasCliente,FechaAlta)
                 VALUES
-                  (@idBranch,@idCuenta,@idPedido,@idDetalle,@idProducto,@Cantidad,@PrecioUnitario,@Subtotal)`);
+                  (@idBranch,@idCuenta,@idPedido,@idPuntoVenta,@idCliente,@Canal,@Status,
+                   @MetodoPago,@StatusPago,@TotalUSD,@DireccionEntrega,
+                   @UbicacionEntregaLat,@UbicacionEntregaLon,@NotasCliente,GETDATE())`);
+
+      let idDetalle = await nextIdTx(transaction, 'VIDA_PEDIDOS_DETALLE', 'idDetalle', idBranch, idCuenta);
+      for (const item of items) {
+        await new sql.Request(transaction)
+          .input('idBranch',       sql.BigInt,      idBranch)
+          .input('idCuenta',       sql.BigInt,      idCuenta)
+          .input('idPedido',       sql.BigInt,      idPedido)
+          .input('idDetalle',      sql.BigInt,      idDetalle++)
+          .input('idProducto',     sql.BigInt,      item.idProducto)
+          .input('Cantidad',       sql.Decimal(18,4), item.Cantidad)
+          .input('PrecioUnitario', sql.Decimal(18,4), item.PrecioUnitario)
+          .input('Subtotal',       sql.Decimal(18,4), item.PrecioUnitario * item.Cantidad)
+          .query(`INSERT INTO VIDA_PEDIDOS_DETALLE
+                    (idBranch,idCuenta,idPedido,idDetalle,idProducto,Cantidad,PrecioUnitario,Subtotal)
+                  VALUES
+                    (@idBranch,@idCuenta,@idPedido,@idDetalle,@idProducto,@Cantidad,@PrecioUnitario,@Subtotal)`);
+      }
+
+      await transaction.commit();
+    } catch (txErr) {
+      try { await transaction.rollback(); } catch (rbErr) { request.log.error('Rollback falló: ' + rbErr.message); }
+      throw txErr;
     }
 
     // ── Buscar repartidores disponibles ───────────────────────────────────
@@ -904,15 +940,21 @@ export async function aceptarPedido(request, reply) {
       return reply.code(409).send({ error: `Pedido ya no está disponible (status: ${pedido.Status})` });
     }
 
-    // Asignar repartidor
-    await pool.request()
+    // Asignar repartidor de forma atómica: la condición Status='BUSCANDO_REPARTIDOR'
+    // en el UPDATE garantiza que solo el primero de dos repartidores simultáneos gana
+    const asignaR = await pool.request()
       .input('idBranch',     sql.BigInt,      idBranch)
       .input('idCuenta',     sql.BigInt,      idCuenta)
       .input('idPedido',     sql.BigInt,      idPedido)
       .input('idRepartidor', sql.BigInt,      idRepartidor)
       .query(`UPDATE VIDA_PEDIDOS
-              SET idRepartidor=@idRepartidor, Status='REPARTIDOR_ASIGNADO'
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
+              SET idRepartidor=@idRepartidor, Status='REPARTIDOR_ASIGNADO', FechaMod=GETDATE()
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
+                AND Status='BUSCANDO_REPARTIDOR'`);
+
+    if (asignaR.rowsAffected[0] === 0) {
+      return reply.code(409).send({ error: 'Otro repartidor ya tomó este pedido' });
+    }
 
     await pool.request()
       .input('idBranch',     sql.BigInt,      idBranch)
@@ -949,7 +991,7 @@ export async function aceptarPedido(request, reply) {
       .input('idPedido', sql.BigInt, idPedido)
       .query(`SELECT d.idProducto, p.Nombre, d.Cantidad, d.PrecioUnitario, d.Subtotal
               FROM VIDA_PEDIDOS_DETALLE d
-              LEFT JOIN VIDA_PRODUCTOS p
+              LEFT JOIN VIDA_INVENTARIO_PRODUCTOS p
                 ON p.idBranch=d.idBranch AND p.idCuenta=d.idCuenta AND p.idProducto=d.idProducto
               WHERE d.idBranch=@idBranch AND d.idCuenta=@idCuenta AND d.idPedido=@idPedido`);
 
@@ -993,15 +1035,17 @@ export async function actualizarStatusPedido(request, reply) {
   const { idBranch, idCuenta, idRepartidor } = request.repartidor;
   const { idPedido, nuevoStatus } = request.body;
 
-  try {
-    const pool = await getPool();
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  let enTransaccion = false;
 
+  try {
     const pedR = await pool.request()
       .input('idBranch',     sql.BigInt, idBranch)
       .input('idCuenta',     sql.BigInt, idCuenta)
       .input('idPedido',     sql.BigInt, idPedido)
       .input('idRepartidor', sql.BigInt, idRepartidor)
-      .query(`SELECT Status, MetodoPago, TotalUSD, ComisionPct
+      .query(`SELECT p.Status, p.MetodoPago, p.TotalUSD, p.idPuntoVenta, r.ComisionPct
               FROM VIDA_PEDIDOS p
               LEFT JOIN VIDA_REPARTIDORES r
                 ON r.idBranch=p.idBranch AND r.idCuenta=p.idCuenta AND r.idRepartidor=p.idRepartidor
@@ -1023,56 +1067,135 @@ export async function actualizarStatusPedido(request, reply) {
       });
     }
 
-    // ── Lógica de entrega con efectivo ────────────────────────────────────
-    if (nuevoStatus === 'ENTREGADO' && pedido.MetodoPago === 'EFECTIVO') {
-      // Obtener comisión: del repartidor o de la config global
-      let pctComision = pedido.ComisionPct != null
+    // Comisión: del repartidor o de la config global (fuera de la transacción)
+    const esEntregaEfectivo = nuevoStatus === 'ENTREGADO' && pedido.MetodoPago === 'EFECTIVO';
+    let comision = 0, efectivoARendir = 0;
+    if (esEntregaEfectivo) {
+      const pctComision = pedido.ComisionPct != null
         ? parseFloat(pedido.ComisionPct)
         : parseFloat(await getConfigVal(pool, idBranch, idCuenta, 'ComisionRepartidorPct', '0'));
+      comision = parseFloat(pedido.TotalUSD) * pctComision / 100;
+      efectivoARendir = parseFloat(pedido.TotalUSD) - comision;
+    }
 
-      const comision = parseFloat(pedido.TotalUSD) * pctComision / 100;
-      const efectivoARendir = parseFloat(pedido.TotalUSD) - comision;
+    await transaction.begin();
+    enTransaccion = true;
 
-      await pool.request()
-        .input('idBranch',     sql.BigInt,      idBranch)
-        .input('idCuenta',     sql.BigInt,      idCuenta)
-        .input('idPedido',     sql.BigInt,      idPedido)
-        .input('comision',     sql.Decimal(18,4), comision)
-        .input('efectivo',     sql.Decimal(18,4), efectivoARendir)
-        .query(`UPDATE VIDA_PEDIDOS
-                SET Status='ENTREGADO', ComisionRepartidor=@comision,
-                    MontoEfectivoRepartidor=@efectivo
+    // Actualizar pedido exigiendo el status leído: si otra petición (doble tap,
+    // admin desde el panel) ya lo cambió, no se toca stock ni saldo dos veces
+    const updReq = new sql.Request(transaction)
+      .input('idBranch',     sql.BigInt,       idBranch)
+      .input('idCuenta',     sql.BigInt,       idCuenta)
+      .input('idPedido',     sql.BigInt,       idPedido)
+      .input('nuevoStatus',  sql.VarChar(40),  nuevoStatus)
+      .input('statusActual', sql.VarChar(40),  statusActual)
+      .input('comision',     sql.Decimal(18,4), comision)
+      .input('efectivo',     sql.Decimal(18,4), efectivoARendir);
+
+    const setComision = esEntregaEfectivo
+      ? ', ComisionRepartidor=@comision, MontoEfectivoRepartidor=@efectivo'
+      : '';
+
+    const updR = await updReq.query(`UPDATE VIDA_PEDIDOS
+            SET Status=@nuevoStatus, FechaMod=GETDATE() ${setComision}
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
+              AND Status=@statusActual`);
+
+    if (updR.rowsAffected[0] === 0) {
+      await transaction.rollback();
+      enTransaccion = false;
+      return reply.code(409).send({ error: 'El pedido fue modificado por otra operación' });
+    }
+
+    if (nuevoStatus === 'ENTREGADO') {
+      // Descontar inventario del pedido entregado (los pedidos APP no manejan
+      // reserva: solo se descuenta Cantidad) + registrar movimiento
+      const detR = await new sql.Request(transaction)
+        .input('idBranch', sql.BigInt, idBranch)
+        .input('idCuenta', sql.BigInt, idCuenta)
+        .input('idPedido', sql.BigInt, idPedido)
+        .query(`SELECT idProducto, Cantidad FROM VIDA_PEDIDOS_DETALLE
                 WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
 
-      await pool.request()
-        .input('idBranch',     sql.BigInt,      idBranch)
-        .input('idCuenta',     sql.BigInt,      idCuenta)
-        .input('idRepartidor', sql.BigInt,      idRepartidor)
-        .input('efectivo',     sql.Decimal(18,4), efectivoARendir)
-        .query(`UPDATE VIDA_REPARTIDORES
-                SET SaldoPendiente = SaldoPendiente + @efectivo,
-                    StatusRepartidor='DISPONIBLE'
-                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+      for (const item of detR.recordset) {
+        const stockR = await new sql.Request(transaction)
+          .input('idBranch',    sql.BigInt,       idBranch)
+          .input('idCuenta',    sql.BigInt,       idCuenta)
+          .input('idPuntoVenta',sql.BigInt,       pedido.idPuntoVenta)
+          .input('idProducto',  sql.BigInt,       item.idProducto)
+          .input('Cantidad',    sql.Decimal(18,4), parseFloat(item.Cantidad))
+          .query(`UPDATE VIDA_INVENTARIO_STOCK WITH (UPDLOCK, HOLDLOCK) SET
+                    Cantidad = CASE WHEN ISNULL(Cantidad,0) - @Cantidad < 0 THEN 0
+                                    ELSE ISNULL(Cantidad,0) - @Cantidad END,
+                    FechaMod = GETDATE()
+                  OUTPUT ISNULL(deleted.Cantidad,0) AS CantidadAntes,
+                         ISNULL(inserted.Cantidad,0) AS CantidadDespues
+                  WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                    AND idPuntoVenta=@idPuntoVenta AND idProducto=@idProducto`);
 
-    } else {
-      // Para cualquier otro status (incluyendo ENTREGADO con TARJETA y CANCELADO)
-      await pool.request()
-        .input('idBranch',  sql.BigInt,      idBranch)
-        .input('idCuenta',  sql.BigInt,      idCuenta)
-        .input('idPedido',  sql.BigInt,      idPedido)
-        .input('nuevoStatus', sql.VarChar(40), nuevoStatus)
-        .query(`UPDATE VIDA_PEDIDOS SET Status=@nuevoStatus
-                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
+        const s = stockR.recordset[0] || { CantidadAntes: 0, CantidadDespues: 0 };
 
-      if (nuevoStatus === 'ENTREGADO' || nuevoStatus === 'CANCELADO') {
-        await pool.request()
-          .input('idBranch',     sql.BigInt, idBranch)
-          .input('idCuenta',     sql.BigInt, idCuenta)
-          .input('idRepartidor', sql.BigInt, idRepartidor)
-          .query(`UPDATE VIDA_REPARTIDORES SET StatusRepartidor='DISPONIBLE'
+        const movId = await nextIdTx(transaction, 'VIDA_INVENTARIO_MOVIMIENTOS', 'idMovimiento', idBranch, idCuenta);
+        await new sql.Request(transaction)
+          .input('idBranch',        sql.BigInt,       idBranch)
+          .input('idCuenta',        sql.BigInt,       idCuenta)
+          .input('idMovimiento',    sql.BigInt,       movId)
+          .input('idPuntoVenta',    sql.BigInt,       pedido.idPuntoVenta)
+          .input('idProducto',      sql.BigInt,       item.idProducto)
+          .input('Cantidad',        sql.Decimal(18,4), parseFloat(item.Cantidad))
+          .input('CantidadAntes',   sql.Decimal(18,4), parseFloat(s.CantidadAntes))
+          .input('CantidadDespues', sql.Decimal(18,4), parseFloat(s.CantidadDespues))
+          .input('Motivo',          sql.VarChar(300),  `Entrega delivery pedido #${idPedido}`)
+          .input('Referencia',      sql.VarChar(100),  String(idPedido))
+          .input('UsuAlta',         sql.VarChar(20),   `REP:${idRepartidor}`)
+          .query(`INSERT INTO VIDA_INVENTARIO_MOVIMIENTOS
+                    (idBranch, idCuenta, idMovimiento, idPuntoVenta, idProducto,
+                     TipoMovimiento, Cantidad, CantidadAntes, CantidadDespues,
+                     Motivo, Referencia, UsuAlta)
+                  VALUES
+                    (@idBranch, @idCuenta, @idMovimiento, @idPuntoVenta, @idProducto,
+                     'SALIDA', @Cantidad, @CantidadAntes, @CantidadDespues,
+                     @Motivo, @Referencia, @UsuAlta)`);
+      }
+
+      if (esEntregaEfectivo) {
+        await new sql.Request(transaction)
+          .input('idBranch',     sql.BigInt,       idBranch)
+          .input('idCuenta',     sql.BigInt,       idCuenta)
+          .input('idRepartidor', sql.BigInt,       idRepartidor)
+          .input('efectivo',     sql.Decimal(18,4), efectivoARendir)
+          .query(`UPDATE VIDA_REPARTIDORES
+                  SET SaldoPendiente = ISNULL(SaldoPendiente,0) + @efectivo,
+                      StatusRepartidor='DISPONIBLE'
                   WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
       }
     }
+
+    if ((nuevoStatus === 'ENTREGADO' && !esEntregaEfectivo) || nuevoStatus === 'CANCELADO') {
+      await new sql.Request(transaction)
+        .input('idBranch',     sql.BigInt, idBranch)
+        .input('idCuenta',     sql.BigInt, idCuenta)
+        .input('idRepartidor', sql.BigInt, idRepartidor)
+        .query(`UPDATE VIDA_REPARTIDORES SET StatusRepartidor='DISPONIBLE'
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+    }
+
+    // Historial del pedido (el panel admin lo muestra como línea de tiempo)
+    const histId = await nextIdTx(transaction, 'VIDA_PEDIDOS_HISTORIAL', 'idHistorial', idBranch, idCuenta);
+    await new sql.Request(transaction)
+      .input('idBranch',      sql.BigInt,      idBranch)
+      .input('idCuenta',      sql.BigInt,      idCuenta)
+      .input('idHistorial',   sql.BigInt,      histId)
+      .input('idPedido',      sql.BigInt,      idPedido)
+      .input('StatusAnterior',sql.VarChar(40), statusActual)
+      .input('StatusNuevo',   sql.VarChar(40), nuevoStatus)
+      .input('UsuAlta',       sql.VarChar(20), `REP:${idRepartidor}`)
+      .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL
+                (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, UsuAlta)
+              VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, @StatusAnterior, @StatusNuevo, @UsuAlta)`);
+
+    await transaction.commit();
+    enTransaccion = false;
 
     broadcast(idBranch, idCuenta, {
       tipo:       'pedido_status',
@@ -1083,6 +1206,9 @@ export async function actualizarStatusPedido(request, reply) {
 
     return reply.send({ ok: true, nuevoStatus });
   } catch (err) {
+    if (enTransaccion) {
+      try { await transaction.rollback(); } catch (rbErr) { request.log.error('Rollback falló: ' + rbErr.message); }
+    }
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al actualizar status del pedido' });
   }

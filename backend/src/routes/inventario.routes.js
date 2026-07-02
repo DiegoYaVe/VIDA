@@ -8,10 +8,10 @@ import {
 } from '../controllers/inventario.controller.js';
 
 // Roles que pueden escribir (alta/edición)
-const ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
+const ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN'];
 
 // Roles que pueden leer (consultas) — incluye cajeros porque el POS busca productos
-const LECTURA   = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
+const LECTURA   = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
 
 export async function inventarioRoutes(fastify) {
 
@@ -52,7 +52,7 @@ export async function inventarioRoutes(fastify) {
   // SUPERVISOR incluido en escritura de movimientos pero el botón en UI
   // se ocultará hasta que sea necesario
   fastify.post('/inventario/movimientos',
-    { preHandler: [requireRole(...LECTURA)] }, registrarMovimiento);
+    { preHandler: [requireRole(...ESCRITURA, 'SUPERVISOR')] }, registrarMovimiento);
 
   fastify.get('/inventario/movimientos',
     { preHandler: [requireRole(...LECTURA)] }, listarMovimientos);

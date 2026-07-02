@@ -107,14 +107,35 @@ async function enviarEmailInvitacion(pool, usuario, passwordTemporal, idBranch) 
   });
 }
 
+const NIVELES_ROL = { SUPER_ADMIN: 0, ADMIN_PAIS: 1, ADMIN_ESTADO: 1, ADMIN: 2, SUPERVISOR: 3, CAJERO: 4, CASHIER: 4 };
+
 function nivelPorRol(rol) {
-  const niveles = { SUPER_ADMIN: 0, ADMIN_PAIS: 1, ADMIN: 1, SUPERVISOR: 2, CAJERO: 3, CASHIER: 3 };
-  return niveles[rol] ?? 3;
+  return NIVELES_ROL[rol] ?? 4;
+}
+
+function esRolValido(rol) {
+  return Object.prototype.hasOwnProperty.call(NIVELES_ROL, rol);
+}
+
+// Un usuario solo puede asignar/gestionar roles de su mismo nivel o inferior
+// (nivel numérico mayor = menos privilegios; SUPER_ADMIN=0 puede todo)
+function puedeGestionarRol(rolCaller, rolTarget) {
+  return nivelPorRol(rolTarget) >= nivelPorRol(rolCaller);
+}
+
+async function obtenerRolUsuario(pool, idBranch, idCuenta, idUsuario) {
+  const r = await pool.request()
+    .input('idBranch',  sql.BigInt, idBranch)
+    .input('idCuenta',  sql.BigInt, idCuenta)
+    .input('idUsuario', sql.BigInt, idUsuario)
+    .query(`SELECT TipoUsuario FROM VIDA_CUENTA_USUARIOS
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
+  return r.recordset[0]?.TipoUsuario ?? null;
 }
 
 // ── GET /api/usuarios ──────────────────────────────────────────────────────
 export async function listarUsuarios(request, reply) {
-  const { idBranch, idCuenta } = request.user;
+  const { idBranch, idCuenta, TipoUsuario, idPuntoVenta, idEstado, idPais } = request.user;
   const { page = 1, limit = 20, search = '', rol = '' } = request.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
@@ -124,6 +145,15 @@ export async function listarUsuarios(request, reply) {
     if (search) whereExtra += ` AND (u.Nombre LIKE @search OR u.Apellidos LIKE @search OR u.Correo LIKE @search OR u.Cve LIKE @search)`;
     if (rol)    whereExtra += ` AND u.TipoUsuario = @rol`;
 
+    // Filtro geográfico según rol del usuario autenticado
+    if (TipoUsuario === 'ADMIN_PAIS' && idPais) {
+      whereExtra += ` AND u.idPais = @geoIdPais`;
+    } else if (TipoUsuario === 'ADMIN_ESTADO' && idEstado) {
+      whereExtra += ` AND u.idEstado = @geoIdEstado`;
+    } else if (['ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'].includes(TipoUsuario) && idPuntoVenta) {
+      whereExtra += ` AND u.idPuntoVenta = @geoIdPV`;
+    }
+
     const req = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
@@ -132,28 +162,48 @@ export async function listarUsuarios(request, reply) {
 
     if (search) req.input('search', sql.VarChar(200), `%${search}%`);
     if (rol)    req.input('rol',    sql.VarChar(50),  rol);
+    if (TipoUsuario === 'ADMIN_PAIS'   && idPais)       req.input('geoIdPais',    sql.BigInt, idPais);
+    if (TipoUsuario === 'ADMIN_ESTADO' && idEstado)     req.input('geoIdEstado',  sql.BigInt, idEstado);
+    if (['ADMIN','SUPERVISOR','CAJERO','CASHIER'].includes(TipoUsuario) && idPuntoVenta)
+      req.input('geoIdPV', sql.BigInt, idPuntoVenta);
 
     const result = await req.query(`
       SELECT u.idUsuario, u.Nombre, u.Apellidos, u.NomComercial,
         u.Correo, u.Telefono, u.Cve, u.TipoUsuario, u.NivelAcceso, u.Puesto,
-        u.idPuntoVenta, u.Status, u.FechaAlta, u.ImagenUsuario, u.FechaNacimiento, u.CambiarPass,
-        p.NomComercial AS NombreSucursal,
+        u.idPuntoVenta, u.idEstado, u.idPais, u.Status, u.FechaAlta,
+        u.ImagenUsuario, u.FechaNacimiento, u.CambiarPass,
+        pv.NomComercial AS NombreSucursal,
+        e.NombreEstado, p.NombrePais,
         (SELECT COUNT(*) FROM VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO a
          WHERE a.idBranch=u.idBranch AND a.idCuenta=u.idCuenta
            AND a.idUsuario=u.idUsuario AND a.StatusAcceso='ACTIVO') AS totalAccesos
       FROM VIDA_CUENTA_USUARIOS u
-      LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA p
-        ON p.idBranch=u.idBranch AND p.idCuenta=u.idCuenta AND p.idPuntoVenta=u.idPuntoVenta
+      LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+        ON pv.idBranch=u.idBranch AND pv.idCuenta=u.idCuenta AND pv.idPuntoVenta=u.idPuntoVenta
+      LEFT JOIN VIDA_CUENTA_ESTADOS e
+        ON e.idBranch=u.idBranch AND e.idCuenta=u.idCuenta AND e.idEstado=u.idEstado
+      LEFT JOIN VIDA_CUENTA_PAISES p
+        ON p.idBranch=u.idBranch AND p.idCuenta=u.idCuenta AND p.idPais=u.idPais
       WHERE u.idBranch=@idBranch AND u.idCuenta=@idCuenta
       ${whereExtra}
       ORDER BY u.idUsuario
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 
-    const totalRes = await pool.request()
+    const countReq = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
-      .input('idCuenta', sql.BigInt, idCuenta)
-      .query(`SELECT COUNT(*) AS total FROM VIDA_CUENTA_USUARIOS WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+      .input('idCuenta', sql.BigInt, idCuenta);
+
+    let countWhere = '';
+    if (TipoUsuario === 'ADMIN_PAIS'   && idPais)   { countReq.input('cIdPais',  sql.BigInt, idPais);   countWhere = 'AND idPais=@cIdPais'; }
+    if (TipoUsuario === 'ADMIN_ESTADO' && idEstado) { countReq.input('cIdEst',   sql.BigInt, idEstado); countWhere = 'AND idEstado=@cIdEst'; }
+    if (['ADMIN','SUPERVISOR','CAJERO','CASHIER'].includes(TipoUsuario) && idPuntoVenta) {
+      countReq.input('cIdPV', sql.BigInt, idPuntoVenta); countWhere = 'AND idPuntoVenta=@cIdPV';
+    }
+
+    const totalRes = await countReq.query(
+      `SELECT COUNT(*) AS total FROM VIDA_CUENTA_USUARIOS WHERE idBranch=@idBranch AND idCuenta=@idCuenta ${countWhere}`
+    );
 
     return reply.send({
       data:  result.recordset,
@@ -170,10 +220,16 @@ export async function listarUsuarios(request, reply) {
 // ── POST /api/usuarios ────────────────────────────────────────────────────
 export async function crearUsuario(request, reply) {
   const { idBranch, idCuenta, idUsuario: idCreador } = request.user;
-  const { Nombre, Apellidos, NomComercial, Correo, Cve, TipoUsuario, Puesto, Telefono, FechaNacimiento, idPuntoVenta, pantallas = [] } = request.body;
+  const { Nombre, Apellidos, NomComercial, Correo, Cve, TipoUsuario, Puesto, Telefono, FechaNacimiento, idPuntoVenta, idEstado, idPais, pantallas = [] } = request.body;
 
   if (!Nombre || !Correo || !Cve || !TipoUsuario) {
     return reply.code(400).send({ error: 'Nombre, Correo, Usuario y Rol son requeridos' });
+  }
+  if (!esRolValido(TipoUsuario)) {
+    return reply.code(400).send({ error: 'Rol inválido' });
+  }
+  if (!puedeGestionarRol(request.user.TipoUsuario, TipoUsuario)) {
+    return reply.code(403).send({ error: 'No puedes crear usuarios con un rol superior al tuyo' });
   }
 
   try {
@@ -214,17 +270,19 @@ export async function crearUsuario(request, reply) {
       .input('Puesto',         sql.VarChar(200), Puesto || null)
       .input('FechaNacimiento',sql.Date,         FechaNacimiento || null)
       .input('idPuntoVenta',   sql.BigInt,       idPuntoVenta || null)
+      .input('idEstado',       sql.BigInt,       idEstado || null)
+      .input('idPais',         sql.BigInt,       idPais || null)
       .input('NivelAcceso',    sql.Int,           nivelPorRol(TipoUsuario))
       .input('Pass',           sql.VarChar(255), hash)
       .input('UsuAlta',        sql.VarChar(10),  String(idCreador))
       .query(`INSERT INTO VIDA_CUENTA_USUARIOS
                 (idBranch, idCuenta, idUsuario, Nombre, Apellidos, NomComercial,
                  Correo, Telefono, Cve, TipoUsuario, Puesto, FechaNacimiento,
-                 idPuntoVenta, NivelAcceso, Pass, CambiarPass, UsuAlta, Status)
+                 idPuntoVenta, idEstado, idPais, NivelAcceso, Pass, CambiarPass, UsuAlta, Status)
               VALUES
                 (@idBranch, @idCuenta, @idUsuario, @Nombre, @Apellidos, @NomComercial,
                  @Correo, @Telefono, @Cve, @TipoUsuario, @Puesto, @FechaNacimiento,
-                 @idPuntoVenta, @NivelAcceso, @Pass, 1, @UsuAlta, 'ACTIVO')`);
+                 @idPuntoVenta, @idEstado, @idPais, @NivelAcceso, @Pass, 1, @UsuAlta, 'ACTIVO')`);
 
     for (const idPantalla of pantallas) {
       await pool.request()
@@ -267,10 +325,23 @@ export async function crearUsuario(request, reply) {
 export async function editarUsuario(request, reply) {
   const { idBranch, idCuenta, idUsuario: idEditor } = request.user;
   const { idUsuario } = request.params;
-  const { Nombre, Apellidos, NomComercial, Correo, Telefono, TipoUsuario, Puesto, FechaNacimiento, idPuntoVenta, pantallas } = request.body;
+  const { Nombre, Apellidos, NomComercial, Correo, Telefono, TipoUsuario, Puesto, FechaNacimiento, idPuntoVenta, idEstado, idPais, pantallas } = request.body;
+
+  if (!esRolValido(TipoUsuario)) {
+    return reply.code(400).send({ error: 'Rol inválido' });
+  }
+  if (!puedeGestionarRol(request.user.TipoUsuario, TipoUsuario)) {
+    return reply.code(403).send({ error: 'No puedes asignar un rol superior al tuyo' });
+  }
 
   try {
     const pool = await getPool();
+
+    const rolActual = await obtenerRolUsuario(pool, idBranch, idCuenta, idUsuario);
+    if (!rolActual) return reply.code(404).send({ error: 'Usuario no encontrado' });
+    if (!puedeGestionarRol(request.user.TipoUsuario, rolActual)) {
+      return reply.code(403).send({ error: 'No puedes editar a un usuario con rol superior al tuyo' });
+    }
 
     await pool.request()
       .input('idBranch',       sql.BigInt,       idBranch)
@@ -285,13 +356,16 @@ export async function editarUsuario(request, reply) {
       .input('Puesto',         sql.VarChar(200), Puesto || null)
       .input('FechaNacimiento',sql.Date,         FechaNacimiento || null)
       .input('idPuntoVenta',   sql.BigInt,       idPuntoVenta || null)
+      .input('idEstado',       sql.BigInt,       idEstado || null)
+      .input('idPais',         sql.BigInt,       idPais || null)
       .input('NivelAcceso',    sql.Int,           nivelPorRol(TipoUsuario))
       .input('UsuMod',         sql.VarChar(10),  String(idEditor))
       .query(`UPDATE VIDA_CUENTA_USUARIOS SET
                 Nombre=@Nombre, Apellidos=@Apellidos, NomComercial=@NomComercial,
                 Correo=@Correo, Telefono=@Telefono, TipoUsuario=@TipoUsuario,
                 Puesto=@Puesto, FechaNacimiento=@FechaNacimiento,
-                idPuntoVenta=@idPuntoVenta, NivelAcceso=@NivelAcceso,
+                idPuntoVenta=@idPuntoVenta, idEstado=@idEstado, idPais=@idPais,
+                NivelAcceso=@NivelAcceso,
                 FechaMod=GETDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
 
@@ -328,8 +402,22 @@ export async function toggleStatus(request, reply) {
   const { idUsuario } = request.params;
   const { status } = request.body;
 
+  if (!['ACTIVO', 'INACTIVO'].includes(status)) {
+    return reply.code(400).send({ error: 'Status inválido' });
+  }
+  if (String(idUsuario) === String(idEditor) && status !== 'ACTIVO') {
+    return reply.code(400).send({ error: 'No puedes desactivar tu propia cuenta' });
+  }
+
   try {
     const pool = await getPool();
+
+    const rolActual = await obtenerRolUsuario(pool, idBranch, idCuenta, idUsuario);
+    if (!rolActual) return reply.code(404).send({ error: 'Usuario no encontrado' });
+    if (!puedeGestionarRol(request.user.TipoUsuario, rolActual)) {
+      return reply.code(403).send({ error: 'No puedes cambiar el status de un usuario con rol superior al tuyo' });
+    }
+
     await pool.request()
       .input('idBranch',  sql.BigInt,      idBranch)
       .input('idCuenta',  sql.BigInt,      idCuenta)

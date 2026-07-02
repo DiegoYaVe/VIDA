@@ -4,11 +4,12 @@ import {
   listarPedidos, obtenerPedido, crearPedido, cambiarStatusPedido,
   asignarRepartidor, subirComprobante, revisarComprobante,
   listarRepartidores, aprobarRepartidor, listarVentasPOS,
+  sincronizarVentasOffline,
 } from '../controllers/pedidos.controller.js';
 
-const ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
-const LECTURA   = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN', 'SUPERVISOR'];
-const CAJA      = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
+const ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN'];
+const LECTURA   = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR'];
+const CAJA      = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
 
 export async function pedidosRoutes(fastify) {
 
@@ -24,6 +25,11 @@ export async function pedidosRoutes(fastify) {
   fastify.post('/pedidos',
     { preHandler: [authenticate, requireRole(...CAJA)] },
     crearPedido);
+
+  // Sincronización de ventas offline (batch idempotente)
+  fastify.post('/pedidos/sync',
+    { preHandler: [authenticate, requireRole(...CAJA)] },
+    sincronizarVentasOffline);
 
   fastify.patch('/pedidos/:idPedido/status',
     { preHandler: [authenticate, requireRole(...CAJA)] },

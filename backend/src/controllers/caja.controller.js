@@ -10,7 +10,17 @@ async function nextId(pool, tabla, campo, idBranch, idCuenta) {
   return r.recordset[0].next;
 }
 
-const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN', 'SUPERVISOR'];
+// Variante transaccional: UPDLOCK+HOLDLOCK serializa la obtención del ID
+async function nextIdTx(transaction, tabla, campo, idBranch, idCuenta) {
+  const r = await new sql.Request(transaction)
+    .input('idBranch', sql.BigInt, idBranch)
+    .input('idCuenta', sql.BigInt, idCuenta)
+    .query(`SELECT ISNULL(MAX(${campo}),0)+1 AS next FROM ${tabla} WITH (UPDLOCK, HOLDLOCK)
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+  return r.recordset[0].next;
+}
+
+const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR'];
 
 function isAdmin(user) {
   return ADMIN_ROLES.includes(user.TipoUsuario);
@@ -102,23 +112,11 @@ export async function abrirCaja(request, reply) {
     return reply.code(400).send({ error: 'Se requiere idPuntoVenta para abrir caja' });
   }
 
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  let enTransaccion = false;
+
   try {
-    const pool = await getPool();
-
-    // Verificar que no haya turno abierto para este PV
-    const existe = await pool.request()
-      .input('idBranch',     sql.BigInt, idBranch)
-      .input('idCuenta',     sql.BigInt, idCuenta)
-      .input('idPuntoVenta', sql.BigInt, pvId)
-      .query(`
-        SELECT TOP 1 idTurno FROM VIDA_CAJA_TURNOS
-        WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta AND Status='ABIERTO'
-      `);
-
-    if (existe.recordset.length > 0) {
-      return reply.code(409).send({ error: 'Ya existe un turno abierto para este punto de venta' });
-    }
-
     // Obtener nombre del cajero
     const cajeroR = await pool.request()
       .input('idBranch',  sql.BigInt, idBranch)
@@ -145,10 +143,30 @@ export async function abrirCaja(request, reply) {
 
     const NombreSucursal = pvR.recordset[0]?.NombreSucursal || null;
 
-    // Generar ID
-    const idTurno = await nextId(pool, 'VIDA_CAJA_TURNOS', 'idTurno', idBranch, idCuenta);
+    await transaction.begin();
+    enTransaccion = true;
 
-    await pool.request()
+    // Verificar turno abierto CON lock de rango: HOLDLOCK retiene el lock hasta
+    // el commit, así dos aperturas simultáneas del mismo PV se serializan y la
+    // segunda ve el turno que insertó la primera
+    const existe = await new sql.Request(transaction)
+      .input('idBranch',     sql.BigInt, idBranch)
+      .input('idCuenta',     sql.BigInt, idCuenta)
+      .input('idPuntoVenta', sql.BigInt, pvId)
+      .query(`
+        SELECT TOP 1 idTurno FROM VIDA_CAJA_TURNOS WITH (UPDLOCK, HOLDLOCK)
+        WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta AND Status='ABIERTO'
+      `);
+
+    if (existe.recordset.length > 0) {
+      await transaction.rollback();
+      enTransaccion = false;
+      return reply.code(409).send({ error: 'Ya existe un turno abierto para este punto de venta' });
+    }
+
+    const idTurno = await nextIdTx(transaction, 'VIDA_CAJA_TURNOS', 'idTurno', idBranch, idCuenta);
+
+    await new sql.Request(transaction)
       .input('idBranch',      sql.BigInt,       idBranch)
       .input('idCuenta',      sql.BigInt,       idCuenta)
       .input('idTurno',       sql.BigInt,       idTurno)
@@ -170,8 +188,14 @@ export async function abrirCaja(request, reply) {
            @Observaciones, 'ABIERTO', @UsuAlta, GETDATE(), GETDATE())
       `);
 
+    await transaction.commit();
+    enTransaccion = false;
+
     return reply.code(201).send({ idTurno, mensaje: 'Caja abierta correctamente' });
   } catch (err) {
+    if (enTransaccion) {
+      try { await transaction.rollback(); } catch (rbErr) { request.log.error('Rollback falló: ' + rbErr.message); }
+    }
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al abrir caja' });
   }
@@ -326,7 +350,9 @@ export async function cerrarCaja(request, reply) {
     const montoCi  = parseFloat(MontoCierre);
     const diferencia = montoCi - (montoAp + totalEf);
 
-    await pool.request()
+    // La condición Status='ABIERTO' evita doble cierre concurrente: solo la
+    // primera petición cierra; la segunda no afecta filas y recibe 409
+    const cierreR = await pool.request()
       .input('idBranch',             sql.BigInt,       idBranch)
       .input('idCuenta',             sql.BigInt,       idCuenta)
       .input('idTurno',              sql.BigInt,       BigInt(idTurno))
@@ -349,7 +375,12 @@ export async function cerrarCaja(request, reply) {
           Diferencia           = @Diferencia,
           Observaciones        = @Observaciones
         WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idTurno=@idTurno
+          AND Status='ABIERTO'
       `);
+
+    if (cierreR.rowsAffected[0] === 0) {
+      return reply.code(409).send({ error: 'El turno ya fue cerrado por otra operación' });
+    }
 
     // Retornar el turno cerrado
     const cerradoR = await pool.request()
