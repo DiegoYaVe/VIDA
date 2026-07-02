@@ -102,6 +102,11 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
           <Text style={styles.panelHint}>
             Mueve el mapa hasta que el pin quede sobre tu puerta
           </Text>
+          {/* Feedback de coordenadas (útil si los tiles no cargan en Expo Go:
+              el botón de GPS sí toma tu ubicación real) */}
+          <Text style={styles.coordsText}>
+            📍 {centro.latitude.toFixed(5)}, {centro.longitude.toFixed(5)}
+          </Text>
 
           {puedeGuardar && (
             <View style={styles.guardarRow}>
@@ -185,7 +190,8 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 12,
     shadowOffset: { width: 0, height: -4 }, elevation: 12,
   },
-  panelHint: { fontSize: 13, color: '#718096', textAlign: 'center', marginBottom: 14 },
+  panelHint: { fontSize: 13, color: '#718096', textAlign: 'center', marginBottom: 4 },
+  coordsText: { fontSize: 11.5, color: '#A0AEC0', textAlign: 'center', marginBottom: 12, fontVariant: ['tabular-nums'] },
   guardarRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: '#F7FAFC', borderRadius: 14, padding: 12, marginBottom: 14,
