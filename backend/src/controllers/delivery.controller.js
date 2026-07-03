@@ -16,17 +16,28 @@ if (!process.env.BASE_URL) {
   console.warn('[delivery] BASE_URL no definido en .env — links de email/OAuth usarán ' + BASE_URL);
 }
 
-// ── Helper — página HTML que redirige al deep link via JS ──────────────────
+// ── Helper — página HTML que regresa a la app vía deep link ────────────────
+// IMPORTANTE: la redirección automática va DESPUÉS de renderizar y con delay.
+// Chrome bloquea navegaciones a esquemas de app (exp://, vida-cliente://)
+// sin gesto del usuario y dejaba la pestaña en blanco — el botón grande
+// (tap = gesto) es el camino garantizado.
 function buildDeepLinkPage(deepLink) {
   const safe = deepLink.replace(/"/g, '&quot;');
+  const esError = deepLink.includes('error=');
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>Autenticando...</title></head>
-<body style="font-family:sans-serif;text-align:center;padding:60px 20px;background:#f5f7fa">
-<p style="color:#4a5568;font-size:18px">Autenticando...</p>
-<script>window.location.href="${safe}";</script>
-<a href="${safe}" style="display:inline-block;margin-top:24px;padding:14px 28px;
-background:#27AE60;color:#fff;border-radius:10px;text-decoration:none;font-size:16px;font-weight:700">
-Volver a la app</a>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VIDA</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:70px 24px;background:#0D1B2A;margin:0">
+<div style="font-size:54px;margin-bottom:16px">${esError ? '⚠️' : '✅'}</div>
+<p style="color:#fff;font-size:22px;font-weight:800;margin:0 0 8px">
+${esError ? 'Algo salió mal' : '¡Sesión iniciada!'}</p>
+<p style="color:rgba(255,255,255,0.6);font-size:14px;margin:0 0 32px">
+${esError ? 'Regresa a la app e inténtalo de nuevo' : 'Toca el botón para volver a la app'}</p>
+<a href="${safe}" style="display:inline-block;padding:16px 40px;
+background:#27AE60;color:#fff;border-radius:14px;text-decoration:none;font-size:17px;font-weight:800;
+box-shadow:0 6px 18px rgba(39,174,96,0.4)">
+Volver a la app →</a>
+<script>setTimeout(function(){ try { window.location.href = "${safe}"; } catch(e){} }, 600);</script>
 </body></html>`;
 }
 
