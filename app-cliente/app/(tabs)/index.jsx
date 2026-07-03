@@ -1,6 +1,7 @@
-// Home estilo Uber Eats/DiDi: header con gradiente de marca, banner promo,
-// categorías circulares y tarjetas de producto con imagen protagonista.
-// Navegable sin cuenta — el login se pide hasta confirmar el pedido.
+// Home calcado del layout de Uber Eats con colores VIDA:
+// header blanco con selector de tienda + carrito, categorías con íconos
+// grandes, búsqueda tipo píldora, "Destacados" y tarjetas planas con
+// imagen protagonista. Navegable sin cuenta.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -15,10 +16,11 @@ import {
   ScrollView,
   RefreshControl,
   Platform,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
@@ -26,22 +28,27 @@ import useCarritoStore from '../../store/carritoStore';
 import { absImg } from '../../constants/config';
 import DetalleProducto from '../../components/DetalleProducto';
 
-const PLACEHOLDER = 'https://via.placeholder.com/300/EBF8FF/1A6A9A?text=VIDA';
+const PLACEHOLDER = 'https://via.placeholder.com/300/F1F5F9/94A3B8?text=VIDA';
+const { width: SCREEN_W } = Dimensions.get('window');
+// Ancho fijo por tarjeta: así el último producto impar NO se estira
+const CARD_W = (SCREEN_W - 16 * 2 - 14) / 2;
 
-// Emoji por nombre de categoría (estilo Uber Eats/DiDi)
+// Emoji por nombre de categoría
 function emojiCategoria(nombre = '') {
   const n = nombre.toLowerCase();
   if (n.includes('bebida') || n.includes('refresco') || n.includes('jugo')) return '🥤';
-  if (n.includes('snack') || n.includes('botana') || n.includes('fritura')) return '🍿';
+  if (n.includes('snack') || n.includes('botana') || n.includes('fritura')) return '🍟';
   if (n.includes('lácteo') || n.includes('lacteo') || n.includes('leche')) return '🥛';
   if (n.includes('limpieza') || n.includes('hogar')) return '🧼';
-  if (n.includes('pan') || n.includes('bagel') || n.includes('reposter')) return '🥐';
-  if (n.includes('dulce') || n.includes('chocolate') || n.includes('postre')) return '🍬';
+  if (n.includes('pan') || n.includes('bagel') || n.includes('reposter')) return '🥞';
+  if (n.includes('dulce') || n.includes('chocolate') || n.includes('postre')) return '🍩';
   if (n.includes('carne') || n.includes('charcuter')) return '🥩';
   if (n.includes('fruta') || n.includes('verdura')) return '🍎';
-  if (n.includes('comida') || n.includes('sandwich') || n.includes('sánd')) return '🥪';
+  if (n.includes('comida') || n.includes('sandwich') || n.includes('sánd')) return '🌮';
   if (n.includes('licor') || n.includes('cerveza') || n.includes('vino')) return '🍺';
-  return '🛒';
+  if (n.includes('café') || n.includes('cafe')) return '☕';
+  if (n.includes('pizza')) return '🍕';
+  return '🛍️';
 }
 
 export default function HomeScreen() {
@@ -51,6 +58,7 @@ export default function HomeScreen() {
   const [productos, setProductos] = useState([]);
   const [sucursales, setSucursales] = useState([]);
   const [sucursalActiva, setSucursalActiva] = useState(null);
+  const [selectorTienda, setSelectorTienda] = useState(false);
   const [categoriaActiva, setCategoriaActiva] = useState(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -112,6 +120,12 @@ export default function HomeScreen() {
     return list;
   }, [productos, sucursalActiva, categoriaActiva, search]);
 
+  const nombreSucursalActiva = useMemo(() => {
+    if (!sucursalActiva) return 'Todas las tiendas';
+    const s = sucursales.find(x => String(x.idPuntoVenta ?? x.id) === String(sucursalActiva));
+    return s?.NomComercial ?? s?.Nombre ?? 'Tienda';
+  }, [sucursalActiva, sucursales]);
+
   const getCantidad = (p) => {
     if (idPVCarrito && String(idPVCarrito) !== String(p.idPuntoVenta)) return 0;
     return items.find((i) => i.idProducto === p.idProducto)?.Cantidad ?? 0;
@@ -158,8 +172,7 @@ export default function HomeScreen() {
 
     return (
       <View style={styles.prodCard}>
-        <TouchableOpacity activeOpacity={0.9} onPress={() => setProductoAbierto(p)}>
-          {/* Imagen protagonista con botón + flotante */}
+        <TouchableOpacity activeOpacity={0.85} onPress={() => setProductoAbierto(p)}>
           <View>
             <Image
               source={{ uri: absImg(p.ImagenProducto) || PLACEHOLDER }}
@@ -168,7 +181,7 @@ export default function HomeScreen() {
             />
             {cant === 0 ? (
               <TouchableOpacity style={styles.addFab} onPress={() => handleAgregar(p)}>
-                <Ionicons name="add" size={22} color="#fff" />
+                <Ionicons name="add" size={22} color="#1A202C" />
               </TouchableOpacity>
             ) : (
               <View style={styles.qtyFab}>
@@ -183,74 +196,26 @@ export default function HomeScreen() {
             )}
           </View>
 
-          <View style={styles.prodInfo}>
-            <Text style={styles.prodNombre} numberOfLines={1}>{p.Nombre}</Text>
+          <Text style={styles.prodNombre} numberOfLines={1}>{p.Nombre}</Text>
+          <View style={styles.prodMetaRow}>
             <Text style={styles.prodPrecio}>${precio.toFixed(2)}</Text>
-            <View style={styles.sucChip}>
-              <Ionicons name="storefront" size={10} color="#1A6A9A" />
-              <Text style={styles.sucChipText} numberOfLines={1}>{p.NombreSucursal}</Text>
-            </View>
+            <Text style={styles.prodMetaSep}> · </Text>
+            <Ionicons name="storefront-outline" size={12} color="#6B7280" />
+            <Text style={styles.prodMeta} numberOfLines={1}> {p.NombreSucursal}</Text>
           </View>
         </TouchableOpacity>
       </View>
     );
   };
 
-  // Header completo del feed (va dentro del FlatList para scroll natural)
+  // Header del feed (scrollea junto con los productos)
   const ListHeader = (
     <View>
-      {/* Banner promo */}
-      <LinearGradient
-        colors={['#1A6A9A', '#27AE60']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0.8 }}
-        style={styles.banner}
-      >
-        <View style={{ flex: 1 }}>
-          <Text style={styles.bannerTitulo}>Entrega a domicilio 🛵</Text>
-          <Text style={styles.bannerSub}>Pide de tu tienda favorita{'\n'}y recíbelo en minutos</Text>
-        </View>
-        <Text style={styles.bannerEmoji}>🛍️</Text>
-      </LinearGradient>
-
-      {/* Chips de sucursal */}
-      {sucursales.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          <TouchableOpacity
-            style={[styles.sucFiltroChip, !sucursalActiva && styles.sucFiltroChipActive]}
-            onPress={() => setSucursalActiva(null)}
-          >
-            <Text style={[styles.sucFiltroText, !sucursalActiva && styles.sucFiltroTextActive]}>
-              Todas las tiendas
-            </Text>
-          </TouchableOpacity>
-          {sucursales.map((s) => {
-            const id = s.idPuntoVenta ?? s.id;
-            const activa = String(sucursalActiva) === String(id);
-            return (
-              <TouchableOpacity
-                key={id}
-                style={[styles.sucFiltroChip, activa && styles.sucFiltroChipActive]}
-                onPress={() => setSucursalActiva(activa ? null : id)}
-              >
-                <Ionicons name="storefront-outline" size={13}
-                  color={activa ? '#fff' : '#1A6A9A'} style={{ marginRight: 4 }} />
-                <Text style={[styles.sucFiltroText, activa && styles.sucFiltroTextActive]} numberOfLines={1}>
-                  {s.NomComercial ?? s.Nombre ?? s.nombre}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      )}
-
-      {/* Categorías circulares */}
+      {/* Categorías con íconos grandes (fila estilo Uber Eats) */}
       {categorias.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
           <TouchableOpacity style={styles.catItem} onPress={() => setCategoriaActiva(null)}>
-            <View style={[styles.catCircle, !categoriaActiva && styles.catCircleActive]}>
-              <Text style={styles.catEmoji}>✨</Text>
-            </View>
+            <Text style={[styles.catEmoji, categoriaActiva && styles.catEmojiInactiva]}>🛍️</Text>
             <Text style={[styles.catLabel, !categoriaActiva && styles.catLabelActive]}>Todo</Text>
           </TouchableOpacity>
           {categorias.map((c) => {
@@ -261,9 +226,9 @@ export default function HomeScreen() {
                 style={styles.catItem}
                 onPress={() => setCategoriaActiva(activa ? null : c.id)}
               >
-                <View style={[styles.catCircle, activa && styles.catCircleActive]}>
-                  <Text style={styles.catEmoji}>{emojiCategoria(c.nombre)}</Text>
-                </View>
+                <Text style={[styles.catEmoji, categoriaActiva && !activa && styles.catEmojiInactiva]}>
+                  {emojiCategoria(c.nombre)}
+                </Text>
                 <Text style={[styles.catLabel, activa && styles.catLabelActive]} numberOfLines={1}>
                   {c.nombre}
                 </Text>
@@ -273,61 +238,58 @@ export default function HomeScreen() {
         </ScrollView>
       )}
 
-      <Text style={styles.seccionTitulo}>
-        {sucursalActiva || categoriaActiva || search ? 'Resultados' : 'Para ti'}
-      </Text>
+      {/* Búsqueda tipo píldora */}
+      <View style={styles.searchWrap}>
+        <Ionicons name="search" size={18} color="#6B7280" style={{ marginRight: 8 }} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Buscar en VIDA..."
+          placeholderTextColor="#6B7280"
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search ? (
+          <TouchableOpacity onPress={() => setSearch('')}>
+            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {/* Título de sección con flecha */}
+      <View style={styles.seccionRow}>
+        <Text style={styles.seccionTitulo}>
+          {sucursalActiva || categoriaActiva || search ? 'Resultados' : 'Destacados en VIDA'}
+        </Text>
+        <View style={styles.seccionArrow}>
+          <Ionicons name="arrow-forward" size={18} color="#1A202C" />
+        </View>
+      </View>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
 
-      {/* Header con gradiente de marca */}
-      <LinearGradient
-        colors={['#0D1B2A', '#1A6A9A']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1.4 }}
-        style={styles.header}
-      >
-        <View style={styles.headerTop}>
-          <View>
-            <Text style={styles.headerHola}>
-              {cliente ? `¡Hola, ${cliente.Nombre ?? ''}! 👋` : '¡Hola! 👋'}
-            </Text>
-            <Text style={styles.headerTitle}>¿Qué se te antoja hoy?</Text>
-          </View>
-          <TouchableOpacity style={styles.headerCarrito} onPress={() => router.push('/(tabs)/carrito')}>
-            <Ionicons name="cart-outline" size={23} color="#fff" />
-            {totalItems > 0 && (
-              <View style={styles.headerCarritoBadge}>
-                <Text style={styles.headerCarritoBadgeText}>{totalItems}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Búsqueda dentro del header */}
-        <View style={styles.searchWrap}>
-          <Ionicons name="search" size={18} color="#94A3B8" style={{ marginRight: 8 }} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar productos o tiendas..."
-            placeholderTextColor="#94A3B8"
-            value={search}
-            onChangeText={setSearch}
-          />
-          {search ? (
-            <TouchableOpacity onPress={() => setSearch('')}>
-              <Ionicons name="close-circle" size={18} color="#94A3B8" />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </LinearGradient>
+      {/* Header blanco: selector de tienda + carrito */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.tiendaSelector} onPress={() => setSelectorTienda(true)}>
+          <Text style={styles.tiendaSelectorText} numberOfLines={1}>{nombreSucursalActiva}</Text>
+          <Ionicons name="chevron-down" size={20} color="#1A202C" style={{ marginLeft: 4, marginTop: 2 }} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.headerCarrito} onPress={() => router.push('/(tabs)/carrito')}>
+          <Ionicons name="cart-outline" size={24} color="#1A202C" />
+          {totalItems > 0 && (
+            <View style={styles.headerCarritoBadge}>
+              <Text style={styles.headerCarritoBadgeText}>{totalItems}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#1A6A9A" />
+          <ActivityIndicator size="large" color="#27AE60" />
         </View>
       ) : error ? (
         <View style={styles.center}>
@@ -356,6 +318,42 @@ export default function HomeScreen() {
         />
       )}
 
+      {/* Selector de tienda (dropdown como el "Casa ▼" de Uber Eats) */}
+      <Modal visible={selectorTienda} transparent animationType="fade" onRequestClose={() => setSelectorTienda(false)}>
+        <TouchableOpacity style={styles.modalFondo} activeOpacity={1} onPress={() => setSelectorTienda(false)}>
+          <View style={styles.modalTiendas}>
+            <Text style={styles.modalTiendasTitulo}>Elige una tienda</Text>
+            <TouchableOpacity
+              style={styles.tiendaOpcion}
+              onPress={() => { setSucursalActiva(null); setSelectorTienda(false); }}
+            >
+              <View style={styles.tiendaOpcionIcon}><Text style={{ fontSize: 18 }}>🛍️</Text></View>
+              <Text style={styles.tiendaOpcionText}>Todas las tiendas</Text>
+              {!sucursalActiva && <Ionicons name="checkmark-circle" size={20} color="#27AE60" />}
+            </TouchableOpacity>
+            {sucursales.map((s) => {
+              const id = s.idPuntoVenta ?? s.id;
+              const activa = String(sucursalActiva) === String(id);
+              return (
+                <TouchableOpacity
+                  key={id}
+                  style={styles.tiendaOpcion}
+                  onPress={() => { setSucursalActiva(id); setSelectorTienda(false); }}
+                >
+                  <View style={styles.tiendaOpcionIcon}>
+                    <Ionicons name="storefront" size={16} color="#1A6A9A" />
+                  </View>
+                  <Text style={styles.tiendaOpcionText} numberOfLines={1}>
+                    {s.NomComercial ?? s.Nombre ?? s.nombre}
+                  </Text>
+                  {activa && <Ionicons name="checkmark-circle" size={20} color="#27AE60" />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Detalle de producto */}
       {productoAbierto && (
         <DetalleProducto
@@ -368,22 +366,15 @@ export default function HomeScreen() {
       {/* Botón flotante del carrito */}
       {totalItems > 0 && (
         <TouchableOpacity
-          style={styles.floatingCartWrap}
+          style={styles.floatingCart}
           onPress={() => router.push('/(tabs)/carrito')}
           activeOpacity={0.9}
         >
-          <LinearGradient
-            colors={['#27AE60', '#1F9E56']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.floatingCart}
-          >
-            <View style={styles.floatingCartBadge}>
-              <Text style={styles.floatingCartBadgeText}>{totalItems}</Text>
-            </View>
-            <Text style={styles.floatingCartText}>Ver carrito</Text>
-            <Text style={styles.floatingCartPrice}>${totalCarrito.toFixed(2)}</Text>
-          </LinearGradient>
+          <View style={styles.floatingCartBadge}>
+            <Text style={styles.floatingCartBadgeText}>{totalItems}</Text>
+          </View>
+          <Text style={styles.floatingCartText}>Ver carrito</Text>
+          <Text style={styles.floatingCartPrice}>${totalCarrito.toFixed(2)}</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -391,130 +382,89 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  container: { flex: 1, backgroundColor: '#fff' },
 
-  // Header con gradiente
+  // Header blanco estilo Uber Eats
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingTop: Platform.OS === 'ios' ? 58 : 46,
-    paddingBottom: 18,
+    paddingBottom: 10,
     paddingHorizontal: 16,
-    borderBottomLeftRadius: 26,
-    borderBottomRightRadius: 26,
+    backgroundColor: '#fff',
   },
-  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  headerHola: { fontSize: 13, color: 'rgba(255,255,255,0.75)', fontWeight: '600' },
-  headerTitle: { fontSize: 21, fontWeight: '900', color: '#fff', marginTop: 2 },
-  headerCarrito: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-  },
+  tiendaSelector: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 },
+  tiendaSelectorText: { fontSize: 24, fontWeight: '900', color: '#1A202C' },
+  headerCarrito: { padding: 4 },
   headerCarritoBadge: {
-    position: 'absolute', top: -3, right: -3,
+    position: 'absolute', top: -4, right: -6,
     backgroundColor: '#27AE60', borderRadius: 10, minWidth: 19, height: 19,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
     borderWidth: 1.5, borderColor: '#fff',
   },
   headerCarritoBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+
+  // Categorías con íconos grandes
+  catRow: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4, flexDirection: 'row', gap: 22 },
+  catItem: { alignItems: 'center', minWidth: 56 },
+  catEmoji: { fontSize: 38 },
+  catEmojiInactiva: { opacity: 0.45 },
+  catLabel: { fontSize: 13.5, color: '#1A202C', fontWeight: '500', marginTop: 6, textAlign: 'center' },
+  catLabelActive: { fontWeight: '800' },
+
+  // Búsqueda píldora
   searchWrap: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#fff', borderRadius: 14,
-    paddingHorizontal: 14, paddingVertical: Platform.OS === 'ios' ? 12 : 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 10, elevation: 5,
+    backgroundColor: '#F3F4F6', borderRadius: 26,
+    marginHorizontal: 16, marginTop: 12, marginBottom: 4,
+    paddingHorizontal: 16, paddingVertical: Platform.OS === 'ios' ? 12 : 6,
   },
-  searchInput: { flex: 1, fontSize: 14.5, color: '#1A202C' },
+  searchInput: { flex: 1, fontSize: 15, color: '#1A202C' },
 
-  // Banner promo
-  banner: {
-    flexDirection: 'row', alignItems: 'center',
-    marginHorizontal: 16, marginTop: 14, marginBottom: 4,
-    borderRadius: 18, paddingHorizontal: 18, paddingVertical: 16,
-    shadowColor: '#1A6A9A', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25, shadowRadius: 12, elevation: 5,
+  // Sección
+  seccionRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, marginTop: 16, marginBottom: 12,
   },
-  bannerTitulo: { color: '#fff', fontSize: 16, fontWeight: '900' },
-  bannerSub: { color: 'rgba(255,255,255,0.85)', fontSize: 12.5, marginTop: 4, lineHeight: 17 },
-  bannerEmoji: { fontSize: 44 },
-
-  chipRow: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 2, flexDirection: 'row' },
-  sucFiltroChip: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 20, backgroundColor: '#fff',
-    borderWidth: 1.5, borderColor: '#DBEAFE',
-    marginRight: 8, maxWidth: 200,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
-  },
-  sucFiltroChipActive: { backgroundColor: '#1A6A9A', borderColor: '#1A6A9A' },
-  sucFiltroText: { color: '#1A6A9A', fontSize: 13, fontWeight: '700' },
-  sucFiltroTextActive: { color: '#fff' },
-
-  catRow: { paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', gap: 14 },
-  catItem: { alignItems: 'center', width: 62 },
-  catCircle: {
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: 'transparent',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 6, elevation: 2,
-  },
-  catCircleActive: { borderColor: '#27AE60', backgroundColor: '#F0FFF4' },
-  catEmoji: { fontSize: 26 },
-  catLabel: { fontSize: 11, color: '#718096', fontWeight: '600', marginTop: 5, textAlign: 'center' },
-  catLabelActive: { color: '#27AE60', fontWeight: '800' },
-
-  seccionTitulo: {
-    fontSize: 18, fontWeight: '900', color: '#1A202C',
-    paddingHorizontal: 16, marginTop: 8, marginBottom: 4,
+  seccionTitulo: { fontSize: 22, fontWeight: '900', color: '#1A202C' },
+  seccionArrow: {
+    width: 38, height: 38, borderRadius: 19, backgroundColor: '#F3F4F6',
+    alignItems: 'center', justifyContent: 'center',
   },
 
   grid: { paddingBottom: 110 },
-  row: { paddingHorizontal: 10 },
+  row: { paddingHorizontal: 16, justifyContent: 'space-between' },
 
-  // Tarjeta de producto estilo DiDi
-  prodCard: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    margin: 6,
-    flex: 1,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 2,
+  // Tarjeta plana estilo Uber Eats (ancho FIJO: el último impar no se estira)
+  prodCard: { width: CARD_W, marginBottom: 20 },
+  prodImg: {
+    width: '100%', height: CARD_W * 0.72, borderRadius: 14,
+    resizeMode: 'cover', backgroundColor: '#F3F4F6',
   },
-  prodImg: { width: '100%', height: 132, resizeMode: 'cover', backgroundColor: '#EDF2F7' },
   addFab: {
     position: 'absolute', right: 8, bottom: 8,
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: '#27AE60',
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: '#fff',
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25, shadowRadius: 5, elevation: 5,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2, shadowRadius: 5, elevation: 4,
   },
   qtyFab: {
     position: 'absolute', right: 8, bottom: 8,
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#27AE60', borderRadius: 18, height: 36,
+    backgroundColor: '#27AE60', borderRadius: 19, height: 38,
     paddingHorizontal: 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25, shadowRadius: 5, elevation: 5,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25, shadowRadius: 5, elevation: 4,
   },
-  qtyFabBtn: { width: 28, height: 36, alignItems: 'center', justifyContent: 'center' },
+  qtyFabBtn: { width: 28, height: 38, alignItems: 'center', justifyContent: 'center' },
   qtyFabNum: { color: '#fff', fontSize: 14, fontWeight: '800', minWidth: 18, textAlign: 'center' },
-  prodInfo: { padding: 11 },
-  prodNombre: { fontSize: 14, fontWeight: '700', color: '#1A202C' },
-  prodPrecio: { fontSize: 16.5, fontWeight: '900', color: '#1A6A9A', marginTop: 3 },
-  sucChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    alignSelf: 'flex-start',
-    backgroundColor: '#EBF8FF', borderRadius: 8,
-    paddingHorizontal: 7, paddingVertical: 3, marginTop: 7,
-  },
-  sucChipText: { color: '#1A6A9A', fontSize: 10, fontWeight: '700' },
+  prodNombre: { fontSize: 15.5, fontWeight: '800', color: '#1A202C', marginTop: 9 },
+  prodMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
+  prodPrecio: { fontSize: 14.5, fontWeight: '800', color: '#27AE60' },
+  prodMetaSep: { color: '#9CA3AF', fontSize: 13 },
+  prodMeta: { color: '#6B7280', fontSize: 12.5, flexShrink: 1 },
 
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
   errorText: { color: '#E53E3E', textAlign: 'center', fontSize: 14 },
@@ -525,14 +475,33 @@ const styles = StyleSheet.create({
   },
   retryBtnText: { color: '#fff', fontWeight: '700' },
 
-  floatingCartWrap: {
+  // Selector de tienda
+  modalFondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-start' },
+  modalTiendas: {
+    marginTop: Platform.OS === 'ios' ? 105 : 92,
+    marginHorizontal: 16,
+    backgroundColor: '#fff', borderRadius: 20, padding: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2, shadowRadius: 24, elevation: 12,
+  },
+  modalTiendasTitulo: { fontSize: 16, fontWeight: '900', color: '#1A202C', marginBottom: 10 },
+  tiendaOpcion: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+  },
+  tiendaOpcionIcon: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tiendaOpcionText: { flex: 1, fontSize: 15, fontWeight: '600', color: '#1A202C' },
+
+  floatingCart: {
     position: 'absolute', bottom: 20, left: 20, right: 20,
+    backgroundColor: '#27AE60', borderRadius: 16,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 18, paddingVertical: 15, gap: 8,
     shadowColor: '#27AE60', shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
-  },
-  floatingCart: {
-    borderRadius: 16, flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 18, paddingVertical: 15, gap: 8,
   },
   floatingCartBadge: {
     backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 12,
