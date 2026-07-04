@@ -31,10 +31,13 @@
         }
       },
       "permissions": [
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -57,6 +60,12 @@
       "expo-status-bar",
       "expo-web-browser"
     ],
-    "scheme": "vida-cliente"
+    "scheme": "vida-cliente",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "43759832-99f1-4e6c-9381-1915794facbe"
+      }
+    }
   }
 }

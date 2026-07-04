@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 
@@ -112,7 +113,10 @@ export default function Historial() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView edges={['top']} style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Historial de entregas</Text>
+      </View>
       {/* Resumen del día */}
       <View style={styles.resumenCard}>
         <Text style={styles.resumenLabel}>Ganado hoy</Text>
@@ -138,12 +142,17 @@ export default function Historial() {
           </View>
         }
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.fondo },
+  header: {
+    paddingHorizontal: 20, paddingVertical: 14,
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#EDF2F7',
+  },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: COLORS.texto },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   resumenCard: {
     margin: 16, padding: 20, backgroundColor: COLORS.primary,

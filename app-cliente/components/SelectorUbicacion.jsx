@@ -1,32 +1,56 @@
-// Selector de ubicación de entrega estilo Uber: pin fijo al centro y el mapa
-// se mueve debajo. Devuelve las coordenadas confirmadas y permite guardar la
-// dirección con alias (solo con sesión iniciada).
 import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal, TextInput,
   ActivityIndicator, Platform, Switch,
 } from 'react-native';
-import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 
-// Centro por defecto si no hay GPS (Caracas)
-const DEFAULT_REGION = {
-  latitude: 10.4806,
-  longitude: -66.9036,
-  latitudeDelta: 0.05,
-  longitudeDelta: 0.05,
-};
+const DEFAULT_LAT = 10.4806;
+const DEFAULT_LON = -66.9036;
+
+function buildMapHTML(lat, lon) {
+  return `<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+html,body,#map{margin:0;padding:0;width:100%;height:100%;}
+#pin{position:fixed;left:50%;top:50%;transform:translate(-50%,-100%);
+  font-size:40px;line-height:1;pointer-events:none;z-index:9999;
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));}
+</style>
+</head><body>
+<div id="map"></div>
+<div id="pin">📍</div>
+<script>
+  var map = L.map('map', { zoomControl: true, attributionControl: false })
+    .setView([${lat}, ${lon}], 16);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+  function sendCenter() {
+    var c = map.getCenter();
+    window.ReactNativeWebView.postMessage(JSON.stringify({ lat: c.lat, lon: c.lng }));
+  }
+  map.on('moveend', sendCenter);
+  sendCenter();
+
+  window.moveTo = function(lat, lon) { map.setView([lat, lon], 16); };
+</script>
+</body></html>`;
+}
 
 export default function SelectorUbicacion({ visible, onClose, onConfirmar, puedeGuardar }) {
-  const mapRef = useRef(null);
-  const [region, setRegion] = useState(DEFAULT_REGION);
-  const [centro, setCentro] = useState(DEFAULT_REGION);
+  const webRef = useRef(null);
+  const [lat, setLat] = useState(DEFAULT_LAT);
+  const [lon, setLon] = useState(DEFAULT_LON);
   const [buscandoGPS, setBuscandoGPS] = useState(false);
   const [guardar, setGuardar] = useState(false);
   const [alias, setAlias] = useState('');
+  const [mapReady, setMapReady] = useState(false);
 
-  // Al abrir: intentar centrar en la ubicación actual
   useEffect(() => {
     if (visible) usarMiUbicacion();
   }, [visible]);
@@ -37,25 +61,30 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const nueva = {
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-        latitudeDelta: 0.008,
-        longitudeDelta: 0.008,
-      };
-      setCentro(nueva);
-      mapRef.current?.animateToRegion(nueva, 500);
+      const newLat = loc.coords.latitude;
+      const newLon = loc.coords.longitude;
+      setLat(newLat);
+      setLon(newLon);
+      webRef.current?.injectJavaScript(`window.moveTo(${newLat}, ${newLon}); true;`);
     } catch {
-      // sin GPS: se queda en el centro por defecto, el usuario arrastra
+      // sin GPS: queda en default
     } finally {
       setBuscandoGPS(false);
     }
   }
 
+  function onMessage(e) {
+    try {
+      const { lat: newLat, lon: newLon } = JSON.parse(e.nativeEvent.data);
+      setLat(newLat);
+      setLon(newLon);
+    } catch (_) {}
+  }
+
   function confirmar() {
     onConfirmar({
-      Latitud: centro.latitude,
-      Longitud: centro.longitude,
+      Latitud: lat,
+      Longitud: lon,
       guardar: puedeGuardar && guardar,
       alias: alias.trim(),
     });
@@ -66,20 +95,17 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.container}>
-        <MapView
-          ref={mapRef}
+        {/* Mapa OpenStreetMap via WebView */}
+        <WebView
+          ref={webRef}
           style={StyleSheet.absoluteFill}
-          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-          initialRegion={region}
-          onRegionChangeComplete={(r) => setCentro(r)}
-          showsUserLocation
-          showsMyLocationButton={false}
+          source={{ html: buildMapHTML(lat, lon) }}
+          onMessage={onMessage}
+          onLoad={() => setMapReady(true)}
+          javaScriptEnabled
+          domStorageEnabled
+          originWhitelist={['*']}
         />
-
-        {/* Pin fijo al centro */}
-        <View pointerEvents="none" style={styles.pinWrap}>
-          <Ionicons name="location" size={44} color="#E53E3E" style={styles.pinSombra} />
-        </View>
 
         {/* Header */}
         <View style={styles.header}>
@@ -102,10 +128,8 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
           <Text style={styles.panelHint}>
             Mueve el mapa hasta que el pin quede sobre tu puerta
           </Text>
-          {/* Feedback de coordenadas (útil si los tiles no cargan en Expo Go:
-              el botón de GPS sí toma tu ubicación real) */}
           <Text style={styles.coordsText}>
-            📍 {centro.latitude.toFixed(5)}, {centro.longitude.toFixed(5)}
+            📍 {lat.toFixed(5)}, {lon.toFixed(5)}
           </Text>
 
           {puedeGuardar && (
@@ -143,25 +167,11 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
-  pinWrap: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 44, // la punta del pin cae exactamente en el centro
-  },
-  pinSombra: {
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
   header: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 54 : 40,
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    left: 16, right: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
   headerBtn: {
     width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff',

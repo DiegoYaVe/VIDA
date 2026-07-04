@@ -58,6 +58,13 @@ export default function RootLayout() {
         <Stack.Screen name="google-auth" />
         <Stack.Screen name="sucursal/[idPuntoVenta]" />
         <Stack.Screen name="pedido/[idPedido]" />
+        <Stack.Screen name="mis-pedidos" />
+        <Stack.Screen name="perfil-editar" />
+        <Stack.Screen name="perfil-password" />
+        <Stack.Screen name="perfil-tarjetas" />
+        <Stack.Screen name="info-ayuda" />
+        <Stack.Screen name="info-quienes-somos" />
+        <Stack.Screen name="info-privacidad" />
       </Stack>
     </AuthGuard>
   );

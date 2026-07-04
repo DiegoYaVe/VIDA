@@ -16,6 +16,29 @@ if (!process.env.BASE_URL) {
   console.warn('[delivery] BASE_URL no definido en .env — links de email/OAuth usarán ' + BASE_URL);
 }
 
+// Store temporal para tokens OAuth pendientes de ser recogidos por la app (polling)
+// sessionId -> { token, nombre, idCliente, ts }
+const _oauthSessions = new Map();
+// Limpiar sesiones viejas cada 10 min (TTL 5 min)
+setInterval(() => {
+  const cutoff = Date.now() - 5 * 60 * 1000;
+  for (const [k, v] of _oauthSessions) if (v.ts < cutoff) _oauthSessions.delete(k);
+}, 10 * 60 * 1000);
+
+// ── Helper — página de resultado OAuth (sin deep link, la app hace polling) ─
+function buildOAuthResultPage(success) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VIDA</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:70px 24px;background:#0D1B2A;margin:0">
+<div style="font-size:54px;margin-bottom:16px">${success ? '✅' : '⚠️'}</div>
+<p style="color:#fff;font-size:22px;font-weight:800;margin:0 0 8px">
+${success ? '¡Listo! Vuelve a la app' : 'Algo salió mal'}</p>
+<p style="color:rgba(255,255,255,0.6);font-size:14px;margin:0">
+${success ? 'Puedes cerrar esta ventana' : 'Regresa a la app e inténtalo de nuevo'}</p>
+</body></html>`;
+}
+
 // ── Helper — página HTML que regresa a la app vía deep link ────────────────
 // IMPORTANTE: la redirección automática va DESPUÉS de renderizar y con delay.
 // Chrome bloquea navegaciones a esquemas de app (exp://, vida-cliente://)
@@ -346,11 +369,10 @@ export async function confirmarEmailCliente(request, reply) {
 // GET /delivery/cliente/google/start?idBranch=1&idCuenta=1
 // ══════════════════════════════════════════════════════════════════════════
 export async function googleOAuthStart(request, reply) {
-  const { idBranch = 1, idCuenta = 1, appRedirectUri = 'vida-cliente://google-auth' } = request.query;
+  const { idBranch = 1, idCuenta = 1, sessionId = '' } = request.query;
   const redirectUri = `${BASE_URL}/api/delivery/cliente/google/callback`;
 
-  // Guardar la URI de retorno a la app en el state para recuperarla en el callback
-  const stateData = `${idBranch}:${idCuenta}:${encodeURIComponent(appRedirectUri)}`;
+  const stateData = `${idBranch}:${idCuenta}:${encodeURIComponent(sessionId)}`;
 
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
@@ -372,14 +394,15 @@ export async function googleOAuthCallback(request, reply) {
   const { code, state, error } = request.query;
   const redirectUri = `${BASE_URL}/api/delivery/cliente/google/callback`;
 
-  // Decodificar state: "idBranch:idCuenta:appRedirectUri"
-  const stateParts = (state || '1:1:vida-cliente%3A%2F%2Fgoogle-auth').split(':');
+  // Decodificar state: "idBranch:idCuenta:sessionId"
+  const stateParts = (state || '1:1:').split(':');
   const idBranch = Number(stateParts[0]) || 1;
   const idCuenta = Number(stateParts[1]) || 1;
-  const appRedirectUri = decodeURIComponent(stateParts.slice(2).join(':')) || 'vida-cliente://google-auth';
+  const sessionId = decodeURIComponent(stateParts.slice(2).join(':')) || '';
 
   if (error || !code) {
-    return reply.type('text/html').send(buildDeepLinkPage(`${appRedirectUri}?error=cancelado`));
+    if (sessionId) _oauthSessions.set(sessionId, { error: 'cancelado', ts: Date.now() });
+    return reply.type('text/html').send(buildOAuthResultPage(false));
   }
 
   try {
@@ -474,11 +497,154 @@ export async function googleOAuthCallback(request, reply) {
       { expiresIn: '180d' }
     );
 
-    const deepLink = `${appRedirectUri}?token=${encodeURIComponent(jwtToken)}&nombre=${encodeURIComponent(nombreFinal)}&id=${idCliente}`;
-    return reply.type('text/html').send(buildDeepLinkPage(deepLink));
+    if (sessionId) {
+      _oauthSessions.set(sessionId, { token: jwtToken, nombre: nombreFinal, idCliente, ts: Date.now() });
+    }
+    return reply.type('text/html').send(buildOAuthResultPage(true));
   } catch (err) {
     request.log.error(err);
-    return reply.type('text/html').send(buildDeepLinkPage(`${appRedirectUri}?error=servidor`));
+    if (sessionId) _oauthSessions.set(sessionId, { error: 'servidor', ts: Date.now() });
+    return reply.type('text/html').send(buildOAuthResultPage(false));
+  }
+}
+
+// GET /delivery/cliente/google/poll/:sessionId
+export async function googleOAuthPoll(request, reply) {
+  const { sessionId } = request.params;
+  const session = _oauthSessions.get(sessionId);
+  if (!session) return reply.send({ status: 'pending' });
+  _oauthSessions.delete(sessionId);
+  if (session.error) return reply.send({ status: 'error', error: session.error });
+  return reply.send({ status: 'ok', token: session.token, nombre: session.nombre, idCliente: session.idCliente });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — ACTUALIZAR DATOS DE PERFIL
+// PUT /delivery/cliente/perfil
+// ══════════════════════════════════════════════════════════════════════════
+export async function actualizarPerfilCliente(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  const { Nombre, Apellidos, Telefono, Email } = request.body || {};
+  try {
+    const pool = await getPool();
+    await pool.request()
+      .input('idBranch',  sql.BigInt,      idBranch)
+      .input('idCuenta',  sql.BigInt,      idCuenta)
+      .input('idCliente', sql.BigInt,      idCliente)
+      .input('Nombre',    sql.VarChar(200), Nombre?.trim()    || null)
+      .input('Apellidos', sql.VarChar(200), Apellidos?.trim() || null)
+      .input('Telefono',  sql.VarChar(30),  Telefono?.trim()  || null)
+      .input('Email',     sql.VarChar(100), Email?.trim()     || null)
+      .query(`UPDATE VIDA_APP_CLIENTES SET
+                Nombre    = COALESCE(@Nombre,    Nombre),
+                Apellidos = COALESCE(@Apellidos, Apellidos),
+                Telefono  = COALESCE(@Telefono,  Telefono),
+                Email     = COALESCE(@Email,     Email)
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+    const r = await pool.request()
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT Nombre, Apellidos, Telefono, Email, FotoURL FROM VIDA_APP_CLIENTES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+    return reply.send(r.recordset[0]);
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al actualizar perfil' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — SUBIR FOTO DE PERFIL (multipart)
+// POST /delivery/cliente/foto
+// ══════════════════════════════════════════════════════════════════════════
+export async function subirFotoCliente(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  try {
+    const data = await request.file();
+    if (!data) return reply.code(400).send({ error: 'No se recibió archivo' });
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(data.mimetype)) {
+      return reply.code(400).send({ error: 'Solo JPG, PNG o WebP' });
+    }
+    const uploadDir = path.join(process.cwd(), 'uploads', 'fotos-cliente');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    const ext = (data.filename?.split('.').pop() || 'jpg').toLowerCase();
+    const filename = `cli_${idBranch}_${idCuenta}_${idCliente}.${ext}`;
+    fs.writeFileSync(path.join(uploadDir, filename), await data.toBuffer());
+    const fotoURL = `/uploads/fotos-cliente/${filename}`;
+    const pool = await getPool();
+    await pool.request()
+      .input('idBranch',  sql.BigInt,      idBranch)
+      .input('idCuenta',  sql.BigInt,      idCuenta)
+      .input('idCliente', sql.BigInt,      idCliente)
+      .input('FotoURL',   sql.VarChar(500), fotoURL)
+      .query(`UPDATE VIDA_APP_CLIENTES SET FotoURL=@FotoURL
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+    return reply.send({ fotoURL });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al subir foto' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — CAMBIAR CONTRASEÑA
+// PUT /delivery/cliente/password
+// ══════════════════════════════════════════════════════════════════════════
+export async function cambiarPasswordCliente(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  const { actual, nueva } = request.body || {};
+  if (!nueva || nueva.length < 6) {
+    return reply.code(400).send({ error: 'La nueva contraseña debe tener al menos 6 caracteres' });
+  }
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT Contrasena FROM VIDA_APP_CLIENTES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+    const cliente = r.recordset[0];
+    if (cliente?.Contrasena) {
+      if (!actual) return reply.code(400).send({ error: 'Debes ingresar tu contraseña actual' });
+      const ok = await bcrypt.compare(actual, cliente.Contrasena);
+      if (!ok) return reply.code(401).send({ error: 'La contraseña actual es incorrecta' });
+    }
+    const hash = await bcrypt.hash(nueva, 10);
+    await pool.request()
+      .input('idBranch',   sql.BigInt,      idBranch)
+      .input('idCuenta',   sql.BigInt,      idCuenta)
+      .input('idCliente',  sql.BigInt,      idCliente)
+      .input('Contrasena', sql.VarChar(200), hash)
+      .query(`UPDATE VIDA_APP_CLIENTES SET Contrasena=@Contrasena
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+    return reply.send({ ok: true });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al cambiar contraseña' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — ELIMINAR CUENTA (soft delete)
+// DELETE /delivery/cliente
+// ══════════════════════════════════════════════════════════════════════════
+export async function eliminarCuentaCliente(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  try {
+    const pool = await getPool();
+    await pool.request()
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`UPDATE VIDA_APP_CLIENTES SET Status='ELIMINADO'
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+    return reply.send({ ok: true });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al eliminar cuenta' });
   }
 }
 
@@ -937,11 +1103,10 @@ export async function crearPedidoApp(request, reply) {
           .input('idProducto',     sql.BigInt,      item.idProducto)
           .input('Cantidad',       sql.Decimal(18,4), item.Cantidad)
           .input('PrecioUnitario', sql.Decimal(18,4), item.PrecioUnitario)
-          .input('Subtotal',       sql.Decimal(18,4), item.PrecioUnitario * item.Cantidad)
           .query(`INSERT INTO VIDA_PEDIDOS_DETALLE
-                    (idBranch,idCuenta,idPedido,idDetalle,idProducto,Cantidad,PrecioUnitario,Subtotal)
+                    (idBranch,idCuenta,idPedido,idDetalle,idProducto,Cantidad,PrecioUnitario)
                   VALUES
-                    (@idBranch,@idCuenta,@idPedido,@idDetalle,@idProducto,@Cantidad,@PrecioUnitario,@Subtotal)`);
+                    (@idBranch,@idCuenta,@idPedido,@idDetalle,@idProducto,@Cantidad,@PrecioUnitario)`);
       }
 
       await transaction.commit();
@@ -1046,8 +1211,17 @@ export async function estadoPedidoCliente(request, reply) {
                p.UbicacionEntregaLat, p.UbicacionEntregaLon,
                rep.Nombre AS NombreRepartidor,
                rep.Telefono AS TelefonoRepartidor,
+               rep.Vehiculo AS VehiculoRepartidor,
+               rep.PlacaVehiculo AS PlacaRepartidor,
+               rep.FotoURL AS FotoRepartidor,
+               rep.Calificacion AS CalificacionRepartidor,
+               rep.TotalCalificaciones AS TotalCalificacionesRepartidor,
                rep.UltimaLatitud AS LatRepartidor,
-               rep.UltimaLongitud AS LonRepartidor
+               rep.UltimaLongitud AS LonRepartidor,
+               CASE WHEN EXISTS (
+                 SELECT 1 FROM VIDA_REPARTIDORES_CALIFICACIONES c
+                 WHERE c.idBranch=p.idBranch AND c.idCuenta=p.idCuenta AND c.idPedido=p.idPedido
+               ) THEN 1 ELSE 0 END AS YaCalificado
         FROM VIDA_PEDIDOS p
         LEFT JOIN VIDA_REPARTIDORES rep
           ON rep.idBranch=p.idBranch AND rep.idCuenta=p.idCuenta AND rep.idRepartidor=p.idRepartidor
@@ -1063,6 +1237,35 @@ export async function estadoPedidoCliente(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener estado del pedido' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — HISTORIAL DE PEDIDOS
+// GET /delivery/cliente/pedidos
+// ══════════════════════════════════════════════════════════════════════════
+export async function historialPedidosCliente(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`
+        SELECT TOP 50
+          p.idPedido, p.Status, p.MetodoPago, p.TotalUSD,
+          p.FechaAlta AS FechaCreacion, p.DireccionEntrega,
+          (SELECT COUNT(*) FROM VIDA_PEDIDOS_DETALLE d
+           WHERE d.idBranch=p.idBranch AND d.idCuenta=p.idCuenta AND d.idPedido=p.idPedido) AS TotalItems
+        FROM VIDA_PEDIDOS p
+        WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.idCliente=@idCliente
+        ORDER BY p.FechaAlta DESC
+      `);
+    return reply.send(r.recordset);
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener historial' });
   }
 }
 
@@ -1344,7 +1547,8 @@ export async function aceptarPedido(request, reply) {
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
       .input('idPedido', sql.BigInt, idPedido)
-      .query(`SELECT d.idProducto, p.Nombre, d.Cantidad, d.PrecioUnitario, d.Subtotal
+      .query(`SELECT d.idProducto, p.Nombre, d.Cantidad, d.PrecioUnitario,
+                     d.Cantidad * d.PrecioUnitario AS Subtotal
               FROM VIDA_PEDIDOS_DETALLE d
               LEFT JOIN VIDA_INVENTARIO_PRODUCTOS p
                 ON p.idBranch=d.idBranch AND p.idCuenta=d.idCuenta AND p.idProducto=d.idProducto
@@ -1697,6 +1901,39 @@ export async function pedidosActivos(request, reply) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// REPARTIDOR — PEDIDOS DISPONIBLES (BUSCANDO_REPARTIDOR)
+// GET /delivery/repartidor/pedidos-disponibles
+// ══════════════════════════════════════════════════════════════════════════
+export async function pedidosDisponibles(request, reply) {
+  const { idBranch, idCuenta } = request.repartidor;
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .query(`
+        SELECT p.idPedido, p.Status, p.MetodoPago, p.TotalUSD,
+               p.DireccionEntrega, p.UbicacionEntregaLat, p.UbicacionEntregaLon,
+               p.NotasCliente, p.FechaAlta,
+               pv.NomComercial AS NombreSucursal,
+               pv.Latitud AS LatSucursal, pv.Longitud AS LonSucursal,
+               (SELECT COUNT(*) FROM VIDA_PEDIDOS_DETALLE d
+                WHERE d.idBranch=p.idBranch AND d.idCuenta=p.idCuenta AND d.idPedido=p.idPedido) AS TotalItems
+        FROM VIDA_PEDIDOS p
+        LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+          ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
+        WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
+          AND p.Status='BUSCANDO_REPARTIDOR'
+        ORDER BY p.FechaAlta ASC
+      `);
+    return reply.send(r.recordset);
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener pedidos disponibles' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // REPARTIDOR — HISTORIAL PAGINADO
 // GET /delivery/repartidor/historial?page=1&limit=20
 // ══════════════════════════════════════════════════════════════════════════
@@ -1741,6 +1978,181 @@ export async function historialRepartidor(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener historial' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// REPARTIDOR — SUBIR FOTO DE PERFIL (multipart)
+// POST /delivery/repartidor/foto
+// ══════════════════════════════════════════════════════════════════════════
+export async function subirFotoRepartidor(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  try {
+    const data = await request.file();
+    if (!data) return reply.code(400).send({ error: 'No se recibió archivo' });
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(data.mimetype)) {
+      return reply.code(400).send({ error: 'Solo se permiten imágenes JPG, PNG o WebP' });
+    }
+    const uploadDir = path.join(process.cwd(), 'uploads', 'fotos-repartidor');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    const ext = (data.filename?.split('.').pop() || 'jpg').toLowerCase();
+    const filename = `rep_${idBranch}_${idCuenta}_${idRepartidor}.${ext}`;
+    fs.writeFileSync(path.join(uploadDir, filename), await data.toBuffer());
+    const fotoURL = `/uploads/fotos-repartidor/${filename}`;
+    const pool = await getPool();
+    await pool.request()
+      .input('idBranch',     sql.BigInt,      idBranch)
+      .input('idCuenta',     sql.BigInt,      idCuenta)
+      .input('idRepartidor', sql.BigInt,      idRepartidor)
+      .input('FotoURL',      sql.VarChar(500), fotoURL)
+      .query(`UPDATE VIDA_REPARTIDORES SET FotoURL=@FotoURL
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+    return reply.send({ fotoURL });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al subir foto' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// REPARTIDOR — ACTUALIZAR DATOS DE PERFIL
+// PUT /delivery/repartidor/perfil
+// ══════════════════════════════════════════════════════════════════════════
+export async function actualizarPerfilRepartidor(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  const { Nombre, Telefono, Vehiculo, PlacaVehiculo } = request.body || {};
+  try {
+    const pool = await getPool();
+    await pool.request()
+      .input('idBranch',      sql.BigInt,      idBranch)
+      .input('idCuenta',      sql.BigInt,      idCuenta)
+      .input('idRepartidor',  sql.BigInt,      idRepartidor)
+      .input('Nombre',        sql.VarChar(200), Nombre?.trim()        || null)
+      .input('Telefono',      sql.VarChar(30),  Telefono?.trim()      || null)
+      .input('Vehiculo',      sql.VarChar(100), Vehiculo?.trim()      || null)
+      .input('PlacaVehiculo', sql.VarChar(20),  PlacaVehiculo?.trim() || null)
+      .query(`UPDATE VIDA_REPARTIDORES SET
+                Nombre        = COALESCE(@Nombre,        Nombre),
+                Telefono      = COALESCE(@Telefono,      Telefono),
+                Vehiculo      = COALESCE(@Vehiculo,      Vehiculo),
+                PlacaVehiculo = COALESCE(@PlacaVehiculo, PlacaVehiculo)
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+
+    // Devolver los datos actualizados
+    const r = await pool.request()
+      .input('idBranch',     sql.BigInt, idBranch)
+      .input('idCuenta',     sql.BigInt, idCuenta)
+      .input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`SELECT Nombre, Telefono, Vehiculo, PlacaVehiculo, FotoURL,
+                     Calificacion, TotalCalificaciones, SaldoPendiente, ComisionPct
+              FROM VIDA_REPARTIDORES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+
+    return reply.send(r.recordset[0]);
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al actualizar perfil' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// REPARTIDOR — PERFIL COMPLETO CON ESTADÍSTICAS
+// GET /delivery/repartidor/perfil
+// ══════════════════════════════════════════════════════════════════════════
+export async function perfilRepartidorApp(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch',     sql.BigInt, idBranch)
+      .input('idCuenta',     sql.BigInt, idCuenta)
+      .input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`
+        SELECT r.Nombre, r.Telefono, r.Email, r.Vehiculo, r.PlacaVehiculo,
+               r.FotoURL, r.Calificacion, r.TotalCalificaciones,
+               r.SaldoPendiente, r.ComisionPct,
+               (SELECT COUNT(*) FROM VIDA_PEDIDOS p
+                WHERE p.idBranch=r.idBranch AND p.idCuenta=r.idCuenta
+                  AND p.idRepartidor=r.idRepartidor AND p.Status='ENTREGADO') AS TotalPedidosEntregados
+        FROM VIDA_REPARTIDORES r
+        WHERE r.idBranch=@idBranch AND r.idCuenta=@idCuenta AND r.idRepartidor=@idRepartidor
+      `);
+    if (!r.recordset.length) return reply.code(404).send({ error: 'Repartidor no encontrado' });
+    return reply.send(r.recordset[0]);
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener perfil' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — CALIFICAR REPARTIDOR
+// POST /delivery/pedido/:idPedido/calificar
+// ══════════════════════════════════════════════════════════════════════════
+export async function calificarRepartidor(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  const { idPedido } = request.params;
+  const { Estrellas, Comentario } = request.body || {};
+  if (!Estrellas || Estrellas < 1 || Estrellas > 5) {
+    return reply.code(400).send({ error: 'Estrellas debe ser entre 1 y 5' });
+  }
+  try {
+    const pool = await getPool();
+    const pedR = await pool.request()
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idPedido',  sql.BigInt, idPedido)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT idRepartidor, Status FROM VIDA_PEDIDOS
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                AND idPedido=@idPedido AND idCliente=@idCliente`);
+    if (!pedR.recordset.length) return reply.code(404).send({ error: 'Pedido no encontrado' });
+    const pedido = pedR.recordset[0];
+    if (pedido.Status !== 'ENTREGADO') return reply.code(400).send({ error: 'El pedido aún no fue entregado' });
+    if (!pedido.idRepartidor) return reply.code(400).send({ error: 'No hay repartidor asignado' });
+
+    // MERGE: inserta o actualiza la calificación del pedido
+    await pool.request()
+      .input('idBranch',     sql.BigInt,      idBranch)
+      .input('idCuenta',     sql.BigInt,      idCuenta)
+      .input('idRepartidor', sql.BigInt,      pedido.idRepartidor)
+      .input('idPedido',     sql.BigInt,      idPedido)
+      .input('idCliente',    sql.BigInt,      idCliente)
+      .input('Estrellas',    sql.TinyInt,     Estrellas)
+      .input('Comentario',   sql.VarChar(500), Comentario?.trim() || null)
+      .query(`
+        MERGE VIDA_REPARTIDORES_CALIFICACIONES AS t
+        USING (SELECT @idBranch AS idBranch, @idCuenta AS idCuenta, @idPedido AS idPedido) AS s
+          ON t.idBranch=s.idBranch AND t.idCuenta=s.idCuenta AND t.idPedido=s.idPedido
+        WHEN MATCHED THEN
+          UPDATE SET Estrellas=@Estrellas, Comentario=@Comentario
+        WHEN NOT MATCHED THEN
+          INSERT (idBranch,idCuenta,idRepartidor,idPedido,idCliente,Estrellas,Comentario)
+          VALUES (@idBranch,@idCuenta,@idRepartidor,@idPedido,@idCliente,@Estrellas,@Comentario);
+      `);
+
+    // Recalcular promedio en VIDA_REPARTIDORES
+    await pool.request()
+      .input('idBranch',     sql.BigInt, idBranch)
+      .input('idCuenta',     sql.BigInt, idCuenta)
+      .input('idRepartidor', sql.BigInt, pedido.idRepartidor)
+      .query(`
+        UPDATE VIDA_REPARTIDORES
+        SET Calificacion = (
+              SELECT AVG(CAST(Estrellas AS DECIMAL(3,2)))
+              FROM VIDA_REPARTIDORES_CALIFICACIONES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor),
+            TotalCalificaciones = (
+              SELECT COUNT(*) FROM VIDA_REPARTIDORES_CALIFICACIONES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor)
+        WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor
+      `);
+
+    return reply.send({ ok: true });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al calificar' });
   }
 }
 

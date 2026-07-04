@@ -10,6 +10,8 @@ import {
   Linking,
   ActivityIndicator,
   Easing,
+  Image,
+  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,12 +34,12 @@ const PASOS = [
 function normalizeStatus(raw) {
   if (!raw) return 'BUSCANDO';
   const s = String(raw).toUpperCase();
-  if (s.includes('BUSCAN') || s === 'PENDIENTE' || s === 'NUEVO') return 'BUSCANDO';
-  if (s.includes('ASIGNA')) return 'ASIGNADO';
-  if (s.includes('CAMINO') && s.includes('TIENDA')) return 'EN_CAMINO_TIENDA';
-  if (s.includes('TIENDA')) return 'EN_TIENDA';
-  if (s.includes('CAMINO')) return 'EN_CAMINO';
-  if (s.includes('ENTREGA') || s === 'COMPLETADO') return 'ENTREGADO';
+  if (s === 'BUSCANDO_REPARTIDOR' || s.includes('BUSCAN') || s === 'PENDIENTE' || s === 'NUEVO') return 'BUSCANDO';
+  if (s === 'REPARTIDOR_ASIGNADO' || s.includes('ASIGNA')) return 'ASIGNADO';
+  if (s === 'IR_A_SUCURSAL') return 'EN_CAMINO_TIENDA';
+  if (s === 'EN_SUCURSAL') return 'EN_TIENDA';
+  if (s === 'EN_CAMINO') return 'EN_CAMINO';
+  if (s === 'ENTREGADO' || s.includes('ENTREGA') || s === 'COMPLETADO') return 'ENTREGADO';
   return 'BUSCANDO';
 }
 
@@ -57,13 +59,16 @@ export default function SeguimientoScreen() {
   const [estado, setEstado] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [calificacion, setCalificacion] = useState(0);
+  const [calificado, setCalificado] = useState(false);
+  const [enviandoCalif, setEnviandoCalif] = useState(false);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const wsRef = useRef(null);
   const pollingRef = useRef(null);
   const confettiAnim = useRef(new Animated.Value(0)).current;
 
-  const stepIndex = estado ? PASOS.findIndex((p) => p.key === normalizeStatus(estado.EstadoPedido ?? estado.estado)) : 0;
+  const stepIndex = estado ? PASOS.findIndex((p) => p.key === normalizeStatus(estado.Status ?? estado.EstadoPedido ?? estado.estado)) : 0;
   const isDelivered = stepIndex === PASOS.length - 1;
   const isBuscando = stepIndex === 0;
 
@@ -89,7 +94,9 @@ export default function SeguimientoScreen() {
   const fetchEstado = useCallback(async () => {
     try {
       const res = await api.get(`/delivery/pedido/${idPedido}/estado`);
-      setEstado(res.data?.pedido ?? res.data);
+      const data = res.data?.pedido ?? res.data;
+      setEstado(data);
+      if (data?.YaCalificado) setCalificado(true);
       setError('');
     } catch (e) {
       setError(e.message);
@@ -118,7 +125,7 @@ export default function SeguimientoScreen() {
         try {
           const msg = JSON.parse(e.data);
           if (msg.tipo === 'status_pedido' && String(msg.idPedido) === String(idPedido)) {
-            setEstado((prev) => ({ ...prev, EstadoPedido: msg.estado }));
+            setEstado((prev) => ({ ...prev, Status: msg.estado, EstadoPedido: msg.estado }));
           }
           if (msg.tipo === 'pedido_asignado' && String(msg.idPedido) === String(idPedido)) {
             fetchEstado();
@@ -134,7 +141,34 @@ export default function SeguimientoScreen() {
     };
   }, [token, idPedido]);
 
-  const repartidor = estado?.repartidor ?? estado?.Repartidor;
+  const repartidor = estado?.repartidor ?? estado?.Repartidor ?? (
+    estado?.NombreRepartidor ? {
+      Nombre: estado.NombreRepartidor,
+      Telefono: estado.TelefonoRepartidor,
+      FotoURL: estado.FotoRepartidor,
+      Vehiculo: estado.VehiculoRepartidor,
+      PlacaVehiculo: estado.PlacaRepartidor,
+      Calificacion: estado.CalificacionRepartidor,
+      TotalCalificaciones: estado.TotalCalificacionesRepartidor,
+    } : null
+  );
+
+  const BASE_URL_IMG = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') ?? '';
+
+  const enviarCalificacion = async (estrellas) => {
+    if (enviandoCalif || calificado) return;
+    setCalificacion(estrellas);
+    setEnviandoCalif(true);
+    try {
+      await api.post(`/delivery/pedido/${idPedido}/calificar`, { Estrellas: estrellas });
+      setCalificado(true);
+      Alert.alert('¡Gracias!', 'Tu calificación fue enviada.');
+    } catch {
+      Alert.alert('Error', 'No se pudo enviar la calificación. Intenta de nuevo.');
+    } finally {
+      setEnviandoCalif(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -228,26 +262,81 @@ export default function SeguimientoScreen() {
           {/* Repartidor info */}
           {repartidor && (
             <View style={styles.repartidorCard}>
-              <View style={styles.repartidorAvatar}>
-                <Text style={styles.repartidorInitial}>
-                  {(repartidor.Nombre ?? repartidor.nombre ?? 'R')[0].toUpperCase()}
-                </Text>
+              <View style={styles.repartidorTop}>
+                {repartidor.FotoURL ? (
+                  <Image
+                    source={{ uri: BASE_URL_IMG + repartidor.FotoURL }}
+                    style={styles.repartidorFoto}
+                  />
+                ) : (
+                  <View style={styles.repartidorAvatar}>
+                    <Text style={styles.repartidorInitial}>
+                      {(repartidor.Nombre ?? 'R')[0].toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.repartidorInfo}>
+                  <Text style={styles.repartidorNombre}>{repartidor.Nombre}</Text>
+                  <Text style={styles.repartidorLabel}>Tu repartidor</Text>
+                  {repartidor.Calificacion != null && (
+                    <View style={styles.ratingRow}>
+                      <Ionicons name="star" size={13} color="#F6AD55" />
+                      <Text style={styles.ratingText}>
+                        {parseFloat(repartidor.Calificacion).toFixed(1)}
+                        <Text style={styles.ratingTotal}> ({repartidor.TotalCalificaciones ?? 0})</Text>
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                {repartidor.Telefono && (
+                  <TouchableOpacity
+                    style={styles.callBtn}
+                    onPress={() => Linking.openURL(`tel:${repartidor.Telefono}`)}
+                  >
+                    <Ionicons name="call" size={18} color="#fff" />
+                  </TouchableOpacity>
+                )}
               </View>
-              <View style={styles.repartidorInfo}>
-                <Text style={styles.repartidorNombre}>
-                  {repartidor.Nombre ?? repartidor.nombre}
-                </Text>
-                <Text style={styles.repartidorLabel}>Tu repartidor</Text>
-              </View>
-              {(repartidor.Telefono ?? repartidor.telefono) && (
-                <TouchableOpacity
-                  style={styles.callBtn}
-                  onPress={() =>
-                    Linking.openURL(`tel:${repartidor.Telefono ?? repartidor.telefono}`)
-                  }
-                >
-                  <Ionicons name="call" size={18} color="#fff" />
-                </TouchableOpacity>
+
+              {(repartidor.Vehiculo || repartidor.PlacaVehiculo) && (
+                <View style={styles.repartidorVehiculo}>
+                  <Ionicons name="bicycle-outline" size={15} color="#718096" />
+                  <Text style={styles.repartidorVehiculoText}>
+                    {[repartidor.Vehiculo, repartidor.PlacaVehiculo].filter(Boolean).join(' · ')}
+                  </Text>
+                </View>
+              )}
+
+              {/* Widget de calificación — solo cuando está entregado */}
+              {isDelivered && !calificado && (
+                <View style={styles.califSection}>
+                  <Text style={styles.califTitle}>¿Cómo fue tu repartidor?</Text>
+                  <View style={styles.starsRow}>
+                    {[1,2,3,4,5].map(n => (
+                      <TouchableOpacity
+                        key={n}
+                        onPress={() => enviarCalificacion(n)}
+                        disabled={enviandoCalif}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name={n <= calificacion ? 'star' : 'star-outline'}
+                          size={34}
+                          color="#F6AD55"
+                          style={{ marginHorizontal: 4 }}
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {enviandoCalif && <ActivityIndicator size="small" color="#1A6A9A" style={{ marginTop: 8 }} />}
+                </View>
+              )}
+
+              {isDelivered && calificado && (
+                <View style={styles.califDone}>
+                  <Ionicons name="checkmark-circle" size={18} color="#27AE60" />
+                  <Text style={styles.califDoneText}>Calificación enviada. ¡Gracias!</Text>
+                </View>
               )}
             </View>
           )}
@@ -394,8 +483,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -403,27 +490,48 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  repartidorAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#1A6A9A',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+  repartidorTop: { flexDirection: 'row', alignItems: 'center' },
+  repartidorFoto: {
+    width: 52, height: 52, borderRadius: 26,
+    marginRight: 12, backgroundColor: '#EDF2F7',
   },
-  repartidorInitial: { color: '#fff', fontSize: 18, fontWeight: '800' },
+  repartidorAvatar: {
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: '#1A6A9A',
+    justifyContent: 'center', alignItems: 'center', marginRight: 12,
+  },
+  repartidorInitial: { color: '#fff', fontSize: 20, fontWeight: '800' },
   repartidorInfo: { flex: 1 },
   repartidorNombre: { fontSize: 15, fontWeight: '700', color: '#1A202C' },
   repartidorLabel: { fontSize: 12, color: '#718096' },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 },
+  ratingText: { fontSize: 13, fontWeight: '700', color: '#F6AD55' },
+  ratingTotal: { fontSize: 11, color: '#A0AEC0', fontWeight: '400' },
+  repartidorVehiculo: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginTop: 10, paddingTop: 10,
+    borderTopWidth: 1, borderTopColor: '#EDF2F7',
+  },
+  repartidorVehiculoText: { fontSize: 13, color: '#718096' },
   callBtn: {
     backgroundColor: '#27AE60',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
+    width: 40, height: 40, borderRadius: 20,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  califSection: {
+    marginTop: 12, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: '#EDF2F7',
     alignItems: 'center',
   },
+  califTitle: { fontSize: 14, fontWeight: '700', color: '#4A5568', marginBottom: 10 },
+  starsRow: { flexDirection: 'row', alignItems: 'center' },
+  califDone: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginTop: 12, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: '#EDF2F7',
+    justifyContent: 'center',
+  },
+  califDoneText: { fontSize: 13, color: '#27AE60', fontWeight: '600' },
 
   mapPlaceholder: {
     height: 160,

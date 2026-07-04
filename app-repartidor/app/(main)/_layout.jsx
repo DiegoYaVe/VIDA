@@ -1,31 +1,30 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Stack, useRouter, usePathname } from 'expo-router';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Switch,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { useEffect } from 'react';
+import { Tabs, useRouter, usePathname } from 'expo-router';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
-import useAuthStore from '../../store/authStore';
-import api from '../../services/api';
+import usePedidoStore from '../../store/pedidoStore';
 import { registrarPushToken, escucharTapsNotificacion } from '../../services/push';
-import { iniciarUbicacionBackground, detenerUbicacionBackground } from '../../services/backgroundLocation';
+
+const STATUS_LABELS = {
+  IR_A_SUCURSAL: 'Yendo a sucursal',
+  EN_SUCURSAL: 'En sucursal',
+  EN_CAMINO: 'En camino al cliente',
+  ENTREGADO: 'Entregado',
+};
+
+const STATUS_COLORS = {
+  IR_A_SUCURSAL: '#1A6A9A',
+  EN_SUCURSAL: '#7B3FBE',
+  EN_CAMINO: '#E67E22',
+  ENTREGADO: '#27AE60',
+};
 
 export default function MainLayout() {
-  const repartidor = useAuthStore((s) => s.repartidor);
-  const [disponible, setDisponible] = useState(false);
-  const [toggling, setToggling] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const pedidoActivo = usePedidoStore((s) => s.pedidoActivo);
 
-  // Push: registrar token al entrar (ya autenticado) y navegar al home
-  // cuando el repartidor toca una notificación de pedido
   useEffect(() => {
     registrarPushToken();
     return escucharTapsNotificacion((data) => {
@@ -35,122 +34,130 @@ export default function MainLayout() {
     });
   }, []);
 
-  const handleToggle = useCallback(async (value) => {
-    setToggling(true);
-    try {
-      if (value) {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          setToggling(false);
-          return;
-        }
-        const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-        await api.post('/delivery/repartidor/disponible', {
-          disponible: true,
-          Latitud: loc.coords.latitude,
-          Longitud: loc.coords.longitude,
-        });
-        iniciarUbicacionBackground();
-      } else {
-        await api.post('/delivery/repartidor/disponible', { disponible: false });
-        detenerUbicacionBackground();
-      }
-      setDisponible(value);
-    } catch (e) {
-      // could show an alert here
-    } finally {
-      setToggling(false);
-    }
-  }, []);
-
-  const isHistorial = pathname === '/(main)/historial';
-  const isPerfil = pathname === '/(main)/perfil';
+  // Banner visible en todas las tabs excepto Inicio cuando hay pedido activo
+  const isInicio = pathname === '/(main)' || pathname === '/(main)/index';
+  const showBanner = !!pedidoActivo && !isInicio;
+  const bannerColor = STATUS_COLORS[pedidoActivo?.Status] || '#1A6A9A';
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#F5F7FA' }}>
-      {/* Custom header */}
-      <SafeAreaView edges={['top']} style={[styles.header, disponible ? styles.headerOnline : styles.headerOffline]}>
-        <View style={styles.headerContent}>
-          {/* Left: back or title */}
-          <View style={styles.headerLeft}>
-            {(isHistorial || isPerfil) ? (
-              <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                <Ionicons name="chevron-back" size={22} color="#fff" />
-              </TouchableOpacity>
-            ) : null}
-            <View>
-              <Text style={styles.headerGreeting}>Hola, {repartidor?.Nombre || 'Repartidor'}</Text>
-              <Text style={styles.headerStatus}>
-                {disponible ? '● En línea' : '● Desconectado'}
+    <View style={{ flex: 1 }}>
+      {showBanner && (
+        <SafeAreaView edges={['top']} style={[styles.bannerSafe, { backgroundColor: bannerColor }]}>
+          <TouchableOpacity style={styles.banner} onPress={() => router.push('/(main)')} activeOpacity={0.85}>
+            <View style={styles.bannerPulse} />
+            <View style={styles.bannerInfo}>
+              <Text style={styles.bannerTitle}>
+                Pedido #{pedidoActivo?.idPedido || pedidoActivo?.id} · activo
+              </Text>
+              <Text style={styles.bannerSub}>
+                {STATUS_LABELS[pedidoActivo?.Status] || 'En proceso'} — toca para ver
               </Text>
             </View>
-          </View>
+            <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.9)" />
+          </TouchableOpacity>
+        </SafeAreaView>
+      )}
 
-          {/* Right: toggle + nav icons */}
-          <View style={styles.headerRight}>
-            {toggling ? (
-              <ActivityIndicator color="#fff" size="small" style={{ marginRight: 12 }} />
-            ) : (
-              <Switch
-                value={disponible}
-                onValueChange={handleToggle}
-                trackColor={{ false: 'rgba(255,255,255,0.3)', true: '#27AE60' }}
-                thumbColor="#fff"
-                ios_backgroundColor="rgba(255,255,255,0.3)"
-                style={{ marginRight: 8 }}
-              />
-            )}
-            {!isHistorial && (
-              <TouchableOpacity onPress={() => router.push('/(main)/historial')} style={styles.navBtn}>
-                <Ionicons name="time-outline" size={22} color="#fff" />
-              </TouchableOpacity>
-            )}
-            {!isPerfil && (
-              <TouchableOpacity onPress={() => router.push('/(main)/perfil')} style={styles.navBtn}>
-                <Ionicons name="person-circle-outline" size={24} color="#fff" />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </SafeAreaView>
-
-      {/* Screens pass disponible via context/prop — we use a global store instead */}
-      <Stack
-        screenOptions={{ headerShown: false }}
-        // Pass disponible state down via initial params
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: '#1A6A9A',
+          tabBarInactiveTintColor: '#A0AEC0',
+          tabBarStyle: styles.tabBar,
+          tabBarLabelStyle: styles.tabLabel,
+        }}
       >
-        <Stack.Screen name="index" initialParams={{ disponible }} />
-        <Stack.Screen name="historial" />
-        <Stack.Screen name="perfil" />
-      </Stack>
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Inicio',
+            tabBarIcon: ({ color, focused }) => (
+              <View style={styles.tabIconWrap}>
+                <Ionicons name={focused ? 'map' : 'map-outline'} size={24} color={color} />
+                {/* Badge si hay pedido activo */}
+                {!!pedidoActivo && (
+                  <View style={styles.badge} />
+                )}
+              </View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="ganancias"
+          options={{
+            title: 'Ganancias',
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'cash' : 'cash-outline'} size={24} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="historial"
+          options={{
+            title: 'Historial',
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'time' : 'time-outline'} size={24} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="perfil"
+          options={{
+            title: 'Perfil',
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
+            ),
+          }}
+        />
+      </Tabs>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  headerOffline: { backgroundColor: '#2D3748' },
-  headerOnline: { backgroundColor: '#1A6A9A' },
-  headerContent: {
+  bannerSafe: {},
+  banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    paddingBottom: Platform.OS === 'android' ? 14 : 10,
+    gap: 12,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  backBtn: { marginRight: 8, padding: 2 },
-  headerGreeting: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  headerStatus: { color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 1 },
-  headerRight: { flexDirection: 'row', alignItems: 'center' },
-  navBtn: { padding: 4, marginLeft: 4 },
+  bannerPulse: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#fff',
+    opacity: 0.9,
+  },
+  bannerInfo: { flex: 1 },
+  bannerTitle: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  bannerSub: { color: 'rgba(255,255,255,0.85)', fontSize: 11, marginTop: 1 },
+
+  tabBar: {
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#EDF2F7',
+    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+    paddingTop: 8,
+    height: Platform.OS === 'ios' ? 82 : 64,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  tabLabel: { fontSize: 11, fontWeight: '600', marginTop: 2 },
+  tabIconWrap: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E67E22',
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
 });

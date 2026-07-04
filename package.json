@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "@fastify/multipart": "^10.0.0"
+    "@fastify/multipart": "^10.0.0",
+    "react-native-webview": "^14.0.1"
   }
 }

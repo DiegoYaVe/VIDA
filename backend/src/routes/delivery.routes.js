@@ -8,7 +8,12 @@ import {
   confirmarEmailCliente,
   googleOAuthStart,
   googleOAuthCallback,
+  googleOAuthPoll,
   actualizarFcmCliente,
+  actualizarPerfilCliente,
+  subirFotoCliente,
+  cambiarPasswordCliente,
+  eliminarCuentaCliente,
   listarDireccionesCliente,
   guardarDireccionCliente,
   eliminarDireccionCliente,
@@ -18,6 +23,7 @@ import {
   listarProductosApp,
   crearPedidoApp,
   estadoPedidoCliente,
+  historialPedidosCliente,
   // Repartidor
   registrarRepartidor,
   loginRepartidor,
@@ -25,10 +31,16 @@ import {
   actualizarUbicacion,
   actualizarFcmRepartidor,
   subirEvidenciaEntrega,
+  subirFotoRepartidor,
+  perfilRepartidorApp,
+  actualizarPerfilRepartidor,
   aceptarPedido,
   actualizarStatusPedido,
   pedidosActivos,
+  pedidosDisponibles,
   historialRepartidor,
+  // Cliente extra
+  calificarRepartidor,
   // Admin
   listarRepartidores,
   crearRepartidor,
@@ -51,8 +63,9 @@ export async function deliveryRoutes(fastify) {
   fastify.post('/delivery/cliente/registro',        registrarCliente);
   fastify.post('/delivery/cliente/login',           loginCliente);
   fastify.get('/delivery/cliente/confirmar-email',  confirmarEmailCliente);
-  fastify.get('/delivery/cliente/google/start',     googleOAuthStart);
-  fastify.get('/delivery/cliente/google/callback',  googleOAuthCallback);
+  fastify.get('/delivery/cliente/google/start',          googleOAuthStart);
+  fastify.get('/delivery/cliente/google/callback',       googleOAuthCallback);
+  fastify.get('/delivery/cliente/google/poll/:sessionId', googleOAuthPoll);
 
   // ── Cliente autenticado ───────────────────────────────────────────────
   fastify.put('/delivery/cliente/fcm',
@@ -75,6 +88,10 @@ export async function deliveryRoutes(fastify) {
     { preHandler: [authenticateCliente] },
     crearPedidoApp);
 
+  fastify.get('/delivery/cliente/pedidos',
+    { preHandler: [authenticateCliente] },
+    historialPedidosCliente);
+
   fastify.get('/delivery/pedido/:idPedido/estado',
     { preHandler: [authenticateCliente] },
     estadoPedidoCliente);
@@ -82,6 +99,26 @@ export async function deliveryRoutes(fastify) {
   fastify.post('/delivery/pedido/:idPedido/comprobante',
     { preHandler: [authenticateCliente] },
     subirComprobanteCliente);
+
+  fastify.post('/delivery/pedido/:idPedido/calificar',
+    { preHandler: [authenticateCliente] },
+    calificarRepartidor);
+
+  fastify.put('/delivery/cliente/perfil',
+    { preHandler: [authenticateCliente] },
+    actualizarPerfilCliente);
+
+  fastify.post('/delivery/cliente/foto',
+    { preHandler: [authenticateCliente] },
+    subirFotoCliente);
+
+  fastify.put('/delivery/cliente/password',
+    { preHandler: [authenticateCliente] },
+    cambiarPasswordCliente);
+
+  fastify.delete('/delivery/cliente',
+    { preHandler: [authenticateCliente] },
+    eliminarCuentaCliente);
 
   // ── Repartidor — auth ─────────────────────────────────────────────────
   fastify.post('/delivery/repartidor/registro', registrarRepartidor);
@@ -115,9 +152,25 @@ export async function deliveryRoutes(fastify) {
     { preHandler: [authenticateRepartidor] },
     pedidosActivos);
 
+  fastify.get('/delivery/repartidor/pedidos-disponibles',
+    { preHandler: [authenticateRepartidor] },
+    pedidosDisponibles);
+
   fastify.get('/delivery/repartidor/historial',
     { preHandler: [authenticateRepartidor] },
     historialRepartidor);
+
+  fastify.get('/delivery/repartidor/perfil',
+    { preHandler: [authenticateRepartidor] },
+    perfilRepartidorApp);
+
+  fastify.put('/delivery/repartidor/perfil',
+    { preHandler: [authenticateRepartidor] },
+    actualizarPerfilRepartidor);
+
+  fastify.post('/delivery/repartidor/foto',
+    { preHandler: [authenticateRepartidor] },
+    subirFotoRepartidor);
 
   // ── Admin — panel web (JWT empleado + rol) ────────────────────────────
   fastify.get('/delivery/admin/repartidores',

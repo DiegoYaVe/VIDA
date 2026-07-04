@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -65,22 +65,47 @@ export default function LoginScreen() {
     setError('');
     setGoogleLoading(true);
     try {
-      const appRedirectUri = Linking.createURL('google-auth');
-      const googleUrl = `${API_URL}/delivery/cliente/google/start?idBranch=${ID_BRANCH}&idCuenta=${ID_CUENTA}&appRedirectUri=${encodeURIComponent(appRedirectUri)}`;
-      const result = await WebBrowser.openAuthSessionAsync(googleUrl, appRedirectUri);
+      // Generar sessionId único para polling
+      const sessionId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      const googleUrl = `${API_URL}/delivery/cliente/google/start?idBranch=${ID_BRANCH}&idCuenta=${ID_CUENTA}&sessionId=${sessionId}`;
 
-      if (result.type !== 'success') { setGoogleLoading(false); return; }
+      // Iniciar polling ANTES de abrir el browser
+      let pollResult = null;
+      const pollInterval = setInterval(async () => {
+        try {
+          const r = await fetch(`${API_URL}/delivery/cliente/google/poll/${sessionId}`);
+          const data = await r.json();
+          if (data.status === 'ok') {
+            pollResult = data;
+            clearInterval(pollInterval);
+            WebBrowser.dismissBrowser();
+          } else if (data.status === 'error') {
+            pollResult = { error: data.error };
+            clearInterval(pollInterval);
+            WebBrowser.dismissBrowser();
+          }
+        } catch (_) { /* red ocupada, ignorar */ }
+      }, 1500);
 
-      // Parsear el deep link de retorno
-      const parsed = Linking.parse(result.url);
-      const { token, nombre, id, error: authError } = parsed.queryParams || {};
+      await WebBrowser.openBrowserAsync(googleUrl, { showTitle: false, enableBarCollapsing: true });
+      clearInterval(pollInterval);
 
-      if (authError || !token) {
+      // Si el poll ya trajo resultado úsalo; si no, esperar un tick más
+      if (!pollResult) {
+        await new Promise(r => setTimeout(r, 1000));
+        try {
+          const r = await fetch(`${API_URL}/delivery/cliente/google/poll/${sessionId}`);
+          const data = await r.json();
+          if (data.status === 'ok') pollResult = data;
+        } catch (_) {}
+      }
+
+      if (!pollResult || pollResult.error || !pollResult.token) {
         setError('No se pudo iniciar sesión con Google');
         return;
       }
-      await AsyncStorage.setItem('vida_cliente_token', token);
-      login({ cliente: { idCliente: Number(id), Nombre: nombre }, token });
+      await AsyncStorage.setItem('vida_cliente_token', pollResult.token);
+      login({ cliente: { idCliente: Number(pollResult.idCliente), Nombre: pollResult.nombre }, token: pollResult.token });
     } catch (e) {
       setError(e.message);
     } finally {

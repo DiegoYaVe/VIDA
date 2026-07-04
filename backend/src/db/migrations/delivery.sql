@@ -100,3 +100,32 @@ ALTER TABLE VIDA_PEDIDOS ADD
   MontoEfectivoRepartidor DECIMAL(18,4) NULL;
 -- VIDA_PEDIDOS.Canal ya soportaba 'POS'; ahora también acepta 'APP'
 -- VIDA_PEDIDOS.Status nuevos valores: BUSCANDO_REPARTIDOR | REPARTIDOR_ASIGNADO | IR_A_SUCURSAL | EN_SUCURSAL | EN_CAMINO
+
+-- ── Columnas adicionales para perfil de cliente ──────────
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('VIDA_APP_CLIENTES') AND name='FotoURL')
+  ALTER TABLE VIDA_APP_CLIENTES ADD FotoURL VARCHAR(500) NULL;
+
+-- ── Columnas adicionales para perfil de repartidor ────────
+-- (Ejecutar con IF NOT EXISTS para no fallar si ya existen)
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('VIDA_REPARTIDORES') AND name='Email')
+  ALTER TABLE VIDA_REPARTIDORES ADD Email VARCHAR(100) NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('VIDA_REPARTIDORES') AND name='FotoURL')
+  ALTER TABLE VIDA_REPARTIDORES ADD FotoURL VARCHAR(500) NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('VIDA_REPARTIDORES') AND name='Calificacion')
+  ALTER TABLE VIDA_REPARTIDORES ADD Calificacion DECIMAL(3,2) NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('VIDA_REPARTIDORES') AND name='TotalCalificaciones')
+  ALTER TABLE VIDA_REPARTIDORES ADD TotalCalificaciones INT NOT NULL DEFAULT 0;
+
+-- ── Calificaciones de repartidores ────────────────────────
+IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE name='VIDA_REPARTIDORES_CALIFICACIONES' AND type='U')
+CREATE TABLE VIDA_REPARTIDORES_CALIFICACIONES (
+  idBranch     BIGINT       NOT NULL,
+  idCuenta     BIGINT       NOT NULL,
+  idRepartidor BIGINT       NOT NULL,
+  idPedido     BIGINT       NOT NULL,
+  idCliente    BIGINT       NOT NULL,
+  Estrellas    TINYINT      NOT NULL,
+  Comentario   VARCHAR(500) NULL,
+  FechaAlta    DATETIME     NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT PK_REP_CALIFICACIONES PRIMARY KEY (idBranch, idCuenta, idPedido)
+);

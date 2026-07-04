@@ -120,6 +120,27 @@ export default function HomeScreen() {
     return list;
   }, [productos, sucursalActiva, categoriaActiva, search]);
 
+  // Búsqueda por tienda: agrupa productos coincidentes por sucursal (3+ chars)
+  const tiendaBusqueda = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (q.length < 3) return null;
+    const mapa = new Map();
+    productos.forEach(p => {
+      if (!(p.Nombre || '').toLowerCase().includes(q) &&
+          !(p.NombreSucursal || '').toLowerCase().includes(q)) return;
+      const id = p.idPuntoVenta;
+      if (!mapa.has(id)) {
+        mapa.set(id, {
+          idPuntoVenta: id,
+          NombreSucursal: p.NombreSucursal || 'Tienda',
+          productos: [],
+        });
+      }
+      mapa.get(id).productos.push(p);
+    });
+    return [...mapa.values()];
+  }, [search, productos]);
+
   const nombreSucursalActiva = useMemo(() => {
     if (!sucursalActiva) return 'Todas las tiendas';
     const s = sucursales.find(x => String(x.idPuntoVenta ?? x.id) === String(sucursalActiva));
@@ -255,15 +276,61 @@ export default function HomeScreen() {
         ) : null}
       </View>
 
-      {/* Título de sección con flecha */}
-      <View style={styles.seccionRow}>
-        <Text style={styles.seccionTitulo}>
-          {sucursalActiva || categoriaActiva || search ? 'Resultados' : 'Destacados en VIDA'}
-        </Text>
-        <View style={styles.seccionArrow}>
-          <Ionicons name="arrow-forward" size={18} color="#1A202C" />
+      {/* Cuando hay búsqueda de 3+ chars: mostrar tiendas con productos */}
+      {tiendaBusqueda !== null ? (
+        <View style={styles.searchResultsWrap}>
+          <Text style={styles.searchResultsTitle}>
+            {tiendaBusqueda.length === 0
+              ? 'Sin resultados para "' + search.trim() + '"'
+              : `${tiendaBusqueda.length} tienda${tiendaBusqueda.length !== 1 ? 's' : ''} con "${search.trim()}"`}
+          </Text>
+          {tiendaBusqueda.map(tienda => (
+            <TouchableOpacity
+              key={tienda.idPuntoVenta}
+              style={styles.tiendaResultCard}
+              onPress={() => { setSucursalActiva(tienda.idPuntoVenta); setSearch(''); }}
+              activeOpacity={0.8}
+            >
+              <View style={styles.tiendaResultHeader}>
+                <View style={styles.tiendaResultIconWrap}>
+                  <Ionicons name="storefront" size={18} color="#1A6A9A" />
+                </View>
+                <Text style={styles.tiendaResultNombre} numberOfLines={1}>{tienda.NombreSucursal}</Text>
+                <View style={styles.tiendaResultBadge}>
+                  <Text style={styles.tiendaResultBadgeText}>{tienda.productos.length} producto{tienda.productos.length !== 1 ? 's' : ''}</Text>
+                </View>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tiendaResultProds}>
+                {tienda.productos.slice(0, 6).map(p => (
+                  <TouchableOpacity
+                    key={p.idProducto}
+                    style={styles.miniProdCard}
+                    onPress={() => { setProductoAbierto(p); setSearch(''); }}
+                    activeOpacity={0.85}
+                  >
+                    <Image
+                      source={{ uri: absImg(p.ImagenProducto) || PLACEHOLDER }}
+                      style={styles.miniProdImg}
+                    />
+                    <Text style={styles.miniProdNombre} numberOfLines={2}>{p.Nombre}</Text>
+                    <Text style={styles.miniProdPrecio}>${parseFloat(p.PrecioUSD || 0).toFixed(2)}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </TouchableOpacity>
+          ))}
         </View>
-      </View>
+      ) : (
+        /* Título de sección con flecha */
+        <View style={styles.seccionRow}>
+          <Text style={styles.seccionTitulo}>
+            {sucursalActiva || categoriaActiva ? 'Resultados' : 'Destacados en VIDA'}
+          </Text>
+          <View style={styles.seccionArrow}>
+            <Ionicons name="arrow-forward" size={18} color="#1A202C" />
+          </View>
+        </View>
+      )}
     </View>
   );
 
@@ -511,4 +578,36 @@ const styles = StyleSheet.create({
   floatingCartBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900' },
   floatingCartText: { flex: 1, color: '#fff', fontWeight: '800', fontSize: 15, marginLeft: 4 },
   floatingCartPrice: { color: '#fff', fontWeight: '900', fontSize: 16 },
+
+  // Resultados de búsqueda por tienda
+  searchResultsWrap: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  searchResultsTitle: { fontSize: 13, fontWeight: '700', color: '#718096', marginBottom: 12 },
+  tiendaResultCard: {
+    backgroundColor: '#fff', borderRadius: 16, marginBottom: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07, shadowRadius: 8, elevation: 2,
+    overflow: 'hidden',
+  },
+  tiendaResultHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10,
+  },
+  tiendaResultIconWrap: {
+    width: 34, height: 34, borderRadius: 10,
+    backgroundColor: '#EBF8FF', alignItems: 'center', justifyContent: 'center',
+  },
+  tiendaResultNombre: { flex: 1, fontSize: 15, fontWeight: '800', color: '#1A202C' },
+  tiendaResultBadge: {
+    backgroundColor: '#EBF8FF', borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  tiendaResultBadgeText: { fontSize: 11, fontWeight: '700', color: '#1A6A9A' },
+  tiendaResultProds: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
+  miniProdCard: { width: 100 },
+  miniProdImg: {
+    width: 100, height: 72, borderRadius: 10,
+    backgroundColor: '#F3F4F6', resizeMode: 'cover',
+  },
+  miniProdNombre: { fontSize: 12, fontWeight: '600', color: '#1A202C', marginTop: 5, lineHeight: 16 },
+  miniProdPrecio: { fontSize: 12, fontWeight: '800', color: '#27AE60', marginTop: 2 },
 });
