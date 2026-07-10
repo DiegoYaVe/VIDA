@@ -23,7 +23,9 @@ const STATUS_COLORS = {
 export default function MainLayout() {
   const router = useRouter();
   const pathname = usePathname();
-  const pedidoActivo = usePedidoStore((s) => s.pedidoActivo);
+  const pedidosActivos = usePedidoStore((s) => s.pedidosActivos);
+  // El banner resume la parada más próxima de la ruta
+  const pedidoActivo = pedidosActivos.length > 0 ? pedidosActivos[0] : null;
 
   useEffect(() => {
     registrarPushToken();
@@ -47,7 +49,9 @@ export default function MainLayout() {
             <View style={styles.bannerPulse} />
             <View style={styles.bannerInfo}>
               <Text style={styles.bannerTitle}>
-                Pedido #{pedidoActivo?.idPedido || pedidoActivo?.id} · activo
+                {pedidosActivos.length > 1
+                  ? `${pedidosActivos.length} pedidos en ruta · próximo #${pedidoActivo?.idPedido || pedidoActivo?.id}`
+                  : `Pedido #${pedidoActivo?.idPedido || pedidoActivo?.id} · activo`}
               </Text>
               <Text style={styles.bannerSub}>
                 {STATUS_LABELS[pedidoActivo?.Status] || 'En proceso'} — toca para ver

@@ -3,6 +3,7 @@ import { getPool, sql } from '../db/sqlserver.js';
 import { broadcast } from '../ws/ws.manager.js';
 import { enviarPush } from '../services/push.service.js';
 import { registrarAuditoria } from '../services/audit.service.js';
+import { recalcularRuta, recalcularRutaThrottled, STATUS_ACTIVOS_REPARTIDOR } from '../services/rutas.service.js';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import path from 'path';
@@ -1115,8 +1116,28 @@ export async function crearPedidoApp(request, reply) {
       throw txErr;
     }
 
+    // Deadline de búsqueda: pasado este tiempo sin repartidor el job de
+    // despacho cancela el pedido (el cliente puede extenderlo desde la app)
+    const cancelMin = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'TiempoCancelacionBusquedaMin', '25')) || 25;
+    await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('idPedido', sql.BigInt, idPedido)
+      .input('min',      sql.Int,    cancelMin)
+      .query(`UPDATE VIDA_PEDIDOS SET FechaLimiteBusqueda = DATEADD(MINUTE, @min, GETDATE())
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
+
     // ── Buscar repartidores disponibles ───────────────────────────────────
-    const radioKm = parseFloat(await getConfigVal(pool, idBranch, idCuenta, 'RadioBusquedaKm', '5.00'));
+    const radioKm = parseFloat(await getConfigVal(pool, idBranch, idCuenta, 'RadioBusquedaKm', '3'));
+    const maxPedidosRep = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'MaxPedidosPorRepartidor', '3')) || 3;
+    // Multi-pedido: también se ofrece a repartidores OCUPADOS con cupo
+    const filtroCupo = `
+      AND ISNULL(r.StatusAprobacion,'APROBADO') NOT IN ('PENDIENTE','RECHAZADO')
+      AND r.StatusRepartidor IN ('DISPONIBLE','OCUPADO')
+      AND (SELECT COUNT(*) FROM VIDA_PEDIDOS pa
+           WHERE pa.idBranch=r.idBranch AND pa.idCuenta=r.idCuenta
+             AND pa.idRepartidor=r.idRepartidor
+             AND pa.Status IN ('${STATUS_ACTIVOS_REPARTIDOR.join("','")}')) < @maxPedidos`;
 
     let repartidoresQuery;
     if (pv?.Latitud && pv?.Longitud) {
@@ -1126,6 +1147,7 @@ export async function crearPedidoApp(request, reply) {
         .input('latSucursal',  sql.Float,   parseFloat(pv.Latitud))
         .input('lonSucursal',  sql.Float,   parseFloat(pv.Longitud))
         .input('radioKm',      sql.Float,   radioKm)
+        .input('maxPedidos',   sql.Int,     maxPedidosRep)
         .query(`
           SELECT r.idRepartidor, r.Nombre, r.Telefono, r.FcmToken,
             CASE
@@ -1138,7 +1160,8 @@ export async function crearPedidoApp(request, reply) {
             END AS DistanciaKm
           FROM VIDA_REPARTIDORES r
           WHERE r.idBranch=@idBranch AND r.idCuenta=@idCuenta
-            AND r.StatusRepartidor='DISPONIBLE' AND r.Status='ACTIVO'
+            AND r.Status='ACTIVO'
+            ${filtroCupo}
             AND (
               r.UltimaLatitud IS NULL OR r.UltimaLongitud IS NULL
               OR (6371 * ACOS(
@@ -1150,12 +1173,14 @@ export async function crearPedidoApp(request, reply) {
         `);
     } else {
       repartidoresQuery = pool.request()
-        .input('idBranch', sql.BigInt, idBranch)
-        .input('idCuenta', sql.BigInt, idCuenta)
-        .query(`SELECT idRepartidor, Nombre, Telefono, FcmToken, NULL AS DistanciaKm
-                FROM VIDA_REPARTIDORES
-                WHERE idBranch=@idBranch AND idCuenta=@idCuenta
-                  AND StatusRepartidor='DISPONIBLE' AND Status='ACTIVO'`);
+        .input('idBranch',   sql.BigInt, idBranch)
+        .input('idCuenta',   sql.BigInt, idCuenta)
+        .input('maxPedidos', sql.Int,    maxPedidosRep)
+        .query(`SELECT r.idRepartidor, r.Nombre, r.Telefono, r.FcmToken, NULL AS DistanciaKm
+                FROM VIDA_REPARTIDORES r
+                WHERE r.idBranch=@idBranch AND r.idCuenta=@idCuenta
+                  AND r.Status='ACTIVO'
+                  ${filtroCupo}`);
     }
 
     const repartidores = await repartidoresQuery;
@@ -1209,6 +1234,12 @@ export async function estadoPedidoCliente(request, reply) {
         SELECT p.Status, p.MetodoPago, p.TotalUSD,
                p.DireccionEntrega, p.NotasCliente,
                p.UbicacionEntregaLat, p.UbicacionEntregaLon,
+               p.ETAEntrega, p.OrdenRuta, p.DistanciaKm,
+               CASE WHEN p.OrdenRuta IS NOT NULL AND p.OrdenRuta > 1
+                    THEN p.OrdenRuta - 1 ELSE 0 END AS ParadasAntes,
+               DATEDIFF(MINUTE, GETUTCDATE(), p.ETAEntrega) AS MinutosRestantes,
+               p.FechaLimiteBusqueda, p.AvisoSinRepartidor,
+               DATEDIFF(SECOND, GETDATE(), p.FechaLimiteBusqueda) AS SegundosBusquedaRestantes,
                rep.Nombre AS NombreRepartidor,
                rep.Telefono AS TelefonoRepartidor,
                rep.Vehiculo AS VehiculoRepartidor,
@@ -1437,20 +1468,18 @@ export async function actualizarUbicacion(request, reply) {
       Longitud,
     });
 
-    // Notificar al cliente si tiene pedido activo
+    // Notificar a TODOS los clientes con pedido activo de este repartidor
     const pedidoR = await pool.request()
       .input('idBranch',     sql.BigInt, idBranch)
       .input('idCuenta',     sql.BigInt, idCuenta)
       .input('idRepartidor', sql.BigInt, idRepartidor)
-      .query(`SELECT TOP 1 idPedido, idCliente
+      .query(`SELECT idPedido, idCliente
               FROM VIDA_PEDIDOS
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta
                 AND idRepartidor=@idRepartidor
-                AND Status IN ('REPARTIDOR_ASIGNADO','IR_A_SUCURSAL','EN_SUCURSAL','EN_CAMINO')
-              ORDER BY FechaAlta DESC`);
+                AND Status IN ('REPARTIDOR_ASIGNADO','IR_A_SUCURSAL','EN_SUCURSAL','EN_CAMINO')`);
 
-    if (pedidoR.recordset.length) {
-      const { idPedido, idCliente } = pedidoR.recordset[0];
+    for (const { idPedido, idCliente } of pedidoR.recordset) {
       broadcast(idBranch, idCuenta, {
         tipo: 'ubicacion_repartidor',
         idPedido,
@@ -1458,6 +1487,11 @@ export async function actualizarUbicacion(request, reply) {
         Latitud,
         Longitud,
       });
+    }
+
+    // Con el repartidor en movimiento los ETAs cambian — recalcular con throttle
+    if (pedidoR.recordset.length) {
+      recalcularRutaThrottled(idBranch, idCuenta, idRepartidor, request.log);
     }
 
     return reply.send({ ok: true });
@@ -1496,6 +1530,24 @@ export async function aceptarPedido(request, reply) {
     const pedido = pedR.recordset[0];
     if (pedido.Status !== 'BUSCANDO_REPARTIDOR') {
       return reply.code(409).send({ error: `Pedido ya no está disponible (status: ${pedido.Status})` });
+    }
+
+    // Límite de pedidos simultáneos por repartidor (config MaxPedidosPorRepartidor)
+    const maxPedidos = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'MaxPedidosPorRepartidor', '3')) || 3;
+    const activosR = await pool.request()
+      .input('idBranch',     sql.BigInt, idBranch)
+      .input('idCuenta',     sql.BigInt, idCuenta)
+      .input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`SELECT COUNT(*) AS activos FROM VIDA_PEDIDOS
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor
+                AND Status IN ('${STATUS_ACTIVOS_REPARTIDOR.join("','")}')`);
+    const activos = activosR.recordset[0].activos;
+    if (activos >= maxPedidos) {
+      return reply.code(409).send({
+        error: `Ya llevas ${activos} pedidos activos (máximo ${maxPedidos}). Entrega alguno antes de aceptar otro.`,
+        maxPedidos,
+        activos,
+      });
     }
 
     // Asignar repartidor de forma atómica: la condición Status='BUSCANDO_REPARTIDOR'
@@ -1571,9 +1623,18 @@ export async function aceptarPedido(request, reply) {
       Telefono:         rep.Telefono,
     });
 
+    // La ruta cambió: reordenar paradas y ETAs con el pedido nuevo incluido
+    let ruta = null;
+    try {
+      ruta = await recalcularRuta(idBranch, idCuenta, idRepartidor, request.log);
+    } catch (errRuta) {
+      request.log.error('recalcularRuta al aceptar falló: ' + errRuta.message);
+    }
+
     return reply.send({
       idPedido,
       status:           'REPARTIDOR_ASIGNADO',
+      ruta,
       sucursal:         pvR.recordset[0],
       DireccionEntrega: pedido.DireccionEntrega,
       UbicacionEntregaLat: pedido.UbicacionEntregaLat,
@@ -1635,15 +1696,17 @@ export async function actualizarStatusPedido(request, reply) {
       });
     }
 
-    // Comisión: del repartidor o de la config global (fuera de la transacción)
-    const esEntregaEfectivo = nuevoStatus === 'ENTREGADO' && pedido.MetodoPago === 'EFECTIVO';
+    // Comisión: del repartidor o de la config global (fuera de la transacción).
+    // Se registra en TODA entrega; el efectivo a rendir solo aplica a EFECTIVO.
+    const esEntrega = nuevoStatus === 'ENTREGADO';
+    const esEntregaEfectivo = esEntrega && pedido.MetodoPago === 'EFECTIVO';
     let comision = 0, efectivoARendir = 0;
-    if (esEntregaEfectivo) {
+    if (esEntrega) {
       const pctComision = pedido.ComisionPct != null
         ? parseFloat(pedido.ComisionPct)
         : parseFloat(await getConfigVal(pool, idBranch, idCuenta, 'ComisionRepartidorPct', '0'));
       comision = parseFloat(pedido.TotalUSD) * pctComision / 100;
-      efectivoARendir = parseFloat(pedido.TotalUSD) - comision;
+      if (esEntregaEfectivo) efectivoARendir = parseFloat(pedido.TotalUSD) - comision;
     }
 
     await transaction.begin();
@@ -1660,8 +1723,8 @@ export async function actualizarStatusPedido(request, reply) {
       .input('comision',     sql.Decimal(18,4), comision)
       .input('efectivo',     sql.Decimal(18,4), efectivoARendir);
 
-    const setComision = esEntregaEfectivo
-      ? ', ComisionRepartidor=@comision, MontoEfectivoRepartidor=@efectivo'
+    const setComision = esEntrega
+      ? `, ComisionRepartidor=@comision${esEntregaEfectivo ? ', MontoEfectivoRepartidor=@efectivo' : ''}`
       : '';
 
     const updR = await updReq.query(`UPDATE VIDA_PEDIDOS
@@ -1733,19 +1796,25 @@ export async function actualizarStatusPedido(request, reply) {
           .input('idRepartidor', sql.BigInt,       idRepartidor)
           .input('efectivo',     sql.Decimal(18,4), efectivoARendir)
           .query(`UPDATE VIDA_REPARTIDORES
-                  SET SaldoPendiente = ISNULL(SaldoPendiente,0) + @efectivo,
-                      StatusRepartidor='DISPONIBLE'
+                  SET SaldoPendiente = ISNULL(SaldoPendiente,0) + @efectivo
                   WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
       }
     }
 
-    if ((nuevoStatus === 'ENTREGADO' && !esEntregaEfectivo) || nuevoStatus === 'CANCELADO') {
+    // Multi-pedido: el repartidor queda DISPONIBLE solo cuando ya no tiene
+    // ningún pedido activo (puede llevar varios a la vez)
+    if (nuevoStatus === 'ENTREGADO' || nuevoStatus === 'CANCELADO') {
       await new sql.Request(transaction)
         .input('idBranch',     sql.BigInt, idBranch)
         .input('idCuenta',     sql.BigInt, idCuenta)
         .input('idRepartidor', sql.BigInt, idRepartidor)
         .query(`UPDATE VIDA_REPARTIDORES SET StatusRepartidor='DISPONIBLE'
-                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor
+                  AND NOT EXISTS (
+                    SELECT 1 FROM VIDA_PEDIDOS p
+                    WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
+                      AND p.idRepartidor=@idRepartidor
+                      AND p.Status IN ('${STATUS_ACTIVOS_REPARTIDOR.join("','")}'))`);
     }
 
     // Historial del pedido (el panel admin lo muestra como línea de tiempo)
@@ -1770,7 +1839,8 @@ export async function actualizarStatusPedido(request, reply) {
         data: {
           StatusAnterior: statusActual, TotalUSD: parseFloat(pedido.TotalUSD),
           MetodoPago: pedido.MetodoPago,
-          ...(esEntregaEfectivo ? { ComisionRepartidor: comision, EfectivoARendir: efectivoARendir } : {}),
+          ...(esEntrega ? { ComisionRepartidor: comision } : {}),
+          ...(esEntregaEfectivo ? { EfectivoARendir: efectivoARendir } : {}),
         },
       }, request.log);
     }
@@ -1784,6 +1854,11 @@ export async function actualizarStatusPedido(request, reply) {
       idRepartidor,
       nuevoStatus,
     });
+
+    // Cada transición cambia la ruta (se recogió, se entregó, se canceló):
+    // reordenar paradas y ETAs de los pedidos que le quedan al repartidor
+    recalcularRuta(idBranch, idCuenta, idRepartidor, request.log)
+      .catch(errRuta => request.log.error('recalcularRuta post-status falló: ' + errRuta.message));
 
     // Push al cliente en los hitos que le importan
     const MENSAJES_CLIENTE = {
@@ -1880,7 +1955,10 @@ export async function pedidosActivos(request, reply) {
       .query(`
         SELECT p.idPedido, p.Status, p.MetodoPago, p.TotalUSD,
                p.DireccionEntrega, p.UbicacionEntregaLat, p.UbicacionEntregaLon,
-               p.NotasCliente, p.FechaAlta,
+               p.NotasCliente, p.FechaAlta, p.idPuntoVenta,
+               p.OrdenRuta, p.DistanciaKm, p.ETAEntrega,
+               DATEDIFF(MINUTE, GETUTCDATE(), p.ETAEntrega) AS MinutosRestantes,
+               c.Nombre AS NombreCliente, c.Telefono AS TelefonoCliente,
                pv.NomComercial AS NombreSucursal,
                CONCAT(ISNULL(pv.Calle,''), ' ', ISNULL(pv.NumExt,''), ' ',
                       ISNULL(pv.Colonia,''), ' ', ISNULL(pv.Ciudad,'')) AS DireccionSucursal,
@@ -1888,10 +1966,12 @@ export async function pedidosActivos(request, reply) {
         FROM VIDA_PEDIDOS p
         LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA pv
           ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
+        LEFT JOIN VIDA_APP_CLIENTES c
+          ON c.idBranch=p.idBranch AND c.idCuenta=p.idCuenta AND c.idCliente=p.idCliente
         WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
           AND p.idRepartidor=@idRepartidor
           AND p.Status NOT IN ('ENTREGADO','CANCELADO')
-        ORDER BY p.FechaAlta DESC
+        ORDER BY ISNULL(p.OrdenRuta, 999), p.FechaAlta ASC
       `);
     return reply.send(r.recordset);
   } catch (err) {
@@ -2402,5 +2482,194 @@ export async function setConfigDelivery(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al guardar configuración' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// REPARTIDOR — RUTA ACTUAL (paradas ordenadas + ETAs)
+// GET /delivery/repartidor/ruta
+// ══════════════════════════════════════════════════════════════════════════
+export async function rutaRepartidor(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  try {
+    const ruta = await recalcularRuta(idBranch, idCuenta, idRepartidor, request.log);
+    return reply.send(ruta);
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al calcular la ruta' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ADMIN — RESUMEN DE REPARTIDORES (pedidos activos, comisiones, generado)
+// GET /delivery/admin/repartidores/resumen?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+// ══════════════════════════════════════════════════════════════════════════
+export async function resumenRepartidores(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { desde, hasta } = request.query;
+
+  // Rango por defecto: el día de hoy
+  const fDesde = desde || new Date().toISOString().slice(0, 10);
+  const fHasta = hasta || fDesde;
+
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('desde', sql.VarChar(10), fDesde)
+      .input('hasta', sql.VarChar(10), fHasta)
+      .query(`
+        SELECT r.idRepartidor, r.Nombre, r.Telefono, r.Vehiculo, r.FotoURL,
+               r.StatusRepartidor, r.SaldoPendiente, r.Calificacion,
+               r.UltimaLatitud, r.UltimaLongitud, r.UltimaUbicacion,
+
+               -- Pedidos activos en este momento (los que lleva encima)
+               (SELECT COUNT(*) FROM VIDA_PEDIDOS p
+                WHERE p.idBranch=r.idBranch AND p.idCuenta=r.idCuenta
+                  AND p.idRepartidor=r.idRepartidor
+                  AND p.Status IN ('REPARTIDOR_ASIGNADO','IR_A_SUCURSAL','EN_SUCURSAL','EN_CAMINO')
+               ) AS PedidosActivos,
+
+               -- Próxima entrega (menor ETA de sus pedidos activos)
+               (SELECT MIN(p.ETAEntrega) FROM VIDA_PEDIDOS p
+                WHERE p.idBranch=r.idBranch AND p.idCuenta=r.idCuenta
+                  AND p.idRepartidor=r.idRepartidor
+                  AND p.Status IN ('REPARTIDOR_ASIGNADO','IR_A_SUCURSAL','EN_SUCURSAL','EN_CAMINO')
+               ) AS ProximaEntrega,
+
+               -- Desempeño en el rango de fechas
+               ISNULL(ent.Entregados, 0)      AS Entregados,
+               ISNULL(ent.MontoGenerado, 0)   AS MontoGenerado,
+               ISNULL(ent.Comisiones, 0)      AS Comisiones,
+               ISNULL(ent.EfectivoRendido, 0) AS EfectivoRecaudado
+        FROM VIDA_REPARTIDORES r
+        OUTER APPLY (
+          SELECT COUNT(*)                            AS Entregados,
+                 SUM(p.TotalUSD)                     AS MontoGenerado,
+                 SUM(ISNULL(p.ComisionRepartidor,0)) AS Comisiones,
+                 SUM(ISNULL(p.MontoEfectivoRepartidor,0)) AS EfectivoRendido
+          FROM VIDA_PEDIDOS p
+          WHERE p.idBranch=r.idBranch AND p.idCuenta=r.idCuenta
+            AND p.idRepartidor=r.idRepartidor AND p.Status='ENTREGADO'
+            AND CONVERT(DATE, p.FechaMod) BETWEEN @desde AND @hasta
+        ) ent
+        WHERE r.idBranch=@idBranch AND r.idCuenta=@idCuenta
+          AND r.Status='ACTIVO'
+          AND ISNULL(r.StatusAprobacion,'APROBADO') NOT IN ('PENDIENTE','RECHAZADO')
+        ORDER BY PedidosActivos DESC, r.Nombre
+      `);
+
+    return reply.send({ desde: fDesde, hasta: fHasta, repartidores: r.recordset });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener resumen de repartidores' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — EXTENDER LA BÚSQUEDA DE REPARTIDOR
+// POST /delivery/pedido/:idPedido/extender-busqueda
+// ══════════════════════════════════════════════════════════════════════════
+export async function extenderBusquedaPedido(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  const { idPedido } = request.params;
+
+  try {
+    const pool = await getPool();
+    const extMin = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'ExtensionBusquedaMin', '10')) || 10;
+
+    const upd = await pool.request()
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idPedido',  sql.BigInt, idPedido)
+      .input('idCliente', sql.BigInt, idCliente)
+      .input('min',       sql.Int,    extMin)
+      .query(`UPDATE VIDA_PEDIDOS
+              SET FechaLimiteBusqueda = DATEADD(MINUTE, @min, GETDATE()), FechaMod = GETDATE()
+              OUTPUT inserted.FechaLimiteBusqueda
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                AND idPedido=@idPedido AND idCliente=@idCliente
+                AND Status='BUSCANDO_REPARTIDOR'`);
+
+    if (!upd.recordset.length) {
+      return reply.code(409).send({ error: 'El pedido ya no está en búsqueda de repartidor' });
+    }
+
+    return reply.send({
+      ok: true,
+      minutosExtra: extMin,
+      FechaLimiteBusqueda: upd.recordset[0].FechaLimiteBusqueda,
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al extender la búsqueda' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — CANCELAR SU PEDIDO (solo mientras busca repartidor)
+// POST /delivery/pedido/:idPedido/cancelar
+// ══════════════════════════════════════════════════════════════════════════
+export async function cancelarPedidoCliente(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  const { idPedido } = request.params;
+
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  let enTransaccion = false;
+
+  try {
+    await transaction.begin();
+    enTransaccion = true;
+
+    const upd = await new sql.Request(transaction)
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idPedido',  sql.BigInt, idPedido)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`UPDATE VIDA_PEDIDOS SET Status='CANCELADO', FechaMod=GETDATE()
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                AND idPedido=@idPedido AND idCliente=@idCliente
+                AND Status='BUSCANDO_REPARTIDOR'`);
+
+    if (upd.rowsAffected[0] === 0) {
+      await transaction.rollback();
+      enTransaccion = false;
+      return reply.code(409).send({
+        error: 'El pedido ya no se puede cancelar (un repartidor ya lo tomó o ya fue procesado)',
+      });
+    }
+
+    const histId = await nextIdTx(transaction, 'VIDA_PEDIDOS_HISTORIAL', 'idHistorial', idBranch, idCuenta);
+    await new sql.Request(transaction)
+      .input('idBranch',      sql.BigInt,      idBranch)
+      .input('idCuenta',      sql.BigInt,      idCuenta)
+      .input('idHistorial',   sql.BigInt,      histId)
+      .input('idPedido',      sql.BigInt,      idPedido)
+      .input('StatusAnterior',sql.VarChar(40), 'BUSCANDO_REPARTIDOR')
+      .input('StatusNuevo',   sql.VarChar(40), 'CANCELADO')
+      .input('UsuAlta',       sql.VarChar(20), `CLI:${idCliente}`)
+      .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL
+                (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, UsuAlta)
+              VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, @StatusAnterior, @StatusNuevo, @UsuAlta)`);
+
+    await transaction.commit();
+    enTransaccion = false;
+
+    broadcast(idBranch, idCuenta, {
+      tipo: 'status_pedido', idPedido: Number(idPedido), idCliente, estado: 'CANCELADO',
+    });
+    broadcast(idBranch, idCuenta, {
+      tipo: 'pedido:actualizado', idPedido: Number(idPedido), StatusNuevo: 'CANCELADO',
+    });
+
+    return reply.send({ ok: true, status: 'CANCELADO' });
+  } catch (err) {
+    if (enTransaccion) {
+      try { await transaction.rollback(); } catch {}
+    }
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al cancelar el pedido' });
   }
 }

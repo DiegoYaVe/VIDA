@@ -24,6 +24,8 @@ import {
   crearPedidoApp,
   estadoPedidoCliente,
   historialPedidosCliente,
+  extenderBusquedaPedido,
+  cancelarPedidoCliente,
   // Repartidor
   registrarRepartidor,
   loginRepartidor,
@@ -39,6 +41,8 @@ import {
   pedidosActivos,
   pedidosDisponibles,
   historialRepartidor,
+  rutaRepartidor,
+  resumenRepartidores,
   // Cliente extra
   calificarRepartidor,
   // Admin
@@ -95,6 +99,14 @@ export async function deliveryRoutes(fastify) {
   fastify.get('/delivery/pedido/:idPedido/estado',
     { preHandler: [authenticateCliente] },
     estadoPedidoCliente);
+
+  fastify.post('/delivery/pedido/:idPedido/extender-busqueda',
+    { preHandler: [authenticateCliente] },
+    extenderBusquedaPedido);
+
+  fastify.post('/delivery/pedido/:idPedido/cancelar',
+    { preHandler: [authenticateCliente] },
+    cancelarPedidoCliente);
 
   fastify.post('/delivery/pedido/:idPedido/comprobante',
     { preHandler: [authenticateCliente] },
@@ -160,6 +172,10 @@ export async function deliveryRoutes(fastify) {
     { preHandler: [authenticateRepartidor] },
     historialRepartidor);
 
+  fastify.get('/delivery/repartidor/ruta',
+    { preHandler: [authenticateRepartidor] },
+    rutaRepartidor);
+
   fastify.get('/delivery/repartidor/perfil',
     { preHandler: [authenticateRepartidor] },
     perfilRepartidorApp);
@@ -176,6 +192,10 @@ export async function deliveryRoutes(fastify) {
   fastify.get('/delivery/admin/repartidores',
     { preHandler: [authenticate, requireRole(...ADMIN_ROLES)] },
     listarRepartidores);
+
+  fastify.get('/delivery/admin/repartidores/resumen',
+    { preHandler: [authenticate, requireRole(...ADMIN_ROLES)] },
+    resumenRepartidores);
 
   fastify.post('/delivery/admin/repartidores',
     { preHandler: [authenticate, requireRole(...ADMIN_ROLES)] },

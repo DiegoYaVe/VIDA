@@ -22,6 +22,7 @@ import { estadosRoutes }    from './routes/estados.routes.js';
 import { auditRoutes }      from './routes/audit.routes.js';
 import { marcarInactivos }  from './controllers/heartbeat.controller.js';
 import { expirarPedidosVencidos } from './controllers/pedidos.controller.js';
+import { procesarBusquedas } from './services/dispatch.service.js';
 import { wsRoutes } from './ws/ws.routes.js';
 import multipart from '@fastify/multipart';
 import staticFiles from '@fastify/static';
@@ -102,6 +103,14 @@ setInterval(async () => {
   try {
     const pool = await getPool();
     await marcarInactivos(pool, fastify.log);
+  } catch {}
+}, 60_000);
+
+// Job: búsqueda de repartidor — escalar radio, avisar al cliente sin
+// repartidor y cancelar pedidos cuya búsqueda venció (cada 60 segundos)
+setInterval(async () => {
+  try {
+    await procesarBusquedas(fastify.log);
   } catch {}
 }, 60_000);
 

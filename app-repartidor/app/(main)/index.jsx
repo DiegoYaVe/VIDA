@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,15 +21,19 @@ import * as ImagePicker from 'expo-image-picker';
 import api from '../../services/api';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useLocation } from '../../hooks/useLocation';
-import MapaPedido from '../../components/MapaPedido';
+import MapaRuta from '../../components/MapaRuta';
 import { iniciarUbicacionBackground, detenerUbicacionBackground } from '../../services/backgroundLocation';
 import useAuthStore from '../../store/authStore';
 import usePedidoStore from '../../store/pedidoStore';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// Máximo local de pedidos simultáneos (el backend valida el real por config)
+const MAX_PEDIDOS = 3;
+
 const STATUSES = ['IR_A_SUCURSAL', 'EN_SUCURSAL', 'EN_CAMINO', 'ENTREGADO'];
 const STATUS_LABELS = {
+  REPARTIDOR_ASIGNADO: 'Asignado',
   IR_A_SUCURSAL: 'Ir a sucursal',
   EN_SUCURSAL: 'En sucursal',
   EN_CAMINO: 'En camino',
@@ -43,11 +47,24 @@ const STATUS_ICONS = {
 };
 
 const ACTION_BUTTONS = [
-  { fromStatus: null,          label: 'Voy a la sucursal',               nextStatus: 'IR_A_SUCURSAL', color: '#1A6A9A' },
-  { fromStatus: 'IR_A_SUCURSAL', label: 'Llegué a la sucursal',          nextStatus: 'EN_SUCURSAL',   color: '#7B3FBE' },
-  { fromStatus: 'EN_SUCURSAL',   label: 'Tomé el pedido, voy al cliente', nextStatus: 'EN_CAMINO',     color: '#E67E22' },
-  { fromStatus: 'EN_CAMINO',     label: 'Marcar como entregado',          nextStatus: 'ENTREGADO',     color: '#27AE60' },
+  { fromStatus: 'REPARTIDOR_ASIGNADO', label: 'Voy a la sucursal',                nextStatus: 'IR_A_SUCURSAL', color: '#1A6A9A' },
+  { fromStatus: null,                  label: 'Voy a la sucursal',                nextStatus: 'IR_A_SUCURSAL', color: '#1A6A9A' },
+  { fromStatus: 'IR_A_SUCURSAL',       label: 'Llegué a la sucursal',             nextStatus: 'EN_SUCURSAL',   color: '#7B3FBE' },
+  { fromStatus: 'EN_SUCURSAL',         label: 'Tomé el pedido, voy al cliente',   nextStatus: 'EN_CAMINO',     color: '#E67E22' },
+  { fromStatus: 'EN_CAMINO',           label: 'Marcar como entregado',            nextStatus: 'ENTREGADO',     color: '#27AE60' },
 ];
+
+// Formatea el ETA como "~25 min · 3:40 PM"
+function fmtETA(pedido) {
+  const min = pedido?.MinutosRestantes;
+  const eta = pedido?.ETAEntrega ? new Date(pedido.ETAEntrega) : null;
+  if (min == null && !eta) return null;
+  const hora = eta
+    ? eta.toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit' })
+    : '';
+  if (min != null && min >= 0) return `~${min} min${hora ? ` · ${hora}` : ''}`;
+  return hora || null;
+}
 
 // ---------- PulseView ----------
 function PulseView({ style }) {
@@ -66,7 +83,7 @@ function PulseView({ style }) {
 }
 
 // ---------- NuevoPedidoModal ----------
-function NuevoPedidoModal({ pedido, onAceptar, onRechazar }) {
+function NuevoPedidoModal({ pedido, pedidosActivos, onAceptar, onRechazar }) {
   const slideAnim   = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const progressAnim = useRef(new Animated.Value(1)).current;
   const [segundos, setSegundos] = useState(60);
@@ -91,13 +108,23 @@ function NuevoPedidoModal({ pedido, onAceptar, onRechazar }) {
       <Animated.View style={[modalStyles.sheet, { transform: [{ translateY: slideAnim }] }]}>
         <View style={modalStyles.urgentHeader}>
           <Ionicons name="flash" size={28} color="#fff" />
-          <Text style={modalStyles.urgentTitle}>¡Nuevo pedido!</Text>
+          <Text style={modalStyles.urgentTitle}>
+            {pedidosActivos > 0 ? '¡Pedido extra en tu ruta!' : '¡Nuevo pedido!'}
+          </Text>
           <Text style={modalStyles.timerText}>{segundos}s</Text>
         </View>
         <View style={modalStyles.progressBg}>
           <Animated.View style={[modalStyles.progressFill, { width: progressWidth, backgroundColor: colorProgress }]} />
         </View>
         <View style={modalStyles.body}>
+          {pedidosActivos > 0 && (
+            <View style={modalStyles.multiChip}>
+              <Ionicons name="layers-outline" size={16} color="#1A6A9A" />
+              <Text style={modalStyles.multiChipText}>
+                Ya llevas {pedidosActivos} pedido{pedidosActivos !== 1 ? 's' : ''} — este se suma a tu ruta
+              </Text>
+            </View>
+          )}
           {(pedido.sucursal || pedido.NombreSucursal) && (
             <View style={modalStyles.infoRow}>
               <Ionicons name="storefront-outline" size={20} color="#718096" />
@@ -175,57 +202,99 @@ function PedidoStatusBar({ currentStatus }) {
 // ---------- Pantalla principal ----------
 export default function IndexScreen() {
   // Estado global compartido con las demás tabs
-  const disponible    = usePedidoStore((s) => s.disponible);
-  const pedidoActivo  = usePedidoStore((s) => s.pedidoActivo);
-  const setDisponible   = usePedidoStore((s) => s.setDisponible);
-  const setPedidoActivo = usePedidoStore((s) => s.setPedidoActivo);
-  const repartidor    = useAuthStore((s) => s.repartidor);
+  const disponible     = usePedidoStore((s) => s.disponible);
+  const pedidosActivos = usePedidoStore((s) => s.pedidosActivos);
+  const rutaParadas    = usePedidoStore((s) => s.rutaParadas);
+  const setDisponible     = usePedidoStore((s) => s.setDisponible);
+  const setPedidosActivos = usePedidoStore((s) => s.setPedidosActivos);
+  const setRutaParadas    = usePedidoStore((s) => s.setRutaParadas);
+  const actualizarPedido  = usePedidoStore((s) => s.actualizarPedido);
+  const quitarPedido      = usePedidoStore((s) => s.quitarPedido);
+  const repartidor     = useAuthStore((s) => s.repartidor);
 
   const [nuevoPedido,   setNuevoPedido]   = useState(null);
   const [loading,       setLoading]       = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [toggling,      setToggling]      = useState(false);
+  const [idPedidoSel,   setIdPedidoSel]   = useState(null);
 
   const { ubicacion } = useLocation(disponible);
 
-  // Al montar, recuperar pedido activo del backend (si el repartidor reabre la app)
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await api.get('/delivery/repartidor/pedidos-activos');
-        const pedidos = res.data?.pedidos || res.data || [];
-        if (Array.isArray(pedidos) && pedidos.length > 0) {
-          setPedidoActivo(pedidos[0]);
-          setDisponible(true);
-        }
-      } catch (_) {}
-    })();
+  // El pedido seleccionado (por defecto el primero de la ruta)
+  const pedidoSel = useMemo(() => {
+    if (!pedidosActivos.length) return null;
+    return pedidosActivos.find((p) => String(p.idPedido) === String(idPedidoSel))
+      ?? pedidosActivos[0];
+  }, [pedidosActivos, idPedidoSel]);
+
+  // Cargar pedidos activos + ruta desde el backend
+  const cargarActivos = useCallback(async () => {
+    try {
+      const res = await api.get('/delivery/repartidor/pedidos-activos');
+      const pedidos = Array.isArray(res.data) ? res.data : (res.data?.pedidos || []);
+      setPedidosActivos(pedidos);
+      if (pedidos.length > 0) {
+        setDisponible(true);
+        try {
+          const rutaRes = await api.get('/delivery/repartidor/ruta');
+          setRutaParadas(rutaRes.data?.paradas || []);
+        } catch (_) {}
+      } else {
+        setRutaParadas([]);
+      }
+    } catch (_) {}
   }, []);
 
-  // WebSocket — nuevos pedidos en tiempo real
+  useEffect(() => { cargarActivos(); }, []);
+
+  // WebSocket — pedidos nuevos y ruta recalculada en tiempo real
   useWebSocket((msg) => {
-    if (msg.tipo === 'nuevo_pedido_disponible' || msg.type === 'nuevo_pedido_disponible') {
+    const tipo = msg.tipo || msg.type;
+    if (tipo === 'nuevo_pedido_disponible') {
+      if (usePedidoStore.getState().pedidosActivos.length >= MAX_PEDIDOS) return;
+      // El despacho es dirigido: si el mensaje trae lista de destinatarios
+      // y yo no estoy (fuera del radio de búsqueda), lo ignoro
+      const objetivo = msg.repartidores;
+      if (Array.isArray(objetivo) && objetivo.length > 0 &&
+          !objetivo.map(String).includes(String(repartidor?.idRepartidor))) return;
       const pedido = msg.pedido || msg.data || msg;
       Vibration.vibrate([0, 400, 200, 400, 200, 400]);
       setNuevoPedido(pedido);
     }
+    if (tipo === 'ruta_actualizada' &&
+        String(msg.idRepartidor) === String(repartidor?.idRepartidor)) {
+      setRutaParadas(msg.paradas || []);
+      // Actualizar ETA/orden de cada pedido con lo que trae la ruta
+      (msg.etas || []).forEach((e) => {
+        actualizarPedido(e.idPedido, {
+          OrdenRuta: e.OrdenRuta,
+          ETAEntrega: e.ETAEntrega,
+          MinutosRestantes: e.MinutosRestantes,
+          DistanciaKm: e.DistanciaKm,
+        });
+      });
+    }
   });
 
-  // Polling cada 10s — fallback si el WS no llegó
+  // Polling cada 10s — fallback si el WS no llegó (sigue activo con pedidos
+  // encima mientras haya cupo para otro)
   useEffect(() => {
-    if (!disponible || pedidoActivo) return;
+    if (!disponible || pedidosActivos.length >= MAX_PEDIDOS) return;
     const interval = setInterval(async () => {
       try {
         const res = await api.get('/delivery/repartidor/pedidos-disponibles');
         const lista = Array.isArray(res.data) ? res.data : [];
-        if (lista.length > 0 && !nuevoPedido) {
+        // No re-ofrecer un pedido que ya llevo
+        const nuevos = lista.filter((p) =>
+          !pedidosActivos.some((a) => String(a.idPedido) === String(p.idPedido)));
+        if (nuevos.length > 0 && !nuevoPedido) {
           Vibration.vibrate([0, 400, 200, 400, 200, 400]);
-          setNuevoPedido(lista[0]);
+          setNuevoPedido(nuevos[0]);
         }
       } catch (_) {}
     }, 10000);
     return () => clearInterval(interval);
-  }, [disponible, pedidoActivo, nuevoPedido]);
+  }, [disponible, pedidosActivos, nuevoPedido]);
 
   // Toggle disponible (el switch del header)
   const handleToggle = useCallback(async (value) => {
@@ -277,11 +346,13 @@ export default function IndexScreen() {
     if (!nuevoPedido) return;
     setActionLoading(true);
     try {
-      await api.post('/delivery/repartidor/aceptar', { idPedido: nuevoPedido.idPedido || nuevoPedido.id });
-      setPedidoActivo({ ...nuevoPedido, Status: null });
+      const res = await api.post('/delivery/repartidor/aceptar', { idPedido: nuevoPedido.idPedido || nuevoPedido.id });
       setNuevoPedido(null);
+      if (res.data?.ruta?.paradas) setRutaParadas(res.data.ruta.paradas);
+      await cargarActivos();
     } catch (e) {
-      Alert.alert('Error', e.message);
+      Alert.alert('No se pudo aceptar', e.response?.data?.error || e.message);
+      setNuevoPedido(null);
     } finally {
       setActionLoading(false);
     }
@@ -289,33 +360,33 @@ export default function IndexScreen() {
 
   const handleRechazarPedido = () => setNuevoPedido(null);
 
-  const handleCambiarStatus = async (nuevoStatus) => {
-    if (!pedidoActivo) return;
+  const handleCambiarStatus = (pedido, nuevoStatus) => {
+    if (!pedido) return;
     if (nuevoStatus === 'ENTREGADO') {
       Alert.alert('Confirmar entrega', 'Toma una foto del pedido entregado como evidencia.', [
         { text: 'Cancelar', style: 'cancel' },
-        { text: '📷 Tomar foto', onPress: entregarConFoto },
-        { text: 'Entregar sin foto', style: 'destructive', onPress: () => doCambiarStatus('ENTREGADO') },
+        { text: '📷 Tomar foto', onPress: () => entregarConFoto(pedido) },
+        { text: 'Entregar sin foto', style: 'destructive', onPress: () => doCambiarStatus(pedido, 'ENTREGADO') },
       ]);
       return;
     }
-    doCambiarStatus(nuevoStatus);
+    doCambiarStatus(pedido, nuevoStatus);
   };
 
-  const entregarConFoto = async () => {
+  const entregarConFoto = async (pedido) => {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (perm.status !== 'granted') {
         Alert.alert('Sin permiso de cámara', '¿Entregar sin foto?', [
           { text: 'Cancelar', style: 'cancel' },
-          { text: 'Entregar', onPress: () => doCambiarStatus('ENTREGADO') },
+          { text: 'Entregar', onPress: () => doCambiarStatus(pedido, 'ENTREGADO') },
         ]);
         return;
       }
       const res = await ImagePicker.launchCameraAsync({ quality: 0.6 });
       if (res.canceled || !res.assets?.[0]) return;
       const foto = res.assets[0];
-      const idPedido = pedidoActivo.idPedido || pedidoActivo.id;
+      const idPedido = pedido.idPedido || pedido.id;
       const fd = new FormData();
       fd.append('file', { uri: foto.uri, name: `entrega_${idPedido}.jpg`, type: foto.mimeType || 'image/jpeg' });
       try {
@@ -323,40 +394,43 @@ export default function IndexScreen() {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
       } catch { /* no bloquea la entrega */ }
-      doCambiarStatus('ENTREGADO');
+      doCambiarStatus(pedido, 'ENTREGADO');
     } catch {
-      doCambiarStatus('ENTREGADO');
+      doCambiarStatus(pedido, 'ENTREGADO');
     }
   };
 
-  const doCambiarStatus = async (nuevoStatus) => {
+  const doCambiarStatus = async (pedido, nuevoStatus) => {
     setActionLoading(true);
+    const idPedido = pedido.idPedido || pedido.id;
     try {
-      await api.post('/delivery/repartidor/status-pedido', {
-        idPedido: pedidoActivo.idPedido || pedidoActivo.id,
-        nuevoStatus,
-      });
+      await api.post('/delivery/repartidor/status-pedido', { idPedido, nuevoStatus });
       if (nuevoStatus === 'ENTREGADO' || nuevoStatus === 'CANCELADO') {
-        setPedidoActivo(null);
+        quitarPedido(idPedido);
+        setIdPedidoSel(null);
+        // Refrescar la ruta con los pedidos que quedan
+        cargarActivos();
       } else {
-        setPedidoActivo((prev) => ({ ...prev, Status: nuevoStatus }));
+        actualizarPedido(idPedido, { Status: nuevoStatus });
       }
     } catch (e) {
-      Alert.alert('Error', e.message);
+      Alert.alert('Error', e.response?.data?.error || e.message);
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleCancelar = () => {
-    Alert.alert('Cancelar pedido', '¿Seguro que quieres cancelar este pedido?', [
+  const handleCancelar = (pedido) => {
+    Alert.alert('Cancelar pedido', `¿Seguro que quieres cancelar el pedido #${pedido.idPedido}?`, [
       { text: 'No', style: 'cancel' },
-      { text: 'Sí, cancelar', style: 'destructive', onPress: () => doCambiarStatus('CANCELADO') },
+      { text: 'Sí, cancelar', style: 'destructive', onPress: () => doCambiarStatus(pedido, 'CANCELADO') },
     ]);
   };
 
-  const currentStatus = pedidoActivo?.Status || null;
-  const actionBtn = ACTION_BUTTONS.find((b) => b.fromStatus === currentStatus);
+  const currentStatus = pedidoSel?.Status === 'REPARTIDOR_ASIGNADO' ? null : (pedidoSel?.Status || null);
+  const actionBtn = pedidoSel
+    ? ACTION_BUTTONS.find((b) => b.fromStatus === (pedidoSel.Status === 'REPARTIDOR_ASIGNADO' ? 'REPARTIDOR_ASIGNADO' : pedidoSel.Status || null))
+    : null;
 
   // -------- Header integrado en la pantalla --------
   const Header = (
@@ -368,7 +442,11 @@ export default function IndexScreen() {
         <View>
           <Text style={styles.headerGreeting}>Hola, {repartidor?.Nombre || 'Repartidor'}</Text>
           <Text style={styles.headerStatus}>
-            {disponible ? '● En línea' : '● Desconectado'}
+            {disponible
+              ? pedidosActivos.length > 0
+                ? `● En línea · ${pedidosActivos.length} pedido${pedidosActivos.length !== 1 ? 's' : ''} activo${pedidosActivos.length !== 1 ? 's' : ''}`
+                : '● En línea'
+              : '● Desconectado'}
           </Text>
         </View>
         <View style={styles.headerRight}>
@@ -389,7 +467,7 @@ export default function IndexScreen() {
   );
 
   // -------- RENDER INACTIVO --------
-  if (!disponible && !pedidoActivo) {
+  if (!disponible && pedidosActivos.length === 0) {
     return (
       <View style={{ flex: 1, backgroundColor: '#1A202C' }}>
         {Header}
@@ -421,57 +499,100 @@ export default function IndexScreen() {
     );
   }
 
-  // -------- RENDER DISPONIBLE / CON PEDIDO --------
+  // -------- RENDER DISPONIBLE / CON PEDIDOS --------
   return (
     <View style={{ flex: 1, backgroundColor: '#F5F7FA' }}>
       {Header}
       <View style={styles.onlineContainer}>
         <View style={styles.mapPlaceholder}>
-          <MapaPedido ubicacion={ubicacion} pedido={pedidoActivo} />
+          <MapaRuta ubicacion={ubicacion} paradas={rutaParadas} />
         </View>
 
         <View style={styles.bottomPanel}>
-          {pedidoActivo ? (
+          {pedidosActivos.length > 0 ? (
             <ScrollView showsVerticalScrollIndicator={false}>
-              <PedidoStatusBar currentStatus={pedidoActivo.Status} />
+
+              {/* Selector horizontal de pedidos (orden de la ruta) */}
+              {pedidosActivos.length > 1 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.chipsScroll}
+                  contentContainerStyle={styles.chipsRow}
+                >
+                  {pedidosActivos.map((p) => {
+                    const sel = String(p.idPedido) === String(pedidoSel?.idPedido);
+                    const eta = fmtETA(p);
+                    return (
+                      <TouchableOpacity
+                        key={p.idPedido}
+                        style={[styles.chip, sel && styles.chipSel]}
+                        onPress={() => setIdPedidoSel(p.idPedido)}
+                      >
+                        <View style={[styles.chipNum, { backgroundColor: getStatusColor(p.Status) }]}>
+                          <Text style={styles.chipNumText}>{p.OrdenRuta ?? '·'}</Text>
+                        </View>
+                        <View>
+                          <Text style={[styles.chipTitle, sel && styles.chipTitleSel]}>#{p.idPedido}</Text>
+                          {eta ? <Text style={styles.chipEta}>{eta}</Text> : null}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              )}
+
+              <PedidoStatusBar currentStatus={pedidoSel?.Status} />
 
               <View style={styles.pedidoCard}>
                 <View style={styles.pedidoHeader}>
                   <Text style={styles.pedidoTitle}>
-                    Pedido #{pedidoActivo.idPedido || pedidoActivo.id}
+                    Pedido #{pedidoSel?.idPedido}
+                    {pedidoSel?.OrdenRuta ? `  ·  Parada ${pedidoSel.OrdenRuta}` : ''}
                   </Text>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(pedidoActivo.Status) }]}>
-                    <Text style={styles.statusBadgeText}>{STATUS_LABELS[pedidoActivo.Status] || 'Nuevo'}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(pedidoSel?.Status) }]}>
+                    <Text style={styles.statusBadgeText}>{STATUS_LABELS[pedidoSel?.Status] || 'Nuevo'}</Text>
                   </View>
                 </View>
 
-                {pedidoActivo.cliente && (
+                {/* ETA estimado */}
+                {fmtETA(pedidoSel) && (
+                  <View style={styles.etaBox}>
+                    <Ionicons name="time-outline" size={18} color="#1A6A9A" />
+                    <Text style={styles.etaText}>Entrega estimada: {fmtETA(pedidoSel)}</Text>
+                    {pedidoSel?.DistanciaKm != null && (
+                      <Text style={styles.etaKm}>{parseFloat(pedidoSel.DistanciaKm).toFixed(1)} km</Text>
+                    )}
+                  </View>
+                )}
+
+                {(pedidoSel?.NombreCliente || pedidoSel?.cliente) && (
                   <View style={styles.infoRow}>
                     <Ionicons name="person-outline" size={18} color="#718096" />
-                    <Text style={styles.infoText}>{pedidoActivo.cliente}</Text>
+                    <Text style={styles.infoText}>{pedidoSel.NombreCliente || pedidoSel.cliente}</Text>
                   </View>
                 )}
                 <View style={styles.infoRow}>
                   <Ionicons name="location-outline" size={18} color="#718096" />
                   <Text style={styles.infoText} numberOfLines={2}>
-                    {pedidoActivo.direccion || pedidoActivo.DireccionEntrega || 'Sin dirección'}
+                    {pedidoSel?.direccion || pedidoSel?.DireccionEntrega || 'Sin dirección'}
                   </Text>
                 </View>
-                {pedidoActivo.sucursal && (
+                {(pedidoSel?.sucursal || pedidoSel?.NombreSucursal) && (
                   <View style={styles.infoRow}>
                     <Ionicons name="storefront-outline" size={18} color="#718096" />
-                    <Text style={styles.infoText}>{pedidoActivo.sucursal}</Text>
+                    <Text style={styles.infoText}>{pedidoSel.sucursal || pedidoSel.NombreSucursal}</Text>
                   </View>
                 )}
 
                 {/* Efectivo a cobrar */}
-                {(pedidoActivo.MetodoPago || pedidoActivo.metodoPago || '').toLowerCase().includes('efectivo') && (
+                {(pedidoSel?.MetodoPago || pedidoSel?.metodoPago || '').toLowerCase().includes('efectivo') && (
                   <View style={styles.efectivoBox}>
                     <Ionicons name="cash-outline" size={20} color="#27AE60" />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.efectivoLabel}>Cobrar al cliente</Text>
                       <Text style={styles.efectivoMonto}>
-                        ${(pedidoActivo.total || pedidoActivo.Total || pedidoActivo.TotalUSD || 0).toFixed(2)}
+                        ${(pedidoSel?.total || pedidoSel?.Total || pedidoSel?.TotalUSD || 0).toFixed(2)}
                       </Text>
                     </View>
                   </View>
@@ -480,7 +601,7 @@ export default function IndexScreen() {
                 <View style={styles.totalRow}>
                   <Text style={styles.totalLabel}>Total</Text>
                   <Text style={styles.totalValue}>
-                    ${(pedidoActivo.total || pedidoActivo.Total || pedidoActivo.TotalUSD || 0).toFixed(2)}
+                    ${(pedidoSel?.total || pedidoSel?.Total || pedidoSel?.TotalUSD || 0).toFixed(2)}
                   </Text>
                 </View>
               </View>
@@ -488,7 +609,7 @@ export default function IndexScreen() {
               {actionBtn && (
                 <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: actionBtn.color }, actionLoading && styles.btnDisabled]}
-                  onPress={() => handleCambiarStatus(actionBtn.nextStatus)}
+                  onPress={() => handleCambiarStatus(pedidoSel, actionBtn.nextStatus)}
                   disabled={actionLoading}
                 >
                   {actionLoading ? (
@@ -502,8 +623,8 @@ export default function IndexScreen() {
                 </TouchableOpacity>
               )}
 
-              {pedidoActivo.Status !== 'ENTREGADO' && (
-                <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelar}>
+              {pedidoSel && pedidoSel.Status !== 'ENTREGADO' && (
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelar(pedidoSel)}>
                   <Text style={styles.cancelBtnText}>Cancelar pedido</Text>
                 </TouchableOpacity>
               )}
@@ -521,6 +642,7 @@ export default function IndexScreen() {
       {nuevoPedido && (
         <NuevoPedidoModal
           pedido={nuevoPedido}
+          pedidosActivos={pedidosActivos.length}
           onAceptar={handleAceptarPedido}
           onRechazar={handleRechazarPedido}
         />
@@ -531,6 +653,7 @@ export default function IndexScreen() {
 
 function getStatusColor(status) {
   return {
+    REPARTIDOR_ASIGNADO: '#718096',
     IR_A_SUCURSAL: '#1A6A9A',
     EN_SUCURSAL: '#7B3FBE',
     EN_CAMINO: '#E67E22',
@@ -590,12 +713,38 @@ const styles = StyleSheet.create({
   esperandoTitle: { fontSize: 20, fontWeight: '700', color: '#1A202C', marginTop: 12 },
   esperandoSub:   { color: '#718096', fontSize: 14, textAlign: 'center', marginTop: 6 },
 
+  chipsScroll: { marginBottom: 14, marginHorizontal: -4 },
+  chipsRow:    { gap: 8, paddingHorizontal: 4 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#F7FAFC', borderRadius: 14,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1.5, borderColor: '#E2E8F0',
+  },
+  chipSel: { borderColor: '#1A6A9A', backgroundColor: '#EBF8FF' },
+  chipNum: {
+    width: 24, height: 24, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  chipNumText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  chipTitle:    { fontSize: 13, fontWeight: '700', color: '#4A5568' },
+  chipTitleSel: { color: '#1A6A9A' },
+  chipEta:      { fontSize: 10, color: '#718096' },
+
+  etaBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#EBF8FF', borderRadius: 12, padding: 10, marginBottom: 10,
+    borderWidth: 1, borderColor: '#BEE3F8',
+  },
+  etaText: { color: '#1A6A9A', fontSize: 13, fontWeight: '700', flex: 1 },
+  etaKm:   { color: '#4299E1', fontSize: 12, fontWeight: '600' },
+
   pedidoCard: {
     backgroundColor: '#F7FAFC', borderRadius: 16, padding: 16, marginBottom: 16,
     borderWidth: 1, borderColor: '#E2E8F0',
   },
   pedidoHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  pedidoTitle:  { fontSize: 16, fontWeight: '700', color: '#1A202C' },
+  pedidoTitle:  { fontSize: 15, fontWeight: '700', color: '#1A202C', flex: 1, marginRight: 8 },
   statusBadge:  { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   statusBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   infoRow:  { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8, gap: 8 },
@@ -665,7 +814,7 @@ const modalStyles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     paddingVertical: 18, gap: 10,
   },
-  urgentTitle: { color: '#fff', fontSize: 22, fontWeight: '800', flex: 1, textAlign: 'center' },
+  urgentTitle: { color: '#fff', fontSize: 20, fontWeight: '800', flex: 1, textAlign: 'center' },
   timerText: {
     color: '#fff', fontSize: 18, fontWeight: '700',
     backgroundColor: 'rgba(0,0,0,0.2)', paddingHorizontal: 10, paddingVertical: 4,
@@ -674,6 +823,12 @@ const modalStyles = StyleSheet.create({
   progressBg:   { height: 5, backgroundColor: '#E2E8F0' },
   progressFill: { height: 5 },
   body: { padding: 20 },
+  multiChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#EBF8FF', borderRadius: 12, padding: 10, marginBottom: 12,
+    borderWidth: 1, borderColor: '#BEE3F8',
+  },
+  multiChipText: { color: '#1A6A9A', fontSize: 12, fontWeight: '600', flex: 1 },
   infoRow:   { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 8 },
   infoLabel: { color: '#718096', fontSize: 13, fontWeight: '600', width: 80 },
   infoValue: { color: '#1A202C', fontSize: 14, flex: 1, fontWeight: '500' },

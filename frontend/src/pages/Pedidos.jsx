@@ -220,6 +220,12 @@ function ModalPedido({ idPedido, idBranch, idCuenta, puedeEscribir, repartidores
                 <>
                   <p className="text-sm font-semibold text-gray-800">{pedido.NombreRepartidor}</p>
                   {pedido.TelefonoRepartidor && <p className="text-xs text-gray-500">{pedido.TelefonoRepartidor}</p>}
+                  {pedido.ETAEntrega && pedido.MinutosRestantes != null && pedido.MinutosRestantes >= 0 && (
+                    <p className="text-xs font-semibold text-vida-blue mt-1">
+                      ⏱ Entrega estimada en ~{pedido.MinutosRestantes} min
+                      {pedido.OrdenRuta > 1 ? ` (parada ${pedido.OrdenRuta} de su ruta)` : ''}
+                    </p>
+                  )}
                 </>
               ) : (
                 puedeEscribir && repActivos.length > 0 ? (
@@ -365,6 +371,122 @@ function ModalPedido({ idPedido, idBranch, idCuenta, puedeEscribir, repartidores
   );
 }
 
+// ── Modal resumen de repartidores: pedidos activos, comisiones, generado ──
+function ModalResumenRepartidores({ onClose }) {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const [desde, setDesde] = useState(hoy);
+  const [hasta, setHasta] = useState(hoy);
+  const [datos, setDatos] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const cargar = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await api.get('/delivery/admin/repartidores/resumen', { params: { desde, hasta } });
+      setDatos(r.data);
+    } catch {
+      setDatos(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [desde, hasta]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const reps = datos?.repartidores || [];
+  const totales = reps.reduce((acc, r) => ({
+    entregados: acc.entregados + (r.Entregados || 0),
+    generado:   acc.generado   + parseFloat(r.MontoGenerado || 0),
+    comisiones: acc.comisiones + parseFloat(r.Comisiones || 0),
+  }), { entregados: 0, generado: 0, comisiones: 0 });
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b">
+          <div>
+            <h3 className="font-bold text-gray-800">Repartidores</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Pedidos activos, entregas y comisiones</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
+        </div>
+
+        {/* Rango de fechas */}
+        <div className="flex items-center gap-2 px-5 pt-4">
+          <input type="date" value={desde} max={hasta}
+            onChange={e => setDesde(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs"/>
+          <span className="text-xs text-gray-400">a</span>
+          <input type="date" value={hasta} min={desde}
+            onChange={e => setHasta(e.target.value)}
+            className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs"/>
+          <div className="ml-auto flex items-center gap-3 text-xs text-gray-500">
+            <span>Entregas: <b className="text-gray-800">{totales.entregados}</b></span>
+            <span>Generado: <b className="text-vida-blue">${totales.generado.toFixed(2)}</b></span>
+            <span>Comisiones: <b className="text-green-600">${totales.comisiones.toFixed(2)}</b></span>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 p-5">
+          {loading ? (
+            <p className="text-center text-gray-400 py-10 text-sm">Cargando...</p>
+          ) : reps.length === 0 ? (
+            <p className="text-center text-gray-400 py-10 text-sm">Sin repartidores registrados</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-400 uppercase border-b">
+                  <th className="pb-2 font-semibold">Repartidor</th>
+                  <th className="pb-2 font-semibold text-center">Activos</th>
+                  <th className="pb-2 font-semibold text-center">Próx. entrega</th>
+                  <th className="pb-2 font-semibold text-center">Entregados</th>
+                  <th className="pb-2 font-semibold text-right">Generado</th>
+                  <th className="pb-2 font-semibold text-right">Comisión</th>
+                  <th className="pb-2 font-semibold text-right">Debe rendir</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reps.map(r => (
+                  <tr key={r.idRepartidor} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${
+                          r.PedidosActivos > 0 ? 'bg-orange-400'
+                          : r.StatusRepartidor === 'DISPONIBLE' ? 'bg-green-500' : 'bg-gray-300'
+                        }`}/>
+                        <div>
+                          <p className="font-semibold text-gray-800">{r.Nombre}</p>
+                          <p className="text-[11px] text-gray-400">{r.Vehiculo || '—'}{r.Telefono ? ` · ${r.Telefono}` : ''}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="text-center">
+                      {r.PedidosActivos > 0 ? (
+                        <span className="inline-flex items-center justify-center bg-orange-100 text-orange-700 font-bold rounded-full px-2 py-0.5 text-xs">
+                          {r.PedidosActivos}
+                        </span>
+                      ) : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="text-center text-xs text-gray-500">
+                      {r.ProximaEntrega
+                        ? new Date(r.ProximaEntrega).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                        : '—'}
+                    </td>
+                    <td className="text-center font-semibold text-gray-700">{r.Entregados || 0}</td>
+                    <td className="text-right font-semibold text-vida-blue">${parseFloat(r.MontoGenerado || 0).toFixed(2)}</td>
+                    <td className="text-right font-semibold text-green-600">${parseFloat(r.Comisiones || 0).toFixed(2)}</td>
+                    <td className="text-right font-semibold text-amber-600">${parseFloat(r.SaldoPendiente || 0).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // PÁGINA PRINCIPAL
 // ══════════════════════════════════════════════════════════════════════════
@@ -381,6 +503,7 @@ export default function Pedidos() {
   const [revisionCount, setRevisionCount] = useState(0);
   const [repPendientes, setRepPendientes] = useState([]);
   const [modalReps, setModalReps] = useState(false);
+  const [modalResumen, setModalResumen] = useState(false);
   const [loading, setLoading]         = useState(true);
   const [repartidores, setRepartidores] = useState([]);
   const [pedidoAbierto, setPedidoAbierto] = useState(null);
@@ -530,6 +653,13 @@ export default function Pedidos() {
           ))}
         </div>
 
+        {/* Resumen de repartidores: activos, comisiones, generado */}
+        <button onClick={() => setModalResumen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border bg-white border-gray-200 text-gray-600 hover:border-vida-blue hover:text-vida-blue transition-all">
+          <Truck size={13}/>
+          Repartidores
+        </button>
+
         {/* Solicitudes de repartidores nuevas */}
         {puedeEscribir && repPendientes.length > 0 && (
           <button onClick={() => setModalReps(true)}
@@ -608,6 +738,17 @@ export default function Pedidos() {
                           <p className="text-sm text-gray-600 truncate">{p.NombreRepartidor}</p>
                         </div>
                       )}
+                      {p.ETAEntrega && p.MinutosRestantes != null && p.MinutosRestantes >= 0 && (
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Clock size={12} className="text-vida-blue"/>
+                          <p className="text-xs font-semibold text-vida-blue">
+                            Entrega en ~{p.MinutosRestantes} min
+                            <span className="text-gray-400 font-normal">
+                              {' '}· {new Date(p.ETAEntrega).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                            </span>
+                          </p>
+                        </div>
+                      )}
 
                       <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
                         <span className="font-bold text-vida-blue">${Number(p.TotalUSD).toFixed(2)}</span>
@@ -684,6 +825,9 @@ export default function Pedidos() {
           onActualizado={() => { cargar(page); cargarRevisionCount(); }}
         />
       )}
+
+      {/* Modal: resumen de repartidores (comisiones y pedidos activos) */}
+      {modalResumen && <ModalResumenRepartidores onClose={() => setModalResumen(false)}/>}
 
       {/* Modal: solicitudes de repartidores */}
       {modalReps && (

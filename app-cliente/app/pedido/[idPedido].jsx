@@ -68,9 +68,11 @@ export default function SeguimientoScreen() {
   const pollingRef = useRef(null);
   const confettiAnim = useRef(new Animated.Value(0)).current;
 
+  const rawStatus = String(estado?.Status ?? estado?.EstadoPedido ?? estado?.estado ?? '').toUpperCase();
+  const isCancelado = rawStatus === 'CANCELADO';
   const stepIndex = estado ? PASOS.findIndex((p) => p.key === normalizeStatus(estado.Status ?? estado.EstadoPedido ?? estado.estado)) : 0;
   const isDelivered = stepIndex === PASOS.length - 1;
-  const isBuscando = stepIndex === 0;
+  const isBuscando = stepIndex === 0 && !isCancelado;
 
   // Pulse animation for "buscando"
   useEffect(() => {
@@ -130,6 +132,29 @@ export default function SeguimientoScreen() {
           if (msg.tipo === 'pedido_asignado' && String(msg.idPedido) === String(idPedido)) {
             fetchEstado();
           }
+          // Repartidor moviéndose: actualizar su posición en el mapa en vivo
+          if (msg.tipo === 'ubicacion_repartidor' && String(msg.idPedido) === String(idPedido)) {
+            setEstado((prev) => prev
+              ? { ...prev, LatRepartidor: msg.Latitud, LonRepartidor: msg.Longitud }
+              : prev);
+          }
+          // Aviso del sistema: nadie ha tomado el pedido
+          if (msg.tipo === 'busqueda_sin_repartidor' && String(msg.idPedido) === String(idPedido)) {
+            setEstado((prev) => prev ? { ...prev, AvisoSinRepartidor: 1 } : prev);
+            fetchEstado(); // trae el tiempo límite actualizado
+          }
+          // Ruta recalculada: nueva hora estimada y paradas antes de la mía
+          if (msg.tipo === 'eta_pedido' && String(msg.idPedido) === String(idPedido)) {
+            setEstado((prev) => prev
+              ? {
+                  ...prev,
+                  ETAEntrega: msg.ETAEntrega,
+                  MinutosRestantes: msg.MinutosRestantes,
+                  ParadasAntes: msg.ParadasAntes,
+                  OrdenRuta: msg.OrdenRuta,
+                }
+              : prev);
+          }
         } catch {}
       };
 
@@ -154,6 +179,44 @@ export default function SeguimientoScreen() {
   );
 
   const BASE_URL_IMG = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') ?? '';
+
+  const [accionBusqueda, setAccionBusqueda] = useState(false);
+
+  // El cliente decide seguir esperando: extiende el deadline de búsqueda
+  const extenderBusqueda = async () => {
+    setAccionBusqueda(true);
+    try {
+      const res = await api.post(`/delivery/pedido/${idPedido}/extender-busqueda`);
+      await fetchEstado(); // refresca el tiempo límite desde el servidor
+      Alert.alert('¡Listo!', `Seguimos buscando repartidor ${res.data.minutosExtra} minutos más.`);
+    } catch (e) {
+      Alert.alert('Error', e.response?.data?.error || 'No se pudo extender la búsqueda.');
+      fetchEstado();
+    } finally {
+      setAccionBusqueda(false);
+    }
+  };
+
+  const cancelarPedido = () => {
+    Alert.alert('Cancelar pedido', '¿Seguro que quieres cancelar este pedido?', [
+      { text: 'No, seguir esperando', style: 'cancel' },
+      {
+        text: 'Sí, cancelar', style: 'destructive',
+        onPress: async () => {
+          setAccionBusqueda(true);
+          try {
+            await api.post(`/delivery/pedido/${idPedido}/cancelar`);
+            setEstado((prev) => prev ? { ...prev, Status: 'CANCELADO' } : prev);
+          } catch (e) {
+            Alert.alert('Error', e.response?.data?.error || 'No se pudo cancelar.');
+            fetchEstado();
+          } finally {
+            setAccionBusqueda(false);
+          }
+        },
+      },
+    ]);
+  };
 
   const enviarCalificacion = async (estrellas) => {
     if (enviandoCalif || calificado) return;
@@ -211,7 +274,62 @@ export default function SeguimientoScreen() {
             </Animated.View>
           )}
 
+          {/* Pedido cancelado */}
+          {isCancelado && (
+            <View style={styles.canceladoBanner}>
+              <Ionicons name="close-circle" size={44} color="#E53E3E" />
+              <Text style={styles.canceladoTitle}>Pedido cancelado</Text>
+              <Text style={styles.canceladoSub}>
+                {estado?.AvisoSinRepartidor
+                  ? 'No encontramos un repartidor disponible. No se realizó ningún cobro — puedes intentar de nuevo.'
+                  : 'Este pedido fue cancelado. No se realizó ningún cobro.'}
+              </Text>
+              <TouchableOpacity style={styles.canceladoBtn} onPress={() => router.replace('/(tabs)')}>
+                <Text style={styles.canceladoBtnText}>Volver a la tienda</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Aún sin repartidor: el cliente decide */}
+          {isBuscando && !!estado?.AvisoSinRepartidor && (
+            <View style={styles.sinRepCard}>
+              <View style={styles.sinRepHeader}>
+                <Ionicons name="alert-circle" size={22} color="#C05621" />
+                <Text style={styles.sinRepTitle}>Aún no encontramos repartidor</Text>
+              </View>
+              <Text style={styles.sinRepSub}>
+                Nadie ha tomado tu pedido todavía.
+                {estado?.SegundosBusquedaRestantes != null && estado.SegundosBusquedaRestantes > 0
+                  ? ` Si nadie lo acepta antes de las ${new Date(Date.now() + estado.SegundosBusquedaRestantes * 1000).toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit' })}, se cancelará automáticamente sin costo.`
+                  : ' Puedes seguir esperando o cancelar sin costo.'}
+              </Text>
+              <View style={styles.sinRepActions}>
+                <TouchableOpacity
+                  style={[styles.sinRepBtnEsperar, accionBusqueda && { opacity: 0.6 }]}
+                  onPress={extenderBusqueda}
+                  disabled={accionBusqueda}
+                >
+                  {accionBusqueda
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <>
+                        <Ionicons name="time-outline" size={16} color="#fff" />
+                        <Text style={styles.sinRepBtnEsperarText}>Seguir esperando</Text>
+                      </>}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.sinRepBtnCancelar}
+                  onPress={cancelarPedido}
+                  disabled={accionBusqueda}
+                >
+                  <Text style={styles.sinRepBtnCancelarText}>Cancelar pedido</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {/* Progress bar */}
+          {!isCancelado && (
+          <>
           <View style={styles.progressContainer}>
             {PASOS.map((paso, idx) => {
               const done = idx <= stepIndex;
@@ -258,6 +376,37 @@ export default function SeguimientoScreen() {
               </Text>
             </View>
           </View>
+          </>
+          )}
+
+          {/* Hora estimada de entrega */}
+          {!isDelivered && !isBuscando && (estado?.ETAEntrega || estado?.MinutosRestantes != null) && (
+            <View style={styles.etaCard}>
+              <View style={styles.etaIconWrap}>
+                <Ionicons name="time-outline" size={26} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.etaTitle}>
+                  {estado?.MinutosRestantes != null && estado.MinutosRestantes >= 0
+                    ? `Llega en ~${estado.MinutosRestantes} min`
+                    : 'Llegando pronto'}
+                </Text>
+                {estado?.ETAEntrega && (
+                  <Text style={styles.etaSub}>
+                    Hora estimada: {new Date(estado.ETAEntrega).toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit' })}
+                  </Text>
+                )}
+                {estado?.ParadasAntes > 0 && (
+                  <View style={styles.etaParadasChip}>
+                    <Ionicons name="layers-outline" size={12} color="#1A6A9A" />
+                    <Text style={styles.etaParadasText}>
+                      El repartidor tiene {estado.ParadasAntes} entrega{estado.ParadasAntes !== 1 ? 's' : ''} antes que la tuya
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
 
           {/* Repartidor info */}
           {repartidor && (
@@ -342,7 +491,7 @@ export default function SeguimientoScreen() {
           )}
 
           {/* Mapa de seguimiento: repartidor en movimiento + destino */}
-          {!isDelivered && (
+          {!isDelivered && !isCancelado && (
             <MapaTracking
               estado={estado}
               enCamino={normalizeStatus(estado?.EstadoPedido ?? estado?.estado ?? estado?.Status) === 'EN_CAMINO'}
@@ -415,6 +564,47 @@ const styles = StyleSheet.create({
   celebrationTitle: { fontSize: 22, fontWeight: '900', color: '#27AE60', marginTop: 8 },
   celebrationSub: { color: '#48BB78', marginTop: 4 },
 
+  canceladoBanner: {
+    backgroundColor: '#FFF5F5',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#FEB2B2',
+  },
+  canceladoTitle: { fontSize: 20, fontWeight: '900', color: '#E53E3E', marginTop: 10 },
+  canceladoSub: { color: '#C53030', fontSize: 13, textAlign: 'center', marginTop: 8, lineHeight: 19 },
+  canceladoBtn: {
+    backgroundColor: '#E53E3E', borderRadius: 14,
+    paddingVertical: 12, paddingHorizontal: 28, marginTop: 16,
+  },
+  canceladoBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+
+  sinRepCard: {
+    backgroundColor: '#FFFAF0',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#FBD38D',
+  },
+  sinRepHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sinRepTitle: { fontSize: 15, fontWeight: '800', color: '#C05621', flex: 1 },
+  sinRepSub: { fontSize: 13, color: '#975A16', lineHeight: 19, marginTop: 8 },
+  sinRepActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  sinRepBtnEsperar: {
+    flex: 1.4, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: '#DD6B20', borderRadius: 12, paddingVertical: 12,
+  },
+  sinRepBtnEsperarText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  sinRepBtnCancelar: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#fff', borderRadius: 12, paddingVertical: 12,
+    borderWidth: 1.5, borderColor: '#E53E3E',
+  },
+  sinRepBtnCancelarText: { color: '#E53E3E', fontWeight: '700', fontSize: 13 },
+
   progressContainer: {
     flexDirection: 'row',
     backgroundColor: '#fff',
@@ -478,6 +668,35 @@ const styles = StyleSheet.create({
   statusInfo: { flex: 1 },
   statusTitle: { fontSize: 16, fontWeight: '800', color: '#1A202C' },
   statusSub: { fontSize: 13, color: '#718096', marginTop: 3 },
+
+  etaCard: {
+    backgroundColor: '#1A6A9A',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 12,
+    shadowColor: '#1A6A9A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  etaIconWrap: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  etaTitle: { color: '#fff', fontSize: 19, fontWeight: '900' },
+  etaSub: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 2 },
+  etaParadasChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#fff', borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 5, marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  etaParadasText: { color: '#1A6A9A', fontSize: 11, fontWeight: '700' },
 
   repartidorCard: {
     backgroundColor: '#fff',
