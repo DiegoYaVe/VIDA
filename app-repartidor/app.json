@@ -30,6 +30,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "com.vida.repartidor",
+      "usesCleartextTraffic": true,
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {

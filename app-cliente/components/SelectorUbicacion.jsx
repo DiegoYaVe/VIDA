@@ -6,6 +6,14 @@ import {
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
+
+// Google Maps nativo en la APK; Leaflet en Expo Go
+const ES_EXPO_GO = Constants.executionEnvironment === 'storeClient';
+let Maps = null;
+if (!ES_EXPO_GO) {
+  try { Maps = require('react-native-maps'); } catch (_) { Maps = null; }
+}
 
 const DEFAULT_LAT = 10.4806;
 const DEFAULT_LON = -66.9036;
@@ -44,6 +52,7 @@ html,body,#map{margin:0;padding:0;width:100%;height:100%;}
 
 export default function SelectorUbicacion({ visible, onClose, onConfirmar, puedeGuardar }) {
   const webRef = useRef(null);
+  const mapRef = useRef(null);
   const [lat, setLat] = useState(DEFAULT_LAT);
   const [lon, setLon] = useState(DEFAULT_LON);
   const [buscandoGPS, setBuscandoGPS] = useState(false);
@@ -65,7 +74,12 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
       const newLon = loc.coords.longitude;
       setLat(newLat);
       setLon(newLon);
-      webRef.current?.injectJavaScript(`window.moveTo(${newLat}, ${newLon}); true;`);
+      if (Maps) {
+        mapRef.current?.animateToRegion(
+          { latitude: newLat, longitude: newLon, latitudeDelta: 0.006, longitudeDelta: 0.006 }, 500);
+      } else {
+        webRef.current?.injectJavaScript(`window.moveTo(${newLat}, ${newLon}); true;`);
+      }
     } catch {
       // sin GPS: queda en default
     } finally {
@@ -95,17 +109,37 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.container}>
-        {/* Mapa OpenStreetMap via WebView */}
-        <WebView
-          ref={webRef}
-          style={StyleSheet.absoluteFill}
-          source={{ html: buildMapHTML(lat, lon) }}
-          onMessage={onMessage}
-          onLoad={() => setMapReady(true)}
-          javaScriptEnabled
-          domStorageEnabled
-          originWhitelist={['*']}
-        />
+        {/* Mapa: Google nativo en APK, OpenStreetMap en Expo Go */}
+        {Maps ? (
+          <>
+            <Maps.default
+              ref={mapRef}
+              provider={Maps.PROVIDER_GOOGLE}
+              style={StyleSheet.absoluteFill}
+              initialRegion={{ latitude: lat, longitude: lon, latitudeDelta: 0.008, longitudeDelta: 0.008 }}
+              onRegionChangeComplete={(r) => { setLat(r.latitude); setLon(r.longitude); }}
+              onMapReady={() => setMapReady(true)}
+              showsUserLocation
+              showsMyLocationButton={false}
+              toolbarEnabled={false}
+            />
+            {/* Pin fijo al centro (estilo Uber) */}
+            <View pointerEvents="none" style={styles.pinCentro}>
+              <Text style={styles.pinCentroEmoji}>📍</Text>
+            </View>
+          </>
+        ) : (
+          <WebView
+            ref={webRef}
+            style={StyleSheet.absoluteFill}
+            source={{ html: buildMapHTML(lat, lon) }}
+            onMessage={onMessage}
+            onLoad={() => setMapReady(true)}
+            javaScriptEnabled
+            domStorageEnabled
+            originWhitelist={['*']}
+          />
+        )}
 
         {/* Header */}
         <View style={styles.header}>
@@ -167,6 +201,16 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
+  pinCentro: {
+    position: 'absolute', left: 0, right: 0, top: '50%',
+    alignItems: 'center', marginTop: -40,
+  },
+  pinCentroEmoji: {
+    fontSize: 40,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
   header: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 54 : 40,

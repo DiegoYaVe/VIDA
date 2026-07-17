@@ -5,6 +5,14 @@ import { useRef, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
+
+// Google Maps nativo en la APK; Leaflet en Expo Go
+const ES_EXPO_GO = Constants.executionEnvironment === 'storeClient';
+let Maps = null;
+if (!ES_EXPO_GO) {
+  try { Maps = require('react-native-maps'); } catch (_) { Maps = null; }
+}
 
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
 
@@ -71,12 +79,77 @@ window.update(${JSON.stringify({ yo, stops: [] })});
 </script></body></html>`;
 }
 
+// Versión nativa con Google Maps
+function MapaRutaGoogle({ yo, stops }) {
+  const mapRef = useRef(null);
+  const MapView = Maps.default;
+
+  const seq = [
+    ...(yo ? [{ latitude: yo.lat, longitude: yo.lon }] : []),
+    ...stops.map(s => ({ latitude: s.lat, longitude: s.lon })),
+  ];
+
+  useEffect(() => {
+    if (!mapRef.current || !seq.length) return;
+    if (seq.length >= 2) {
+      mapRef.current.fitToCoordinates(seq, {
+        edgePadding: { top: 60, right: 60, bottom: 60, left: 60 },
+        animated: true,
+      });
+    } else {
+      mapRef.current.animateToRegion({ ...seq[0], latitudeDelta: 0.01, longitudeDelta: 0.01 }, 500);
+    }
+  }, [JSON.stringify(seq)]);
+
+  const centro = seq[0] ?? { latitude: 10.4806, longitude: -66.9036 };
+
+  return (
+    <MapView
+      ref={mapRef}
+      provider={Maps.PROVIDER_GOOGLE}
+      style={{ flex: 1 }}
+      initialRegion={{ ...centro, latitudeDelta: 0.03, longitudeDelta: 0.03 }}
+      showsCompass={false}
+      toolbarEnabled={false}
+    >
+      {yo && (
+        <Maps.Marker coordinate={{ latitude: yo.lat, longitude: yo.lon }} title="Tú" anchor={{ x: 0.5, y: 0.5 }}>
+          <View style={[styles.pinNativo, { backgroundColor: '#4A5568' }]}>
+            <Text style={styles.pinNativoEmoji}>🛵</Text>
+          </View>
+        </Maps.Marker>
+      )}
+      {stops.map((s, i) => (
+        <Maps.Marker
+          key={`${s.tipo}-${s.idPedido ?? s.lat}-${i}`}
+          coordinate={{ latitude: s.lat, longitude: s.lon }}
+          title={s.label}
+          anchor={{ x: 0.5, y: 0.5 }}
+        >
+          {s.tipo === 'PICKUP' ? (
+            <View style={[styles.pinNativo, { backgroundColor: '#1A6A9A' }]}>
+              <Text style={styles.pinNativoEmoji}>🏪</Text>
+            </View>
+          ) : (
+            <View style={[styles.pinNativo, { backgroundColor: '#27AE60' }]}>
+              <Text style={styles.pinNativoNum}>{s.num}</Text>
+            </View>
+          )}
+        </Maps.Marker>
+      ))}
+      {seq.length >= 2 && (
+        <Maps.Polyline coordinates={seq} strokeColor="#1A6A9A" strokeWidth={3} lineDashPattern={[8, 6]} />
+      )}
+    </MapView>
+  );
+}
+
 export default function MapaRuta({ ubicacion, paradas }) {
   const webRef = useRef(null);
   const { yo, stops } = useMemo(() => buildPuntos(ubicacion, paradas), [ubicacion, paradas]);
 
   useEffect(() => {
-    if (!webRef.current) return;
+    if (Maps || !webRef.current) return;
     webRef.current.injectJavaScript(`window.update(${JSON.stringify({ yo, stops })}); true;`);
   }, [yo?.lat, yo?.lon, JSON.stringify(stops)]);
 
@@ -94,6 +167,9 @@ export default function MapaRuta({ ubicacion, paradas }) {
 
   return (
     <View style={styles.container}>
+      {Maps ? (
+        <MapaRutaGoogle yo={yo} stops={stops} />
+      ) : (
       <WebView
         ref={webRef}
         style={{ flex: 1 }}
@@ -106,6 +182,7 @@ export default function MapaRuta({ ubicacion, paradas }) {
           webRef.current?.injectJavaScript(`window.update(${JSON.stringify({ yo, stops })}); true;`);
         }}
       />
+      )}
       {siguiente && (
         <TouchableOpacity style={styles.navBtn} onPress={() => {
           const url = `https://www.google.com/maps/dir/?api=1&destination=${siguiente.lat},${siguiente.lon}&travelmode=driving`;
@@ -125,6 +202,15 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EDF2F7' },
   placeholderText: { color: '#A0AEC0', marginTop: 8, fontSize: 13 },
+  pinNativo: {
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#fff',
+    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  pinNativoEmoji: { fontSize: 15 },
+  pinNativoNum: { color: '#fff', fontSize: 14, fontWeight: '800' },
   navBtn: {
     position: 'absolute', top: 12, right: 12,
     flexDirection: 'row', alignItems: 'center', gap: 6,

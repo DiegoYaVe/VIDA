@@ -2673,3 +2673,100 @@ export async function cancelarPedidoCliente(request, reply) {
     return reply.code(500).send({ error: 'Error al cancelar el pedido' });
   }
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — GOOGLE SIGN-IN NATIVO (APK, sin navegador ni túnel)
+// POST /delivery/cliente/google/native  { idBranch, idCuenta, idToken }
+// La app obtiene el idToken directo de Google Play Services y el backend
+// lo verifica contra Google. No requiere callback URL ni URL pública.
+// ══════════════════════════════════════════════════════════════════════════
+export async function googleLoginNativo(request, reply) {
+  const { idBranch = 1, idCuenta = 1, idToken } = request.body || {};
+  if (!idToken) return reply.code(400).send({ error: 'idToken es requerido' });
+
+  try {
+    // Verificar el token con Google (firma, expiración y emisor)
+    const vRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+    const info = await vRes.json();
+    if (!vRes.ok || info.error || info.error_description) {
+      request.log.warn('[GoogleNative] token inválido: ' + JSON.stringify(info));
+      return reply.code(401).send({ error: 'Token de Google inválido o expirado' });
+    }
+
+    // El token debe haber sido emitido para NUESTRA app (web client id)
+    const audsValidas = [process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_ANDROID_CLIENT_ID].filter(Boolean);
+    if (!audsValidas.includes(info.aud)) {
+      request.log.warn(`[GoogleNative] aud no reconocida: ${info.aud}`);
+      return reply.code(401).send({ error: 'Token no emitido para esta aplicación' });
+    }
+
+    const googleId  = info.sub;
+    const Email     = info.email || null;
+    const Nombre    = info.given_name || info.name || 'Usuario';
+    const Apellidos = info.family_name || '';
+    const pool = await getPool();
+
+    // Buscar por GoogleId → por Email → crear (mismo criterio que el flujo web)
+    let row = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('googleId', sql.NVarChar(200), googleId)
+      .query(`SELECT idCliente, Nombre FROM VIDA_APP_CLIENTES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND GoogleId=@googleId AND Status='ACTIVO'`);
+
+    let idCliente, nombreFinal;
+
+    if (row.recordset.length) {
+      idCliente = row.recordset[0].idCliente;
+      nombreFinal = row.recordset[0].Nombre;
+    } else {
+      if (Email) {
+        row = await pool.request()
+          .input('idBranch', sql.BigInt, idBranch)
+          .input('idCuenta', sql.BigInt, idCuenta)
+          .input('Email', sql.VarChar(100), Email)
+          .query(`SELECT idCliente, Nombre FROM VIDA_APP_CLIENTES
+                  WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Email=@Email AND Status='ACTIVO'`);
+      }
+
+      if (row.recordset.length) {
+        idCliente = row.recordset[0].idCliente;
+        nombreFinal = row.recordset[0].Nombre;
+        await pool.request()
+          .input('idBranch', sql.BigInt, idBranch)
+          .input('idCuenta', sql.BigInt, idCuenta)
+          .input('idCliente', sql.BigInt, idCliente)
+          .input('googleId', sql.NVarChar(200), googleId)
+          .query(`UPDATE VIDA_APP_CLIENTES SET GoogleId=@googleId, EmailConfirmado=1
+                  WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+      } else {
+        idCliente = await nextId(pool, 'VIDA_APP_CLIENTES', 'idCliente', idBranch, idCuenta);
+        nombreFinal = Nombre;
+        await pool.request()
+          .input('idBranch', sql.BigInt, idBranch)
+          .input('idCuenta', sql.BigInt, idCuenta)
+          .input('idCliente', sql.BigInt, idCliente)
+          .input('Nombre', sql.VarChar(200), Nombre)
+          .input('Apellidos', sql.VarChar(200), Apellidos || null)
+          .input('Email', sql.VarChar(100), Email)
+          .input('GoogleId', sql.NVarChar(200), googleId)
+          .query(`INSERT INTO VIDA_APP_CLIENTES
+                    (idBranch,idCuenta,idCliente,Nombre,Apellidos,Telefono,Email,
+                     Contrasena,GoogleId,EmailConfirmado)
+                  VALUES
+                    (@idBranch,@idCuenta,@idCliente,@Nombre,@Apellidos,NULL,@Email,
+                     NULL,@GoogleId,1)`);
+      }
+    }
+
+    const token = request.server.jwt.sign(
+      { idBranch, idCuenta, idCliente, rol: 'CLIENTE' },
+      { expiresIn: '180d' }
+    );
+
+    return reply.send({ token, idCliente, Nombre: nombreFinal, Email });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error en login con Google' });
+  }
+}

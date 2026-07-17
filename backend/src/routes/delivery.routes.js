@@ -9,6 +9,7 @@ import {
   googleOAuthStart,
   googleOAuthCallback,
   googleOAuthPoll,
+  googleLoginNativo,
   actualizarFcmCliente,
   actualizarPerfilCliente,
   subirFotoCliente,
@@ -70,6 +71,7 @@ export async function deliveryRoutes(fastify) {
   fastify.get('/delivery/cliente/google/start',          googleOAuthStart);
   fastify.get('/delivery/cliente/google/callback',       googleOAuthCallback);
   fastify.get('/delivery/cliente/google/poll/:sessionId', googleOAuthPoll);
+  fastify.post('/delivery/cliente/google/native',         googleLoginNativo);
 
   // ── Cliente autenticado ───────────────────────────────────────────────
   fastify.put('/delivery/cliente/fcm',

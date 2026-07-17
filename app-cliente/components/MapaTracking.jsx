@@ -1,10 +1,94 @@
+// Mapa de seguimiento del pedido (repartidor en vivo + destino).
+// En la APK usa Google Maps nativo (react-native-maps, PROVIDER_GOOGLE);
+// en Expo Go cae a Leaflet + OpenStreetMap en WebView (react-native-maps
+// requiere build nativo con la API key de app.json).
 import { useRef, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
+
+const ES_EXPO_GO = Constants.executionEnvironment === 'storeClient';
+let Maps = null;
+if (!ES_EXPO_GO) {
+  try { Maps = require('react-native-maps'); } catch (_) { Maps = null; }
+}
 
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
 
+// ── Versión nativa: Google Maps ──────────────────────────────────────────
+function Pin({ color, children }) {
+  return (
+    <View style={[styles.pin, { backgroundColor: color }]}>
+      <Text style={styles.pinEmoji}>{children}</Text>
+    </View>
+  );
+}
+
+function MapaGoogle({ repartidor, destino, enCamino }) {
+  const mapRef = useRef(null);
+  const MapView = Maps.default;
+
+  const coords = [];
+  if (repartidor) coords.push({ latitude: repartidor.lat, longitude: repartidor.lon });
+  if (destino)    coords.push({ latitude: destino.lat,    longitude: destino.lon });
+
+  useEffect(() => {
+    if (!mapRef.current || !coords.length) return;
+    if (coords.length >= 2) {
+      mapRef.current.fitToCoordinates(coords, {
+        edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+        animated: true,
+      });
+    } else {
+      mapRef.current.animateToRegion({
+        ...coords[0], latitudeDelta: 0.01, longitudeDelta: 0.01,
+      }, 500);
+    }
+  }, [repartidor?.lat, repartidor?.lon, destino?.lat, destino?.lon]);
+
+  const centro = coords[0] ?? { latitude: 10.4806, longitude: -66.9036 };
+
+  return (
+    <MapView
+      ref={mapRef}
+      provider={Maps.PROVIDER_GOOGLE}
+      style={{ flex: 1 }}
+      initialRegion={{ ...centro, latitudeDelta: 0.02, longitudeDelta: 0.02 }}
+      showsCompass={false}
+      toolbarEnabled={false}
+    >
+      {repartidor && (
+        <Maps.Marker
+          coordinate={{ latitude: repartidor.lat, longitude: repartidor.lon }}
+          title="Repartidor"
+          anchor={{ x: 0.5, y: 0.5 }}
+        >
+          <Pin color="#1A6A9A">🛵</Pin>
+        </Maps.Marker>
+      )}
+      {destino && (
+        <Maps.Marker
+          coordinate={{ latitude: destino.lat, longitude: destino.lon }}
+          title="Tu dirección"
+          anchor={{ x: 0.5, y: 0.5 }}
+        >
+          <Pin color="#27AE60">🏠</Pin>
+        </Maps.Marker>
+      )}
+      {repartidor && destino && (
+        <Maps.Polyline
+          coordinates={coords}
+          strokeColor={enCamino ? '#27AE60' : '#A0AEC0'}
+          strokeWidth={3}
+          lineDashPattern={[8, 6]}
+        />
+      )}
+    </MapView>
+  );
+}
+
+// ── Versión Expo Go: Leaflet en WebView ──────────────────────────────────
 function buildHTML(repartidor, destino, enCamino) {
   const points = [];
   if (repartidor) points.push({ lat: repartidor.lat, lon: repartidor.lon, color: '#1A6A9A', icon: '🛵', label: 'Repartidor' });
@@ -69,9 +153,32 @@ window.updatePositions = function(rep, dst, lineClr) {
 </script></body></html>`;
 }
 
-export default function MapaTracking({ estado, enCamino }) {
+function MapaLeaflet({ repartidor, destino, enCamino }) {
   const webRef = useRef(null);
 
+  useEffect(() => {
+    if (!webRef.current) return;
+    const r = repartidor ? JSON.stringify(repartidor) : 'null';
+    const d = destino    ? JSON.stringify(destino)    : 'null';
+    const c = `'${enCamino ? '#27AE60' : '#A0AEC0'}'`;
+    webRef.current.injectJavaScript(`window.updatePositions(${r},${d},${c}); true;`);
+  }, [repartidor?.lat, repartidor?.lon, destino?.lat, destino?.lon, enCamino]);
+
+  return (
+    <WebView
+      ref={webRef}
+      style={{ flex: 1 }}
+      source={{ html: buildHTML(repartidor, destino, enCamino) }}
+      javaScriptEnabled
+      domStorageEnabled
+      originWhitelist={['*']}
+      scrollEnabled={false}
+    />
+  );
+}
+
+// ── Componente público ───────────────────────────────────────────────────
+export default function MapaTracking({ estado, enCamino }) {
   const rLat = num(estado?.LatRepartidor);
   const rLon = num(estado?.LonRepartidor);
   const dLat = num(estado?.UbicacionEntregaLat);
@@ -79,15 +186,6 @@ export default function MapaTracking({ estado, enCamino }) {
 
   const repartidor = rLat != null ? { lat: rLat, lon: rLon } : null;
   const destino    = dLat != null ? { lat: dLat, lon: dLon } : null;
-
-  // Actualizar marcadores cuando cambia la posición del repartidor
-  useEffect(() => {
-    if (!webRef.current) return;
-    const r = repartidor ? JSON.stringify(repartidor) : 'null';
-    const d = destino    ? JSON.stringify(destino)    : 'null';
-    const c = `'${enCamino ? '#27AE60' : '#A0AEC0'}'`;
-    webRef.current.injectJavaScript(`window.updatePositions(${r},${d},${c}); true;`);
-  }, [rLat, rLon, dLat, dLon, enCamino]);
 
   if (!repartidor && !destino) {
     return (
@@ -102,15 +200,9 @@ export default function MapaTracking({ estado, enCamino }) {
 
   return (
     <View style={styles.container}>
-      <WebView
-        ref={webRef}
-        style={{ flex: 1 }}
-        source={{ html: buildHTML(repartidor, destino, enCamino) }}
-        javaScriptEnabled
-        domStorageEnabled
-        originWhitelist={['*']}
-        scrollEnabled={false}
-      />
+      {Maps
+        ? <MapaGoogle  repartidor={repartidor} destino={destino} enCamino={enCamino} />
+        : <MapaLeaflet repartidor={repartidor} destino={destino} enCamino={enCamino} />}
     </View>
   );
 }
@@ -134,4 +226,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   placeholderText: { color: '#A0AEC0', fontSize: 12, marginTop: 6, textAlign: 'center' },
+  pin: {
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#fff',
+    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  pinEmoji: { fontSize: 16 },
 });
