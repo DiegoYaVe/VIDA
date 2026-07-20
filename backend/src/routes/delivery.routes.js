@@ -6,9 +6,6 @@ import {
   registrarCliente,
   loginCliente,
   confirmarEmailCliente,
-  googleOAuthStart,
-  googleOAuthCallback,
-  googleOAuthPoll,
   googleLoginNativo,
   actualizarFcmCliente,
   actualizarPerfilCliente,
@@ -68,10 +65,7 @@ export async function deliveryRoutes(fastify) {
   fastify.post('/delivery/cliente/registro',        registrarCliente);
   fastify.post('/delivery/cliente/login',           loginCliente);
   fastify.get('/delivery/cliente/confirmar-email',  confirmarEmailCliente);
-  fastify.get('/delivery/cliente/google/start',          googleOAuthStart);
-  fastify.get('/delivery/cliente/google/callback',       googleOAuthCallback);
-  fastify.get('/delivery/cliente/google/poll/:sessionId', googleOAuthPoll);
-  fastify.post('/delivery/cliente/google/native',         googleLoginNativo);
+  fastify.post('/delivery/cliente/google/native',   googleLoginNativo);
 
   // ── Cliente autenticado ───────────────────────────────────────────────
   fastify.put('/delivery/cliente/fcm',

@@ -12,7 +12,12 @@
           "package_name": "com.vida.cliente"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "519799220858-b6343va28ho5bhuqonhtevein9d3hamc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyARju17HZImuM-k-CQklgPmS6u4vt2Vg2I"
@@ -20,7 +25,41 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "519799220858-b6343va28ho5bhuqonhtevein9d3hamc.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:519799220858:android:3f5d276cf26e1165c8e9c3",
+        "android_client_info": {
+          "package_name": "com.vida.repartidor"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "519799220858-b6343va28ho5bhuqonhtevein9d3hamc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARju17HZImuM-k-CQklgPmS6u4vt2Vg2I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "519799220858-b6343va28ho5bhuqonhtevein9d3hamc.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

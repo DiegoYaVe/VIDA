@@ -17,54 +17,6 @@ if (!process.env.BASE_URL) {
   console.warn('[delivery] BASE_URL no definido en .env — links de email/OAuth usarán ' + BASE_URL);
 }
 
-// Store temporal para tokens OAuth pendientes de ser recogidos por la app (polling)
-// sessionId -> { token, nombre, idCliente, ts }
-const _oauthSessions = new Map();
-// Limpiar sesiones viejas cada 10 min (TTL 5 min)
-setInterval(() => {
-  const cutoff = Date.now() - 5 * 60 * 1000;
-  for (const [k, v] of _oauthSessions) if (v.ts < cutoff) _oauthSessions.delete(k);
-}, 10 * 60 * 1000);
-
-// ── Helper — página de resultado OAuth (sin deep link, la app hace polling) ─
-function buildOAuthResultPage(success) {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VIDA</title></head>
-<body style="font-family:sans-serif;text-align:center;padding:70px 24px;background:#0D1B2A;margin:0">
-<div style="font-size:54px;margin-bottom:16px">${success ? '✅' : '⚠️'}</div>
-<p style="color:#fff;font-size:22px;font-weight:800;margin:0 0 8px">
-${success ? '¡Listo! Vuelve a la app' : 'Algo salió mal'}</p>
-<p style="color:rgba(255,255,255,0.6);font-size:14px;margin:0">
-${success ? 'Puedes cerrar esta ventana' : 'Regresa a la app e inténtalo de nuevo'}</p>
-</body></html>`;
-}
-
-// ── Helper — página HTML que regresa a la app vía deep link ────────────────
-// IMPORTANTE: la redirección automática va DESPUÉS de renderizar y con delay.
-// Chrome bloquea navegaciones a esquemas de app (exp://, vida-cliente://)
-// sin gesto del usuario y dejaba la pestaña en blanco — el botón grande
-// (tap = gesto) es el camino garantizado.
-function buildDeepLinkPage(deepLink) {
-  const safe = deepLink.replace(/"/g, '&quot;');
-  const esError = deepLink.includes('error=');
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VIDA</title></head>
-<body style="font-family:sans-serif;text-align:center;padding:70px 24px;background:#0D1B2A;margin:0">
-<div style="font-size:54px;margin-bottom:16px">${esError ? '⚠️' : '✅'}</div>
-<p style="color:#fff;font-size:22px;font-weight:800;margin:0 0 8px">
-${esError ? 'Algo salió mal' : '¡Sesión iniciada!'}</p>
-<p style="color:rgba(255,255,255,0.6);font-size:14px;margin:0 0 32px">
-${esError ? 'Regresa a la app e inténtalo de nuevo' : 'Toca el botón para volver a la app'}</p>
-<a href="${safe}" style="display:inline-block;padding:16px 40px;
-background:#27AE60;color:#fff;border-radius:14px;text-decoration:none;font-size:17px;font-weight:800;
-box-shadow:0 6px 18px rgba(39,174,96,0.4)">
-Volver a la app →</a>
-<script>setTimeout(function(){ try { window.location.href = "${safe}"; } catch(e){} }, 600);</script>
-</body></html>`;
-}
-
 // ── Helper ─────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
   const r = await pool.request()
@@ -259,7 +211,10 @@ export async function loginCliente(request, reply) {
 
     const cliente = r.recordset[0];
 
-    if (Contrasena && cliente.Contrasena) {
+    if (cliente.Contrasena) {
+      if (!Contrasena) {
+        return reply.code(401).send({ error: 'Esta cuenta tiene contraseña. Ingrésala para continuar.' });
+      }
       const ok = await bcrypt.compare(Contrasena, cliente.Contrasena);
       if (!ok) {
         return reply.code(401).send({ error: 'Contraseña incorrecta' });
@@ -359,164 +314,6 @@ export async function confirmarEmailCliente(request, reply) {
     request.log.error(err);
     return reply.type('text/html').send(htmlError);
   }
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-// CLIENTE — LOGIN CON GOOGLE
-// POST /delivery/cliente/google
-// ══════════════════════════════════════════════════════════════════════════
-// ══════════════════════════════════════════════════════════════════════════
-// GOOGLE OAUTH — flujo server-side
-// GET /delivery/cliente/google/start?idBranch=1&idCuenta=1
-// ══════════════════════════════════════════════════════════════════════════
-export async function googleOAuthStart(request, reply) {
-  const { idBranch = 1, idCuenta = 1, sessionId = '' } = request.query;
-  const redirectUri = `${BASE_URL}/api/delivery/cliente/google/callback`;
-
-  const stateData = `${idBranch}:${idCuenta}:${encodeURIComponent(sessionId)}`;
-
-  const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID,
-    redirect_uri: redirectUri,
-    response_type: 'code',
-    scope: 'openid profile email',
-    access_type: 'online',
-    state: stateData,
-  });
-
-  return reply.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-// GOOGLE OAUTH — callback server-side
-// GET /delivery/cliente/google/callback?code=...&state=...
-// ══════════════════════════════════════════════════════════════════════════
-export async function googleOAuthCallback(request, reply) {
-  const { code, state, error } = request.query;
-  const redirectUri = `${BASE_URL}/api/delivery/cliente/google/callback`;
-
-  // Decodificar state: "idBranch:idCuenta:sessionId"
-  const stateParts = (state || '1:1:').split(':');
-  const idBranch = Number(stateParts[0]) || 1;
-  const idCuenta = Number(stateParts[1]) || 1;
-  const sessionId = decodeURIComponent(stateParts.slice(2).join(':')) || '';
-
-  if (error || !code) {
-    if (sessionId) _oauthSessions.set(sessionId, { error: 'cancelado', ts: Date.now() });
-    return reply.type('text/html').send(buildOAuthResultPage(false));
-  }
-
-  try {
-    // Intercambiar código por tokens
-    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code,
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: redirectUri,
-        grant_type: 'authorization_code',
-      }).toString(),
-    });
-    const tokens = await tokenRes.json();
-    if (!tokenRes.ok || tokens.error) {
-      request.log.error('[Google] Token exchange: ' + JSON.stringify(tokens));
-      return reply.type('text/html').send(buildDeepLinkPage(`${appRedirectUri}?error=token`));
-    }
-
-    // Obtener info del usuario
-    const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${tokens.access_token}` },
-    });
-    const googleData = await userRes.json();
-    if (!userRes.ok) return reply.type('text/html').send(buildDeepLinkPage(`${appRedirectUri}?error=userinfo`));
-
-    const googleId  = googleData.sub;
-    const Email     = googleData.email || null;
-    const Nombre    = googleData.given_name || googleData.name || 'Usuario';
-    const Apellidos = googleData.family_name || '';
-    const pool = await getPool();
-
-    // Buscar por GoogleId
-    let row = await pool.request()
-      .input('idBranch', sql.BigInt, idBranch)
-      .input('idCuenta', sql.BigInt, idCuenta)
-      .input('googleId', sql.NVarChar(200), googleId)
-      .query(`SELECT idCliente, Nombre FROM VIDA_APP_CLIENTES
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND GoogleId=@googleId AND Status='ACTIVO'`);
-
-    let idCliente, nombreFinal;
-
-    if (row.recordset.length) {
-      idCliente = row.recordset[0].idCliente;
-      nombreFinal = row.recordset[0].Nombre;
-    } else {
-      // Buscar por Email
-      if (Email) {
-        row = await pool.request()
-          .input('idBranch', sql.BigInt, idBranch)
-          .input('idCuenta', sql.BigInt, idCuenta)
-          .input('Email', sql.VarChar(100), Email)
-          .query(`SELECT idCliente, Nombre FROM VIDA_APP_CLIENTES
-                  WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Email=@Email AND Status='ACTIVO'`);
-      }
-
-      if (row.recordset.length) {
-        idCliente = row.recordset[0].idCliente;
-        nombreFinal = row.recordset[0].Nombre;
-        await pool.request()
-          .input('idBranch', sql.BigInt, idBranch)
-          .input('idCuenta', sql.BigInt, idCuenta)
-          .input('idCliente', sql.BigInt, idCliente)
-          .input('googleId', sql.NVarChar(200), googleId)
-          .query(`UPDATE VIDA_APP_CLIENTES SET GoogleId=@googleId, EmailConfirmado=1
-                  WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
-      } else {
-        // Crear nuevo
-        idCliente = await nextId(pool, 'VIDA_APP_CLIENTES', 'idCliente', idBranch, idCuenta);
-        nombreFinal = Nombre;
-        await pool.request()
-          .input('idBranch', sql.BigInt, idBranch)
-          .input('idCuenta', sql.BigInt, idCuenta)
-          .input('idCliente', sql.BigInt, idCliente)
-          .input('Nombre', sql.VarChar(200), Nombre)
-          .input('Apellidos', sql.VarChar(200), Apellidos || null)
-          .input('Email', sql.VarChar(100), Email)
-          .input('GoogleId', sql.NVarChar(200), googleId)
-          .query(`INSERT INTO VIDA_APP_CLIENTES
-                    (idBranch,idCuenta,idCliente,Nombre,Apellidos,Telefono,Email,
-                     Contrasena,GoogleId,EmailConfirmado)
-                  VALUES
-                    (@idBranch,@idCuenta,@idCliente,@Nombre,@Apellidos,NULL,@Email,
-                     NULL,@GoogleId,1)`);
-      }
-    }
-
-    const jwtToken = request.server.jwt.sign(
-      { idBranch, idCuenta, idCliente, rol: 'CLIENTE' },
-      { expiresIn: '180d' }
-    );
-
-    if (sessionId) {
-      _oauthSessions.set(sessionId, { token: jwtToken, nombre: nombreFinal, idCliente, ts: Date.now() });
-    }
-    return reply.type('text/html').send(buildOAuthResultPage(true));
-  } catch (err) {
-    request.log.error(err);
-    if (sessionId) _oauthSessions.set(sessionId, { error: 'servidor', ts: Date.now() });
-    return reply.type('text/html').send(buildOAuthResultPage(false));
-  }
-}
-
-// GET /delivery/cliente/google/poll/:sessionId
-export async function googleOAuthPoll(request, reply) {
-  const { sessionId } = request.params;
-  const session = _oauthSessions.get(sessionId);
-  if (!session) return reply.send({ status: 'pending' });
-  _oauthSessions.delete(sessionId);
-  if (session.error) return reply.send({ status: 'error', error: session.error });
-  return reply.send({ status: 'ok', token: session.token, nombre: session.nombre, idCliente: session.idCliente });
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1309,10 +1106,13 @@ export async function historialPedidosCliente(request, reply) {
 // POST /delivery/repartidor/registro
 // ══════════════════════════════════════════════════════════════════════════
 export async function registrarRepartidor(request, reply) {
-  const { idBranch, idCuenta, Nombre, Telefono, Email, Vehiculo, PlacaVehiculo } = request.body || {};
+  const { idBranch, idCuenta, Nombre, Telefono, Email, Vehiculo, PlacaVehiculo, Contrasena } = request.body || {};
 
   if (!Nombre?.trim() || !Telefono?.trim()) {
     return reply.code(400).send({ error: 'Nombre y teléfono son obligatorios' });
+  }
+  if (!Contrasena || Contrasena.length < 6) {
+    return reply.code(400).send({ error: 'La contraseña es obligatoria (mínimo 6 caracteres)' });
   }
 
   try {
@@ -1333,6 +1133,7 @@ export async function registrarRepartidor(request, reply) {
       });
     }
 
+    const contrasenaHash = await bcrypt.hash(Contrasena, 10);
     const idRepartidor = await nextId(pool, 'VIDA_REPARTIDORES', 'idRepartidor', idBranch, idCuenta);
     await pool.request()
       .input('idBranch',     sql.BigInt,       idBranch)
@@ -1343,10 +1144,11 @@ export async function registrarRepartidor(request, reply) {
       .input('Email',        sql.VarChar(100), Email?.trim() || null)
       .input('Vehiculo',     sql.VarChar(100), Vehiculo?.trim() || null)
       .input('PlacaVehiculo',sql.VarChar(20),  PlacaVehiculo?.trim() || null)
+      .input('Contrasena',   sql.NVarChar(200), contrasenaHash)
       .query(`INSERT INTO VIDA_REPARTIDORES
-                (idBranch, idCuenta, idRepartidor, Nombre, Telefono, Email, Vehiculo, PlacaVehiculo, StatusAprobacion)
+                (idBranch, idCuenta, idRepartidor, Nombre, Telefono, Email, Vehiculo, PlacaVehiculo, Contrasena, StatusAprobacion)
               VALUES
-                (@idBranch, @idCuenta, @idRepartidor, @Nombre, @Telefono, @Email, @Vehiculo, @PlacaVehiculo, 'PENDIENTE')`);
+                (@idBranch, @idCuenta, @idRepartidor, @Nombre, @Telefono, @Email, @Vehiculo, @PlacaVehiculo, @Contrasena, 'PENDIENTE')`);
 
     return reply.code(201).send({
       idRepartidor,
@@ -1359,14 +1161,19 @@ export async function registrarRepartidor(request, reply) {
 }
 
 export async function loginRepartidor(request, reply) {
-  const { idBranch, idCuenta, Telefono } = request.body;
+  const { idBranch, idCuenta, Telefono, Contrasena } = request.body;
+
+  if (!Contrasena) {
+    return reply.code(400).send({ error: 'Ingresa tu contraseña' });
+  }
+
   try {
     const pool = await getPool();
     const r = await pool.request()
       .input('idBranch', sql.BigInt,    idBranch)
       .input('idCuenta', sql.BigInt,    idCuenta)
       .input('Telefono', sql.VarChar(30), Telefono)
-      .query(`SELECT idRepartidor, Nombre, StatusRepartidor, StatusAprobacion
+      .query(`SELECT idRepartidor, Nombre, StatusRepartidor, StatusAprobacion, Contrasena
               FROM VIDA_REPARTIDORES
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta
                 AND Telefono=@Telefono AND Status='ACTIVO'`);
@@ -1389,6 +1196,28 @@ export async function loginRepartidor(request, reply) {
         codigo: 'RECHAZADO',
       });
     }
+
+    if (rep.Contrasena) {
+      const ok = await bcrypt.compare(Contrasena, rep.Contrasena);
+      if (!ok) {
+        return reply.code(401).send({ error: 'Contraseña incorrecta' });
+      }
+    } else {
+      // Cuenta creada antes de la migración 12: el primer login define la contraseña
+      if (Contrasena.length < 6) {
+        return reply.code(400).send({ error: 'La contraseña debe tener mínimo 6 caracteres' });
+      }
+      const hash = await bcrypt.hash(Contrasena, 10);
+      await pool.request()
+        .input('idBranch',     sql.BigInt,        idBranch)
+        .input('idCuenta',     sql.BigInt,        idCuenta)
+        .input('idRepartidor', sql.BigInt,        rep.idRepartidor)
+        .input('Contrasena',   sql.NVarChar(200), hash)
+        .query(`UPDATE VIDA_REPARTIDORES SET Contrasena=@Contrasena
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                  AND idRepartidor=@idRepartidor AND Contrasena IS NULL`);
+    }
+
     const token = request.server.jwt.sign(
       { idBranch, idCuenta, idRepartidor: rep.idRepartidor, rol: 'REPARTIDOR' },
       { expiresIn: '180d' }

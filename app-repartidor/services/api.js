@@ -7,8 +7,6 @@ const api = axios.create({
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
-    // Evita la página de advertencia de ngrok free en las llamadas al API
-    'ngrok-skip-browser-warning': 'true',
   },
 });
 

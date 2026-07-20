@@ -8,26 +8,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
-import Constants from 'expo-constants';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
-WebBrowser.maybeCompleteAuthSession();
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
-import { API_URL, ID_BRANCH, ID_CUENTA, GOOGLE_WEB_CLIENT_ID } from '../../constants/config';
+import { ID_BRANCH, ID_CUENTA, GOOGLE_WEB_CLIENT_ID } from '../../constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Google Sign-In NATIVO — solo existe en la APK / dev build, no en Expo Go.
-// Se carga de forma diferida para que Expo Go no truene al importar.
-const ES_EXPO_GO = Constants.executionEnvironment === 'storeClient';
-let GoogleSigninNativo = null;
-if (!ES_EXPO_GO) {
-  try {
-    GoogleSigninNativo = require('@react-native-google-signin/google-signin').GoogleSignin;
-    GoogleSigninNativo.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
-  } catch (_) { GoogleSigninNativo = null; }
-}
+GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -77,65 +65,18 @@ export default function LoginScreen() {
     setError('');
     setGoogleLoading(true);
     try {
-      // ── Flujo NATIVO (APK): token directo de Google Play Services ──────
-      if (GoogleSigninNativo) {
-        await GoogleSigninNativo.hasPlayServices({ showPlayServicesUpdateDialog: true });
-        const resultado = await GoogleSigninNativo.signIn();
-        // v13+ regresa { type, data:{ idToken } }; versiones previas { idToken }
-        if (resultado?.type === 'cancelled') return;
-        const idToken = resultado?.data?.idToken ?? resultado?.idToken;
-        if (!idToken) { setError('Google no entregó el token. Intenta de nuevo.'); return; }
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const resultado = await GoogleSignin.signIn();
+      // v13+ regresa { type, data:{ idToken } }; versiones previas { idToken }
+      if (resultado?.type === 'cancelled') return;
+      const idToken = resultado?.data?.idToken ?? resultado?.idToken;
+      if (!idToken) { setError('Google no entregó el token. Intenta de nuevo.'); return; }
 
-        const r = await api.post('/delivery/cliente/google/native', {
-          idBranch: ID_BRANCH, idCuenta: ID_CUENTA, idToken,
-        });
-        await AsyncStorage.setItem('vida_cliente_token', r.data.token);
-        login({ cliente: { idCliente: Number(r.data.idCliente), Nombre: r.data.Nombre, Email: r.data.Email }, token: r.data.token });
-        return;
-      }
-
-      // ── Fallback (Expo Go): flujo web con polling ───────────────────────
-      // Generar sessionId único para polling
-      const sessionId = Math.random().toString(36).slice(2) + Date.now().toString(36);
-      const googleUrl = `${API_URL}/delivery/cliente/google/start?idBranch=${ID_BRANCH}&idCuenta=${ID_CUENTA}&sessionId=${sessionId}`;
-
-      // Iniciar polling ANTES de abrir el browser
-      let pollResult = null;
-      const pollInterval = setInterval(async () => {
-        try {
-          const r = await fetch(`${API_URL}/delivery/cliente/google/poll/${sessionId}`);
-          const data = await r.json();
-          if (data.status === 'ok') {
-            pollResult = data;
-            clearInterval(pollInterval);
-            WebBrowser.dismissBrowser();
-          } else if (data.status === 'error') {
-            pollResult = { error: data.error };
-            clearInterval(pollInterval);
-            WebBrowser.dismissBrowser();
-          }
-        } catch (_) { /* red ocupada, ignorar */ }
-      }, 1500);
-
-      await WebBrowser.openBrowserAsync(googleUrl, { showTitle: false, enableBarCollapsing: true });
-      clearInterval(pollInterval);
-
-      // Si el poll ya trajo resultado úsalo; si no, esperar un tick más
-      if (!pollResult) {
-        await new Promise(r => setTimeout(r, 1000));
-        try {
-          const r = await fetch(`${API_URL}/delivery/cliente/google/poll/${sessionId}`);
-          const data = await r.json();
-          if (data.status === 'ok') pollResult = data;
-        } catch (_) {}
-      }
-
-      if (!pollResult || pollResult.error || !pollResult.token) {
-        setError('No se pudo iniciar sesión con Google');
-        return;
-      }
-      await AsyncStorage.setItem('vida_cliente_token', pollResult.token);
-      login({ cliente: { idCliente: Number(pollResult.idCliente), Nombre: pollResult.nombre }, token: pollResult.token });
+      const r = await api.post('/delivery/cliente/google/native', {
+        idBranch: ID_BRANCH, idCuenta: ID_CUENTA, idToken,
+      });
+      await AsyncStorage.setItem('vida_cliente_token', r.data.token);
+      login({ cliente: { idCliente: Number(r.data.idCliente), Nombre: r.data.Nombre, Email: r.data.Email }, token: r.data.token });
     } catch (e) {
       // Cancelación del selector de cuenta no es un error
       if (String(e?.code) === '12501' || /cancel/i.test(String(e?.message))) return;

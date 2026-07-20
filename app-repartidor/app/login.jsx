@@ -20,11 +20,16 @@ const VEHICULOS = [
   { key: 'Carro',     icon: 'car-outline' },
 ];
 
-function Campo({ icon, ...props }) {
+function Campo({ icon, rightIcon, onRightPress, ...props }) {
   return (
     <View style={styles.campo}>
       <Ionicons name={icon} size={19} color="#94A3B8" style={{ marginRight: 8 }} />
       <TextInput style={styles.campoInput} placeholderTextColor="#A0AEC0" {...props} />
+      {rightIcon ? (
+        <TouchableOpacity onPress={onRightPress} style={{ padding: 6 }}>
+          <Ionicons name={rightIcon} size={20} color="#94A3B8" />
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -37,18 +42,26 @@ export default function LoginScreen() {
 
   // Login
   const [telefono, setTelefono] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
 
   // Registro
   const [nombre, setNombre] = useState('');
   const [telefonoReg, setTelefonoReg] = useState('');
   const [vehiculo, setVehiculo] = useState('Moto');
   const [placa, setPlaca] = useState('');
+  const [passwordReg, setPasswordReg] = useState('');
+  const [showPassReg, setShowPassReg] = useState(false);
 
   const login = useAuthStore((s) => s.login);
 
   const handleLogin = async () => {
     if (!telefono.trim()) {
       setError('Ingresa tu número de teléfono');
+      return;
+    }
+    if (!password) {
+      setError('Ingresa tu contraseña');
       return;
     }
     setError('');
@@ -58,6 +71,7 @@ export default function LoginScreen() {
         idBranch: ID_BRANCH,
         idCuenta: ID_CUENTA,
         Telefono: telefono.trim(),
+        Contrasena: password,
         FcmToken: '',
       });
       const { token, repartidor } = res.data;
@@ -79,6 +93,10 @@ export default function LoginScreen() {
       setError('Nombre y teléfono son obligatorios');
       return;
     }
+    if (!passwordReg || passwordReg.length < 6) {
+      setError('La contraseña es obligatoria (mínimo 6 caracteres)');
+      return;
+    }
     setError('');
     setLoading(true);
     try {
@@ -89,6 +107,7 @@ export default function LoginScreen() {
         Telefono: telefonoReg.trim(),
         Vehiculo: vehiculo,
         PlacaVehiculo: placa.trim() || undefined,
+        Contrasena: passwordReg,
       });
       setPendiente(true);
     } catch (e) {
@@ -184,16 +203,27 @@ export default function LoginScreen() {
                 {tab === 'login' ? (
                   <>
                     <Text style={styles.cardTitle}>Bienvenido de vuelta 👋</Text>
-                    <Text style={styles.cardSubtitle}>Ingresa con tu número de teléfono</Text>
-                    <Campo
-                      icon="call-outline"
-                      placeholder="04XX-XXXXXXX"
-                      keyboardType="phone-pad"
-                      value={telefono}
-                      onChangeText={setTelefono}
-                      returnKeyType="done"
-                      onSubmitEditing={handleLogin}
-                    />
+                    <Text style={styles.cardSubtitle}>Ingresa con tu teléfono y contraseña</Text>
+                    <View style={{ gap: 10 }}>
+                      <Campo
+                        icon="call-outline"
+                        placeholder="04XX-XXXXXXX"
+                        keyboardType="phone-pad"
+                        value={telefono}
+                        onChangeText={setTelefono}
+                      />
+                      <Campo
+                        icon="lock-closed-outline"
+                        placeholder="Contraseña"
+                        secureTextEntry={!showPass}
+                        value={password}
+                        onChangeText={setPassword}
+                        rightIcon={showPass ? 'eye-off-outline' : 'eye-outline'}
+                        onRightPress={() => setShowPass(v => !v)}
+                        returnKeyType="done"
+                        onSubmitEditing={handleLogin}
+                      />
+                    </View>
                   </>
                 ) : (
                   <>
@@ -224,6 +254,16 @@ export default function LoginScreen() {
                       {vehiculo !== 'Bicicleta' && (
                         <Campo icon="pricetag-outline" placeholder="Placa del vehículo" autoCapitalize="characters" value={placa} onChangeText={setPlaca} />
                       )}
+
+                      <Campo
+                        icon="lock-closed-outline"
+                        placeholder="Contraseña * (mínimo 6 caracteres)"
+                        secureTextEntry={!showPassReg}
+                        value={passwordReg}
+                        onChangeText={setPasswordReg}
+                        rightIcon={showPassReg ? 'eye-off-outline' : 'eye-outline'}
+                        onRightPress={() => setShowPassReg(v => !v)}
+                      />
                     </View>
                   </>
                 )}
