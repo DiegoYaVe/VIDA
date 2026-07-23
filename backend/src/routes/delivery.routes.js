@@ -41,6 +41,9 @@ import {
   historialRepartidor,
   rutaRepartidor,
   resumenRepartidores,
+  mapaVivoDelivery,
+  listarClientesAdmin,
+  detalleClienteAdmin,
   // Cliente extra
   calificarRepartidor,
   // Admin
@@ -192,6 +195,18 @@ export async function deliveryRoutes(fastify) {
   fastify.get('/delivery/admin/repartidores/resumen',
     { preHandler: [authenticate, requireRole(...ADMIN_ROLES)] },
     resumenRepartidores);
+
+  fastify.get('/delivery/admin/mapa-vivo',
+    { preHandler: [authenticate, requireRole(...ADMIN_ROLES)] },
+    mapaVivoDelivery);
+
+  fastify.get('/delivery/admin/clientes',
+    { preHandler: [authenticate, requireRole(...ADMIN_ROLES)] },
+    listarClientesAdmin);
+
+  fastify.get('/delivery/admin/clientes/:idCliente',
+    { preHandler: [authenticate, requireRole(...ADMIN_ROLES)] },
+    detalleClienteAdmin);
 
   fastify.post('/delivery/admin/repartidores',
     { preHandler: [authenticate, requireRole(...ADMIN_ROLES)] },

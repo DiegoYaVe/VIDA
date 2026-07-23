@@ -2,6 +2,7 @@
 import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { getPool, sql } from '../db/sqlserver.js';
+import { portalDeRol } from '../config/portales.js';
 
 export async function login(request, reply) {
   const { cve, pass } = request.body;
@@ -70,6 +71,7 @@ export async function login(request, reply) {
       Nombre:      usuario.Nombre,
       Apellidos:   usuario.Apellidos,
       TipoUsuario: usuario.TipoUsuario,
+      Portal:      portalDeRol(usuario.TipoUsuario),
       NivelAcceso: usuario.NivelAcceso,
       idPuntoVenta:usuario.idPuntoVenta,
       idEstado:    usuario.idEstado,
@@ -104,6 +106,7 @@ export async function login(request, reply) {
         Apellidos:    usuario.Apellidos,
         Correo:       usuario.Correo,
         TipoUsuario:  usuario.TipoUsuario,
+        Portal:       portalDeRol(usuario.TipoUsuario),
         NivelAcceso:  usuario.NivelAcceso,
         NombreCuenta: usuario.NombreCuenta,
         logoCuenta:   usuario.logoCuenta,
@@ -151,6 +154,7 @@ export async function refresh(request, reply) {
       Nombre:      sesion.Nombre,
       Apellidos:   sesion.Apellidos,
       TipoUsuario: sesion.TipoUsuario,
+      Portal:      portalDeRol(sesion.TipoUsuario),
       NivelAcceso: sesion.NivelAcceso,
       idPuntoVenta:sesion.idPuntoVenta,
       idEstado:    sesion.idEstado,

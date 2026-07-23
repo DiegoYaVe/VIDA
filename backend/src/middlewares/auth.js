@@ -1,3 +1,5 @@
+import { portalDeRol } from '../config/portales.js';
+
 // Rutas permitidas para un usuario con contraseña temporal (CambiarPass=1):
 // solo puede cambiarla, ver su sesión o salir. Todo lo demás responde 403.
 const RUTAS_PERMITIDAS_CAMBIO_PASS = [
@@ -34,6 +36,22 @@ export function requireRole(...roles) {
     if (reply.sent) return;
     if (!roles.includes(request.user?.TipoUsuario)) {
       reply.code(403).send({ error: 'No tienes permiso para esta acción' });
+    }
+  };
+}
+
+// Guard por portal: el usuario debe pertenecer a alguno de los portales dados
+// (CORPORATIVO / EMPRESARIO / REPARTIDOR / CLIENTE). Se deriva de su TipoUsuario.
+export function requirePortal(...portales) {
+  return async (request, reply) => {
+    await authenticate(request, reply);
+    if (reply.sent) return;
+    const portal = portalDeRol(request.user?.TipoUsuario);
+    if (!portal || !portales.includes(portal)) {
+      reply.code(403).send({
+        error: 'Tu portal no tiene acceso a este recurso',
+        codigo: 'PORTAL_NO_AUTORIZADO',
+      });
     }
   };
 }

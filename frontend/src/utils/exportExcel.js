@@ -109,6 +109,48 @@ export function exportarProductosExcel({ filas, totales, fechaInicio, fechaFin }
   descargar(wb, `productos_${fechaInicio}_${fechaFin}.xlsx`);
 }
 
+export function exportarDeliveryExcel({ graficaDiaria, porRepartidor, porMetodo, totales, fechaInicio, fechaFin }) {
+  // Hoja 1: por repartidor
+  const encRep = [
+    ['COMERCIALIZADORA VIDA — REPORTE DE DELIVERY'],
+    [`Período: ${fechaInicio} al ${fechaFin}`, '', '', '', `Generado: ${new Date().toLocaleString('es-VE')}`],
+    [`Entregas: ${totales.NumEntregas} | Generado: ${USD(totales.MontoGenerado)} | Comisiones: ${USD(totales.Comisiones)} | Cancelados: ${totales.Cancelados}`],
+    [],
+    ['Repartidor', 'Vehículo', 'Calificación', 'Entregas', 'Monto Generado', 'Comisión', 'Efectivo Recaudado'],
+  ];
+  const filasRep = (porRepartidor || []).map(r => [
+    r.Nombre,
+    r.Vehiculo || '',
+    r.Calificacion != null ? Number(r.Calificacion) : '',
+    r.Entregas,
+    Number(r.MontoGenerado || 0),
+    Number(r.Comisiones || 0),
+    Number(r.EfectivoRecaudado || 0),
+  ]);
+  const filaTotRep = [
+    'TOTALES', '', '',
+    totales.NumEntregas,
+    Number(totales.MontoGenerado),
+    Number(totales.Comisiones),
+    Number(totales.EfectivoRecaudado),
+  ];
+
+  // Hoja 2: por día
+  const encDia = [['VENTAS DELIVERY POR DÍA'], ['Fecha', 'Núm. Pedidos', 'Total USD']];
+  const filasDia = (graficaDiaria || []).map(r => [fmtFecha(r.Fecha), r.NumPedidos, Number(r.TotalUSD || 0)]);
+
+  // Hoja 3: por método de pago
+  const encMet = [['DELIVERY POR MÉTODO DE PAGO'], ['Método', 'Núm. Pedidos', 'Total USD']];
+  const filasMet = (porMetodo || []).map(r => [r.MetodoPago, r.NumPedidos, Number(r.TotalUSD || 0)]);
+
+  const wb = crearLibro([
+    { nombre: 'Por Repartidor', datos: [...encRep, ...filasRep, [], filaTotRep], anchos: [24, 14, 12, 10, 16, 14, 18] },
+    { nombre: 'Por Día',        datos: [...encDia, ...filasDia], anchos: [14, 14, 14] },
+    { nombre: 'Por Método',     datos: [...encMet, ...filasMet], anchos: [18, 14, 14] },
+  ]);
+  descargar(wb, `delivery_${fechaInicio}_${fechaFin}.xlsx`);
+}
+
 export function exportarInventarioExcel({ filas, resumen }) {
   const now = new Date().toLocaleString('es-VE');
   const encabezado = [

@@ -2397,6 +2397,208 @@ export async function resumenRepartidores(request, reply) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// ADMIN — MAPA EN VIVO (posiciones de repartidores + pedidos en curso)
+// GET /delivery/admin/mapa-vivo
+// Alimenta el mapa de logística del panel web; las actualizaciones en tiempo
+// real llegan por WebSocket (repartidor_ubicacion / pedido_status).
+// ══════════════════════════════════════════════════════════════════════════
+export async function mapaVivoDelivery(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  try {
+    const pool = await getPool();
+
+    // Repartidores con ubicación conocida y su carga actual
+    const repR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .query(`
+        SELECT r.idRepartidor, r.Nombre, r.Telefono, r.Vehiculo,
+               r.StatusRepartidor, r.UltimaLatitud, r.UltimaLongitud, r.UltimaUbicacion,
+               (SELECT COUNT(*) FROM VIDA_PEDIDOS p
+                WHERE p.idBranch=r.idBranch AND p.idCuenta=r.idCuenta
+                  AND p.idRepartidor=r.idRepartidor
+                  AND p.Status IN ('REPARTIDOR_ASIGNADO','IR_A_SUCURSAL','EN_SUCURSAL','EN_CAMINO')
+               ) AS PedidosActivos
+        FROM VIDA_REPARTIDORES r
+        WHERE r.idBranch=@idBranch AND r.idCuenta=@idCuenta
+          AND r.Status='ACTIVO'
+          AND ISNULL(r.StatusAprobacion,'APROBADO') NOT IN ('PENDIENTE','RECHAZADO')
+          AND r.StatusRepartidor IN ('DISPONIBLE','OCUPADO')
+      `);
+
+    // Pedidos en curso (con posición de sucursal y de entrega)
+    const pedR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .query(`
+        SELECT p.idPedido, p.Status, p.idRepartidor, p.TotalUSD,
+               p.OrdenRuta, p.ETAEntrega,
+               DATEDIFF(MINUTE, GETUTCDATE(), p.ETAEntrega) AS MinutosRestantes,
+               p.UbicacionEntregaLat AS EntregaLat, p.UbicacionEntregaLon AS EntregaLon,
+               p.DireccionEntrega,
+               c.Nombre AS NombreCliente,
+               rep.Nombre AS NombreRepartidor,
+               pv.NomComercial AS NombreSucursal,
+               pv.Latitud  AS SucursalLat, pv.Longitud AS SucursalLon
+        FROM VIDA_PEDIDOS p
+        LEFT JOIN VIDA_APP_CLIENTES c
+          ON c.idBranch=p.idBranch AND c.idCuenta=p.idCuenta AND c.idCliente=p.idCliente
+        LEFT JOIN VIDA_REPARTIDORES rep
+          ON rep.idBranch=p.idBranch AND rep.idCuenta=p.idCuenta AND rep.idRepartidor=p.idRepartidor
+        LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+          ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
+        WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
+          AND p.Status IN ('BUSCANDO_REPARTIDOR','REPARTIDOR_ASIGNADO','IR_A_SUCURSAL','EN_SUCURSAL','EN_CAMINO')
+        ORDER BY p.FechaAlta DESC
+      `);
+
+    return reply.send({
+      repartidores: repR.recordset,
+      pedidos:      pedR.recordset,
+      timestamp:    new Date().toISOString(),
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener el mapa en vivo' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ADMIN — LISTAR CONSUMIDORES FINALES (clientes de la app) con métricas
+// GET /delivery/admin/clientes?q=&page=1&limit=20
+// ══════════════════════════════════════════════════════════════════════════
+export async function listarClientesAdmin(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { q = '', page = 1, limit = 20 } = request.query;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+
+  try {
+    const pool = await getPool();
+    const busca = `%${String(q).trim()}%`;
+
+    const filas = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('q',        sql.VarChar(200), busca)
+      .input('offset',   sql.Int, offset)
+      .input('limit',    sql.Int, parseInt(limit))
+      .query(`
+        SELECT c.idCliente, c.Nombre, c.Apellidos, c.Telefono, c.Email,
+               c.FechaAlta, c.Status,
+               CASE WHEN c.GoogleId IS NOT NULL THEN 1 ELSE 0 END AS EsGoogle,
+               ISNULL(ped.NumPedidos, 0)   AS NumPedidos,
+               ISNULL(ped.TotalGastado, 0) AS TotalGastado,
+               ped.UltimoPedido
+        FROM VIDA_APP_CLIENTES c
+        OUTER APPLY (
+          SELECT COUNT(*) AS NumPedidos,
+                 SUM(CASE WHEN p.Status='ENTREGADO' THEN p.TotalUSD ELSE 0 END) AS TotalGastado,
+                 MAX(p.FechaAlta) AS UltimoPedido
+          FROM VIDA_PEDIDOS p
+          WHERE p.idBranch=c.idBranch AND p.idCuenta=c.idCuenta AND p.idCliente=c.idCliente
+        ) ped
+        WHERE c.idBranch=@idBranch AND c.idCuenta=@idCuenta
+          AND (c.Nombre LIKE @q OR c.Apellidos LIKE @q OR c.Telefono LIKE @q OR c.Email LIKE @q)
+        ORDER BY ped.UltimoPedido DESC, c.FechaAlta DESC
+        OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+      `);
+
+    const totalR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('q',        sql.VarChar(200), busca)
+      .query(`SELECT COUNT(*) AS total FROM VIDA_APP_CLIENTES c
+              WHERE c.idBranch=@idBranch AND c.idCuenta=@idCuenta
+                AND (c.Nombre LIKE @q OR c.Apellidos LIKE @q OR c.Telefono LIKE @q OR c.Email LIKE @q)`);
+
+    return reply.send({
+      data:  filas.recordset,
+      total: totalR.recordset[0].total,
+      page:  parseInt(page),
+      pages: Math.ceil(totalR.recordset[0].total / parseInt(limit)),
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al listar consumidores' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ADMIN — DETALLE DE UN CONSUMIDOR + su historial de pedidos
+// GET /delivery/admin/clientes/:idCliente
+// ══════════════════════════════════════════════════════════════════════════
+export async function detalleClienteAdmin(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { idCliente } = request.params;
+
+  try {
+    const pool = await getPool();
+
+    const cliR = await pool.request()
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT c.idCliente, c.Nombre, c.Apellidos, c.Telefono, c.Email,
+                     c.FechaAlta, c.Status, c.EmailConfirmado,
+                     CASE WHEN c.GoogleId IS NOT NULL THEN 1 ELSE 0 END AS EsGoogle
+              FROM VIDA_APP_CLIENTES c
+              WHERE c.idBranch=@idBranch AND c.idCuenta=@idCuenta AND c.idCliente=@idCliente`);
+
+    if (!cliR.recordset.length) {
+      return reply.code(404).send({ error: 'Consumidor no encontrado' });
+    }
+
+    // Direcciones guardadas
+    const dirR = await pool.request()
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT Alias, Direccion, EsPrincipal FROM VIDA_APP_CLIENTES_DIRECCIONES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente
+                AND Status='ACTIVO' ORDER BY EsPrincipal DESC`);
+
+    // Historial de pedidos
+    const pedR = await pool.request()
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT TOP 100
+                p.idPedido, p.Status, p.MetodoPago, p.TotalUSD, p.FechaAlta,
+                p.DireccionEntrega,
+                pv.NomComercial AS NombreSucursal,
+                rep.Nombre      AS NombreRepartidor,
+                (SELECT COUNT(*) FROM VIDA_PEDIDOS_DETALLE d
+                 WHERE d.idBranch=p.idBranch AND d.idCuenta=p.idCuenta AND d.idPedido=p.idPedido) AS TotalItems
+              FROM VIDA_PEDIDOS p
+              LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+                ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
+              LEFT JOIN VIDA_REPARTIDORES rep
+                ON rep.idBranch=p.idBranch AND rep.idCuenta=p.idCuenta AND rep.idRepartidor=p.idRepartidor
+              WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.idCliente=@idCliente
+              ORDER BY p.FechaAlta DESC`);
+
+    const pedidos = pedR.recordset;
+    const metricas = {
+      NumPedidos:   pedidos.length,
+      Entregados:   pedidos.filter(p => p.Status === 'ENTREGADO').length,
+      Cancelados:   pedidos.filter(p => p.Status === 'CANCELADO').length,
+      TotalGastado: pedidos.filter(p => p.Status === 'ENTREGADO').reduce((s, p) => s + (p.TotalUSD || 0), 0),
+    };
+    metricas.TicketPromedio = metricas.Entregados ? metricas.TotalGastado / metricas.Entregados : 0;
+
+    return reply.send({
+      cliente:     cliR.recordset[0],
+      direcciones: dirR.recordset,
+      pedidos,
+      metricas,
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener el consumidor' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // CLIENTE — EXTENDER LA BÚSQUEDA DE REPARTIDOR
 // POST /delivery/pedido/:idPedido/extender-busqueda
 // ══════════════════════════════════════════════════════════════════════════

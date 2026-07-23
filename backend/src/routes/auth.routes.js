@@ -2,6 +2,7 @@
 import { login, refresh, logout } from '../controllers/auth.controller.js';
 import { authenticate } from '../middlewares/auth.js';
 import { getPool, sql } from '../db/sqlserver.js';
+import { portalDeRol } from '../config/portales.js';
 
 export async function authRoutes(fastify) {
 
@@ -38,12 +39,32 @@ export async function authRoutes(fastify) {
         `);
 
       return reply.send({
-        usuario:  request.user,
+        // Garantiza Portal aunque el token sea previo a la feature de portales
+        usuario:  { ...request.user, Portal: request.user.Portal || portalDeRol(request.user.TipoUsuario) },
         pantallas: pantallas.recordset,
       });
     } catch (err) {
       request.log.error(err);
       return reply.code(500).send({ error: 'Error al cargar sesión' });
+    }
+  });
+
+  // Catálogo de roles por portal (para pantallas de administración de accesos)
+  fastify.get('/roles', { preHandler: [authenticate] }, async (request, reply) => {
+    const { idBranch, idCuenta } = request.user;
+    try {
+      const pool = await getPool();
+      const r = await pool.request()
+        .input('idBranch', sql.BigInt, idBranch)
+        .input('idCuenta', sql.BigInt, idCuenta)
+        .query(`SELECT RolCodigo, Nombre, Portal, EsAdministrativo, Descripcion
+                FROM VIDA_ROLES
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'
+                ORDER BY Portal, EsAdministrativo DESC, Nombre`);
+      return reply.send(r.recordset);
+    } catch (err) {
+      request.log.error(err);
+      return reply.code(500).send({ error: 'Error al obtener roles' });
     }
   });
 }

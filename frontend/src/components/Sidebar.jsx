@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore.js';
 import { LogOut, ChevronRight } from 'lucide-react';
 import * as Icons from 'lucide-react';
+import { portalDeUsuario, PORTAL_LABEL, PORTAL_BADGE } from '../config/portales.js';
 
 // Mapeo de nombre de ícono (string de BD) → componente Lucide
 function DynamicIcon({ name, size = 18 }) {
@@ -27,6 +28,7 @@ function Avatar({ nombre, apellidos, imagen }) {
 export default function Sidebar() {
   const { usuario, pantallas, logout } = useAuthStore();
   const navigate = useNavigate();
+  const portal = portalDeUsuario(usuario);
 
   const handleLogout = async () => {
     await logout();
@@ -60,6 +62,16 @@ export default function Sidebar() {
           </div>
         </div>
       </div>
+
+      {/* Portal actual */}
+      {portal && (
+        <div className="px-4 pt-3 pb-1">
+          <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full ${PORTAL_BADGE[portal] || 'bg-gray-100 text-gray-600'}`}>
+            <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+            Portal {PORTAL_LABEL[portal] || portal}
+          </span>
+        </div>
+      )}
 
       {/* Navegación dinámica desde BD */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-1">

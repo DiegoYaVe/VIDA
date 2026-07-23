@@ -6,6 +6,7 @@ import {
   reporteProductos,
   reporteInventario,
   reporteMovimientos,
+  reporteDelivery,
 } from '../controllers/reportes.controller.js';
 
 // Roles con acceso a reportes (todos excepto CASHIER/CAJERO básico que solo ven su sucursal)
@@ -19,4 +20,5 @@ export async function reportesRoutes(fastify) {
   fastify.get('/reportes/productos',    pre, reporteProductos);
   fastify.get('/reportes/inventario',   pre, reporteInventario);
   fastify.get('/reportes/movimientos',  pre, reporteMovimientos);
+  fastify.get('/reportes/delivery',     pre, reporteDelivery);
 }

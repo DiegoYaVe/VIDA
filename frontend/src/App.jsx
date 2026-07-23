@@ -17,13 +17,22 @@ import Sucursales   from './pages/Sucursales.jsx';
 import Ventas       from './pages/Ventas.jsx';
 import Reportes     from './pages/Reportes.jsx';
 import CierreCaja   from './pages/CierreCaja.jsx';
+import Logistica    from './pages/Logistica.jsx';
+import Clientes      from './pages/Clientes.jsx';
 import { ToastContainer } from './components/Toast.jsx';
 
-function ProtectedRoute({ children, skipCambiarPass = false }) {
-  const { accessToken, usuario } = useAuthStore();
+function ProtectedRoute({ children, skipCambiarPass = false, modulo = null }) {
+  const { accessToken, usuario, pantallas } = useAuthStore();
   if (!accessToken) return <Navigate to="/login" replace />;
   if (!skipCambiarPass && usuario?.CambiarPass) {
     return <Navigate to="/cambiar-password" replace />;
+  }
+  // Ruteo por rol/portal (T-0032): si la ruta es un módulo con pantalla,
+  // el usuario solo entra si su rol tiene acceso a esa pantalla. Evita que
+  // alguien navegue por URL a un módulo fuera de su portal.
+  if (modulo && Array.isArray(pantallas) && pantallas.length > 0) {
+    const tieneAcceso = pantallas.some(p => p.Link === modulo);
+    if (!tieneAcceso) return <Navigate to="/dashboard" replace />;
   }
   return children;
 }
@@ -89,7 +98,7 @@ export default function App() {
         } />
 
         <Route path="/admin" element={
-          <ProtectedRoute><Layout><Usuarios /></Layout></ProtectedRoute>
+          <ProtectedRoute modulo="/admin"><Layout><Usuarios /></Layout></ProtectedRoute>
         } />
 
         <Route path="/cambiar-password" element={
@@ -101,45 +110,51 @@ export default function App() {
         } />
 
         <Route path="/inventarios" element={
-          <ProtectedRoute><Layout><Inventario /></Layout></ProtectedRoute>
+          <ProtectedRoute modulo="/inventarios"><Layout><Inventario /></Layout></ProtectedRoute>
         } />
 
         <Route path="/proveedores" element={
-          <ProtectedRoute><Layout><Proveedores /></Layout></ProtectedRoute>
+          <ProtectedRoute modulo="/proveedores"><Layout><Proveedores /></Layout></ProtectedRoute>
         } />
 
         <Route path="/pedidos" element={
-          <ProtectedRoute><Layout><Pedidos /></Layout></ProtectedRoute>
+          <ProtectedRoute modulo="/pedidos"><Layout><Pedidos /></Layout></ProtectedRoute>
         } />
 
         <Route path="/pos" element={
-          <ProtectedRoute><Layout><POS /></Layout></ProtectedRoute>
+          <ProtectedRoute modulo="/pos"><Layout><POS /></Layout></ProtectedRoute>
         } />
 
         <Route path="/sucursales" element={
-          <ProtectedRoute><Layout><Sucursales /></Layout></ProtectedRoute>
+          <ProtectedRoute modulo="/sucursales"><Layout><Sucursales /></Layout></ProtectedRoute>
         } />
 
         <Route path="/ventas" element={
-          <ProtectedRoute><Layout><Ventas /></Layout></ProtectedRoute>
+          <ProtectedRoute modulo="/ventas"><Layout><Ventas /></Layout></ProtectedRoute>
         } />
 
         <Route path="/reportes" element={
-          <ProtectedRoute><Layout><Reportes /></Layout></ProtectedRoute>
+          <ProtectedRoute modulo="/reportes"><Layout><Reportes /></Layout></ProtectedRoute>
         } />
 
         <Route path="/caja" element={
-          <ProtectedRoute><Layout><CierreCaja /></Layout></ProtectedRoute>
+          <ProtectedRoute modulo="/caja"><Layout><CierreCaja /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/logistica" element={
+          <ProtectedRoute modulo="/logistica"><Layout><Logistica /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/clientes" element={
+          <ProtectedRoute modulo="/clientes"><Layout><Clientes /></Layout></ProtectedRoute>
         } />
 
         {[
           { path:'/catalogos',   nombre:'Catálogos' },
           { path:'/precios',     nombre:'Precios y Promociones' },
-          { path:'/logistica',   nombre:'Repartidores y Logística' },
-          { path:'/clientes',    nombre:'Consumidores Finales' },
         ].map(({ path, nombre }) => (
           <Route key={path} path={path} element={
-            <ProtectedRoute><Layout><ComingSoon nombre={nombre} /></Layout></ProtectedRoute>
+            <ProtectedRoute modulo={path}><Layout><ComingSoon nombre={nombre} /></Layout></ProtectedRoute>
           } />
         ))}
 

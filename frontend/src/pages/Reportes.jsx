@@ -5,20 +5,23 @@ import {
   Download, FileSpreadsheet, FileText,
   Filter, RefreshCw, AlertTriangle,
   DollarSign, ShoppingCart, CreditCard, Banknote,
-  MapPin, Store, Globe, ChevronDown,
+  MapPin, Store, Globe, ChevronDown, Truck, Star, XCircle,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, LineChart, Line,
+  PieChart, Pie, Cell,
 } from 'recharts';
 import api from '../services/api.js';
 import {
   exportarVentasExcel, exportarProductosExcel,
   exportarInventarioExcel, exportarMovimientosExcel,
+  exportarDeliveryExcel,
 } from '../utils/exportExcel.js';
 import {
   exportarVentasPDF, exportarProductosPDF,
   exportarInventarioPDF, exportarMovimientosPDF,
+  exportarDeliveryPDF,
 } from '../utils/exportPDF.js';
 import { useAuthStore } from '../store/authStore.js';
 
@@ -724,10 +727,222 @@ function TabMovimientos({ filtros }) {
   );
 }
 
+// ─── TAB: Delivery ───────────────────────────────────────────────────────────
+
+const METODO_PIE_COLOR = {
+  EFECTIVO:   '#F39C12',
+  PAGO_MOVIL: '#8E44AD',
+  TARJETA:    '#2980B9',
+  USDT:       '#16A085',
+  OTRO:       '#95A5A6',
+};
+
+function TabDelivery({ filtros }) {
+  const { usuario } = useAuthStore();
+  const [rango, setRango]   = useState({ ini: HACE7(), fin: HOY() });
+  const [geo, setGeo]       = useState({});
+  const [datos, setDatos]   = useState(null);
+  const [cargando, setCarg] = useState(false);
+  const [error, setError]   = useState(null);
+
+  const cargar = useCallback(async () => {
+    setCarg(true); setError(null);
+    try {
+      const params = new URLSearchParams({
+        fechaInicio: rango.ini, fechaFin: rango.fin,
+        ...(geo.filtroPais         && { filtroPais: geo.filtroPais }),
+        ...(geo.filtroEstado       && { filtroEstado: geo.filtroEstado }),
+        ...(geo.filtroIdPuntoVenta && { filtroIdPuntoVenta: geo.filtroIdPuntoVenta }),
+      });
+      const r = await api.get(`/reportes/delivery?${params}`);
+      setDatos(r.data);
+    } catch (e) {
+      setError(e.response?.data?.error || 'Error al cargar reporte');
+    } finally { setCarg(false); }
+  }, [rango, geo]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const grafData = (datos?.graficaDiaria || []).map(r => ({
+    fecha:  new Date(r.Fecha).toLocaleDateString('es-VE', { day: '2-digit', month: 'short' }),
+    total:  Number(r.TotalUSD || 0),
+    pedidos: r.NumPedidos,
+  }));
+
+  const pieData = (datos?.porMetodo || []).map(r => ({
+    name: r.MetodoPago === 'PAGO_MOVIL' ? 'Pago Móvil' : r.MetodoPago,
+    metodo: r.MetodoPago,
+    value: Number(r.TotalUSD || 0),
+    pedidos: r.NumPedidos,
+  }));
+
+  return (
+    <div className="space-y-5">
+      {/* Filtros */}
+      <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Desde</label>
+            <input type="date" value={rango.ini}
+              onChange={e => setRango(r => ({ ...r, ini: e.target.value }))}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-vida-blue/30" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Hasta</label>
+            <input type="date" value={rango.fin}
+              onChange={e => setRango(r => ({ ...r, fin: e.target.value }))}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-vida-blue/30" />
+          </div>
+          <FiltroGeografia usuario={usuario} filtros={filtros} geo={geo} setGeo={setGeo} />
+          <button onClick={cargar} disabled={cargando}
+            className="flex items-center gap-2 px-4 py-2 bg-vida-blue hover:bg-vida-blue/90 text-white text-sm font-semibold rounded-xl transition-all">
+            <RefreshCw size={14} className={cargando ? 'animate-spin' : ''} />
+            {cargando ? 'Cargando…' : 'Actualizar'}
+          </button>
+          {datos && (
+            <BotonesExport
+              onExcel={() => exportarDeliveryExcel({ ...datos, fechaInicio: rango.ini, fechaFin: rango.fin })}
+              onPDF={()   => exportarDeliveryPDF  ({ ...datos, fechaInicio: rango.ini, fechaFin: rango.fin })}
+              cargando={cargando} />
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm flex items-center gap-2">
+          <AlertTriangle size={16} /> {error}
+        </div>
+      )}
+
+      {cargando && <Spinner />}
+
+      {!cargando && datos && (
+        <>
+          {/* Tarjetas */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <CardResumen icon={Truck}       label="Entregas"       valor={datos.totales.NumEntregas}               color="blue"   />
+            <CardResumen icon={DollarSign}  label="Monto generado" valor={USD(datos.totales.MontoGenerado)}        color="green"  />
+            <CardResumen icon={Banknote}    label="Comisiones"     valor={USD(datos.totales.Comisiones)}           color="amber"  />
+            <CardResumen icon={ShoppingCart} label="Ticket prom."  valor={USD(datos.totales.TicketPromedio)}       color="purple" />
+            <CardResumen icon={XCircle}     label="Cancelados"     valor={datos.totales.Cancelados}                color="red"    />
+          </div>
+
+          {/* Gráfica diaria + Pie de métodos */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+              <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                <TrendingUp size={16} className="text-vida-blue" />
+                Ventas de delivery por día (USD)
+              </h3>
+              {grafData.length === 0 ? (
+                <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Sin entregas en el período</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={230}>
+                  <LineChart data={grafData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="fecha" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} />
+                    <Tooltip formatter={(v, n) => [n === 'total' ? USD(v) : v, n === 'total' ? 'Total USD' : 'Pedidos']} />
+                    <Legend formatter={v => v === 'total' ? 'Total USD' : 'N° Pedidos'} />
+                    <Line type="monotone" dataKey="total" stroke="#1A6A9A" strokeWidth={2.5} dot={{ r: 3 }} name="total" />
+                    <Line type="monotone" dataKey="pedidos" stroke="#27AE60" strokeWidth={2} dot={{ r: 2 }} name="pedidos" />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+              <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                <CreditCard size={16} className="text-vida-blue" />
+                Por método de pago
+              </h3>
+              {pieData.length === 0 ? (
+                <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Sin datos</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={230}>
+                  <PieChart>
+                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={78} innerRadius={40}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}
+                      style={{ fontSize: 10 }}>
+                      {pieData.map((e, i) => (
+                        <Cell key={i} fill={METODO_PIE_COLOR[e.metodo] || '#95A5A6'} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v, n, p) => [`${USD(v)} · ${p.payload.pedidos} pedidos`, p.payload.name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          {/* Tabla por repartidor */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                <Truck size={16} className="text-vida-blue" />
+                Desempeño por repartidor
+              </h3>
+              <span className="text-xs text-gray-400">{datos.porRepartidor.length} repartidores</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-left">
+                    {['#','Repartidor','Vehículo','Calif.','Entregas','Monto Generado','Comisión','Efectivo Recaud.'].map(h => (
+                      <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {datos.porRepartidor.map((r, i) => (
+                    <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-black
+                          ${i === 0 ? 'bg-amber-100 text-amber-700' : i === 1 ? 'bg-gray-100 text-gray-600' : i === 2 ? 'bg-orange-100 text-orange-600' : 'text-gray-400'}`}>
+                          {i + 1}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-gray-800">{r.Nombre}</td>
+                      <td className="px-4 py-3 text-gray-500">{r.Vehiculo || '—'}</td>
+                      <td className="px-4 py-3 text-center">
+                        {r.Calificacion != null ? (
+                          <span className="inline-flex items-center gap-1 text-amber-600 font-semibold">
+                            <Star size={12} className="fill-amber-400 text-amber-400" />{Number(r.Calificacion).toFixed(1)}
+                          </span>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-vida-blue">{r.Entregas}</td>
+                      <td className="px-4 py-3 text-right font-bold text-gray-900">{USD(r.MontoGenerado)}</td>
+                      <td className="px-4 py-3 text-right text-emerald-700 font-semibold">{USD(r.Comisiones)}</td>
+                      <td className="px-4 py-3 text-right text-amber-700">{USD(r.EfectivoRecaudado)}</td>
+                    </tr>
+                  ))}
+                  {/* Totales */}
+                  <tr className="bg-gray-900 text-white font-bold">
+                    <td colSpan={4} className="px-4 py-3">TOTALES</td>
+                    <td className="px-4 py-3 text-right">{datos.totales.NumEntregas}</td>
+                    <td className="px-4 py-3 text-right">{USD(datos.totales.MontoGenerado)}</td>
+                    <td className="px-4 py-3 text-right">{USD(datos.totales.Comisiones)}</td>
+                    <td className="px-4 py-3 text-right">{USD(datos.totales.EfectivoRecaudado)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              {datos.porRepartidor.length === 0 && (
+                <p className="text-center text-gray-400 py-10 text-sm">Sin entregas en el período</p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 const TABS = [
   { id: 'ventas',       label: 'Ventas',       icon: BarChart2    },
+  { id: 'delivery',     label: 'Delivery',      icon: Truck        },
   { id: 'productos',    label: 'Productos',     icon: TrendingUp   },
   { id: 'inventario',   label: 'Inventario',    icon: Package      },
   { id: 'movimientos',  label: 'Movimientos',   icon: ArrowUpDown  },
@@ -778,6 +993,7 @@ export default function Reportes() {
       {/* Contenido */}
       <div className="p-6">
         {tab === 'ventas'      && <TabVentas      filtros={filtros} />}
+        {tab === 'delivery'    && <TabDelivery    filtros={filtros} />}
         {tab === 'productos'   && <TabProductos   filtros={filtros} />}
         {tab === 'inventario'  && <TabInventario  filtros={filtros} />}
         {tab === 'movimientos' && <TabMovimientos filtros={filtros} />}

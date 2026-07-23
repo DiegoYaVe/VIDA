@@ -354,3 +354,50 @@ export function exportarMovimientosPDF({ filas, resumen, fechaInicio, fechaFin }
   agregarPiePagina(doc);
   doc.save(`movimientos_${fechaInicio}_${fechaFin}.pdf`);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REPORTE DELIVERY
+// ─────────────────────────────────────────────────────────────────────────────
+export function exportarDeliveryPDF({ porRepartidor, totales, fechaInicio, fechaFin }) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
+  agregarEncabezado(doc, 'Reporte de Delivery', `Período: ${fechaInicio} al ${fechaFin}`);
+
+  const nextY = tarjetasResumen(doc, [
+    { label: 'Entregas',       valor: totales.NumEntregas,             color: AZUL2 },
+    { label: 'Monto generado', valor: USD(totales.MontoGenerado),      color: VERDE },
+    { label: 'Comisiones',     valor: USD(totales.Comisiones),         color: [39, 174, 96] },
+    { label: 'Ticket prom.',   valor: USD(totales.TicketPromedio),     color: [52, 152, 219] },
+    { label: 'Cancelados',     valor: totales.Cancelados,              color: [231, 76, 60] },
+  ], 33);
+
+  const columns = [
+    { header: 'Repartidor',        key: 'Nombre',        width: 44 },
+    { header: 'Vehículo',          key: 'Vehiculo',      width: 26 },
+    { header: 'Calif.',            key: '_calif',        width: 18, align: 'center' },
+    { header: 'Entregas',          key: 'Entregas',      width: 20, align: 'right' },
+    { header: 'Monto Generado',    key: '_monto',        width: 30, align: 'right' },
+    { header: 'Comisión',          key: '_comision',     width: 26, align: 'right' },
+    { header: 'Efectivo Recaud.',  key: '_efectivo',     width: 30, align: 'right' },
+  ];
+
+  const body = [
+    ...(porRepartidor || []).map(r => ({
+      ...r,
+      _calif:    r.Calificacion != null ? Number(r.Calificacion).toFixed(1) : '—',
+      _monto:    USD(r.MontoGenerado),
+      _comision: USD(r.Comisiones),
+      _efectivo: USD(r.EfectivoRecaudado),
+    })),
+    {
+      Nombre: 'TOTALES', Vehiculo: '', _calif: '',
+      Entregas:  totales.NumEntregas,
+      _monto:    USD(totales.MontoGenerado),
+      _comision: USD(totales.Comisiones),
+      _efectivo: USD(totales.EfectivoRecaudado),
+    },
+  ];
+
+  autoTable(doc, opTabla(nextY, columns, body));
+  agregarPiePagina(doc);
+  doc.save(`delivery_${fechaInicio}_${fechaFin}.pdf`);
+}

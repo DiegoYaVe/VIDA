@@ -386,3 +386,135 @@ export async function reporteMovimientos(request, reply) {
     return reply.code(500).send({ error: 'Error en reporte de movimientos: ' + err.message });
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/reportes/delivery
+// Reporte del canal APP (delivery): ventas por día, desempeño y comisiones
+// por repartidor, y desglose por método de pago.
+// Query: fechaInicio, fechaFin, filtroPais?, filtroEstado?, filtroIdPuntoVenta?
+// ─────────────────────────────────────────────────────────────────────────────
+export async function reporteDelivery(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { fechaInicio, fechaFin } = request.query;
+
+  if (!fechaInicio || !fechaFin)
+    return reply.code(400).send({ error: 'fechaInicio y fechaFin son requeridos' });
+
+  try {
+    const pool = await getPool();
+
+    // Filtro base común a todas las consultas del reporte
+    const mkReq = () => {
+      const r = pool.request()
+        .input('idBranch',    sql.BigInt, idBranch)
+        .input('idCuenta',    sql.BigInt, idCuenta)
+        .input('fechaInicio', sql.Date,   new Date(fechaInicio))
+        .input('fechaFin',    sql.Date,   new Date(fechaFin));
+      const geo = buildGeoFilter(request.user, request.query, r);
+      return { r, geo };
+    };
+
+    // ── Ventas del canal APP por día ──────────────────────────────────────
+    const { r: reqDia, geo: geoDia } = mkReq();
+    const grafica = await reqDia.query(`
+      SELECT
+        CAST(p.FechaAlta AS DATE)  AS Fecha,
+        COUNT(p.idPedido)          AS NumPedidos,
+        SUM(p.TotalUSD)            AS TotalUSD
+      FROM VIDA_PEDIDOS p
+      JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+        ON pv.idBranch = p.idBranch AND pv.idCuenta = p.idCuenta
+       AND pv.idPuntoVenta = p.idPuntoVenta
+      WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
+        AND p.Canal  = 'APP'
+        AND p.Status = 'ENTREGADO'
+        AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        ${geoDia}
+      GROUP BY CAST(p.FechaAlta AS DATE)
+      ORDER BY CAST(p.FechaAlta AS DATE)
+    `);
+
+    // ── Desempeño por repartidor ──────────────────────────────────────────
+    const { r: reqRep, geo: geoRep } = mkReq();
+    const porRepartidor = await reqRep.query(`
+      SELECT
+        rep.idRepartidor,
+        rep.Nombre,
+        rep.Vehiculo,
+        rep.Calificacion,
+        COUNT(p.idPedido)                        AS Entregas,
+        SUM(p.TotalUSD)                          AS MontoGenerado,
+        SUM(ISNULL(p.ComisionRepartidor,0))      AS Comisiones,
+        SUM(ISNULL(p.MontoEfectivoRepartidor,0)) AS EfectivoRecaudado
+      FROM VIDA_PEDIDOS p
+      JOIN VIDA_REPARTIDORES rep
+        ON rep.idBranch = p.idBranch AND rep.idCuenta = p.idCuenta
+       AND rep.idRepartidor = p.idRepartidor
+      JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+        ON pv.idBranch = p.idBranch AND pv.idCuenta = p.idCuenta
+       AND pv.idPuntoVenta = p.idPuntoVenta
+      WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
+        AND p.Canal  = 'APP'
+        AND p.Status = 'ENTREGADO'
+        AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        ${geoRep}
+      GROUP BY rep.idRepartidor, rep.Nombre, rep.Vehiculo, rep.Calificacion
+      ORDER BY SUM(p.TotalUSD) DESC
+    `);
+
+    // ── Desglose por método de pago ───────────────────────────────────────
+    const { r: reqMet, geo: geoMet } = mkReq();
+    const porMetodo = await reqMet.query(`
+      SELECT
+        ISNULL(p.MetodoPago, 'OTRO') AS MetodoPago,
+        COUNT(p.idPedido)            AS NumPedidos,
+        SUM(p.TotalUSD)              AS TotalUSD
+      FROM VIDA_PEDIDOS p
+      JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+        ON pv.idBranch = p.idBranch AND pv.idCuenta = p.idCuenta
+       AND pv.idPuntoVenta = p.idPuntoVenta
+      WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
+        AND p.Canal  = 'APP'
+        AND p.Status = 'ENTREGADO'
+        AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        ${geoMet}
+      GROUP BY p.MetodoPago
+      ORDER BY SUM(p.TotalUSD) DESC
+    `);
+
+    // ── Pedidos cancelados (sin repartidor u otros) en el período ─────────
+    const { r: reqCanc, geo: geoCanc } = mkReq();
+    const cancelados = await reqCanc.query(`
+      SELECT COUNT(p.idPedido) AS Cancelados
+      FROM VIDA_PEDIDOS p
+      JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+        ON pv.idBranch = p.idBranch AND pv.idCuenta = p.idCuenta
+       AND pv.idPuntoVenta = p.idPuntoVenta
+      WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
+        AND p.Canal  = 'APP'
+        AND p.Status = 'CANCELADO'
+        AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        ${geoCanc}
+    `);
+
+    const reps = porRepartidor.recordset;
+    const totales = {
+      NumEntregas:      reps.reduce((s, r) => s + (r.Entregas || 0), 0),
+      MontoGenerado:    reps.reduce((s, r) => s + (r.MontoGenerado || 0), 0),
+      Comisiones:       reps.reduce((s, r) => s + (r.Comisiones || 0), 0),
+      EfectivoRecaudado: reps.reduce((s, r) => s + (r.EfectivoRecaudado || 0), 0),
+      Cancelados:       cancelados.recordset[0]?.Cancelados || 0,
+    };
+    totales.TicketPromedio = totales.NumEntregas ? totales.MontoGenerado / totales.NumEntregas : 0;
+
+    return reply.send({
+      graficaDiaria: grafica.recordset,
+      porRepartidor: reps,
+      porMetodo:     porMetodo.recordset,
+      totales,
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error en reporte de delivery: ' + err.message });
+  }
+}
