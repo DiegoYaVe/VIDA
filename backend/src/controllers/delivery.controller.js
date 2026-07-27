@@ -4,6 +4,7 @@ import { broadcast } from '../ws/ws.manager.js';
 import { enviarPush } from '../services/push.service.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 import { recalcularRuta, recalcularRutaThrottled, STATUS_ACTIVOS_REPARTIDOR } from '../services/rutas.service.js';
+import { promocionesVigentes, mejorPromoUnitaria, calcularLinea } from './promociones.controller.js';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import path from 'path';
@@ -769,7 +770,26 @@ export async function listarProductosApp(request, reply) {
       ORDER BY p.Nombre, pv.NomComercial
     `);
 
-    return reply.send(r.recordset);
+    // Adjuntar precio promocional (si hay promo vigente que aplique al producto)
+    const promos = await promocionesVigentes(pool, idBranch, idCuenta);
+    const productos = r.recordset.map(p => {
+      const unit = mejorPromoUnitaria(promos, p);
+      const combo = promos.find(x => x.Tipo === 'NXM' &&
+        (x.Alcance === 'TODO'
+         || (x.Alcance === 'PRODUCTO'  && String(x.idProducto)  === String(p.idProducto))
+         || (x.Alcance === 'CATEGORIA' && String(x.idCategoria) === String(p.idCategoria))));
+      return {
+        ...p,
+        PrecioPromo: unit ? unit.precioUnitario : null,
+        PromoNombre: unit ? unit.promo.Nombre : (combo ? combo.Nombre : null),
+        // Etiqueta corta para el badge de la app
+        PromoBadge: combo ? `${parseInt(combo.Valor)}x${parseInt(combo.Valor2)}`
+                    : (unit && unit.promo.Tipo === 'DESCUENTO_PCT' ? `-${parseInt(unit.promo.Valor)}%`
+                    : (unit ? 'OFERTA' : null)),
+      };
+    });
+
+    return reply.send(productos);
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener productos' });
@@ -808,23 +828,34 @@ export async function crearPedidoApp(request, reply) {
       .input('idCuenta', sql.BigInt, idCuenta);
     idsProductos.forEach((id, i) => preciosReq.input(`p${i}`, sql.BigInt, id));
     const preciosR = await preciosReq.query(`
-      SELECT idProducto, PrecioUSD FROM VIDA_INVENTARIO_PRODUCTOS
+      SELECT idProducto, PrecioUSD, idCategoria FROM VIDA_INVENTARIO_PRODUCTOS
       WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'
         AND idProducto IN (${idsProductos.map((_, i) => `@p${i}`).join(',')})`);
 
-    const precioPorId = new Map(preciosR.recordset.map(p => [String(p.idProducto), parseFloat(p.PrecioUSD)]));
+    const prodPorId = new Map(preciosR.recordset.map(p => [String(p.idProducto), p]));
     for (const item of items) {
-      if (!precioPorId.has(String(item.idProducto))) {
+      if (!prodPorId.has(String(item.idProducto))) {
         return reply.code(400).send({ error: `Producto ${item.idProducto} no existe o está inactivo` });
       }
     }
 
-    // Items normalizados con precio de servidor
-    const itemsNorm = items.map(i => ({
-      idProducto: parseInt(i.idProducto),
-      Cantidad: parseFloat(i.Cantidad),
-      PrecioUnitario: precioPorId.get(String(i.idProducto)),
-    }));
+    // ── Aplicar promociones vigentes (precio efectivo por línea) ──────────
+    // El precio y el descuento salen del servidor; nunca se confía en la app.
+    const promos = await promocionesVigentes(pool, idBranch, idCuenta);
+    const itemsNorm = items.map(i => {
+      const prod = prodPorId.get(String(i.idProducto));
+      const cantidad = parseFloat(i.Cantidad);
+      const linea = calcularLinea(promos, prod, cantidad);
+      // Precio unitario efectivo = subtotal / cantidad (uniforme, para el detalle)
+      const precioUnitEfectivo = cantidad > 0 ? linea.subtotal / cantidad : parseFloat(prod.PrecioUSD);
+      return {
+        idProducto: parseInt(i.idProducto),
+        Cantidad: cantidad,
+        PrecioUnitario: +precioUnitEfectivo.toFixed(4),
+        Subtotal: linea.subtotal, // subtotal exacto (sin deriva de redondeo)
+        idPromocion: linea.promoAplicada?.idPromocion ?? null,
+      };
+    });
 
     // ── Verificar stock de cada item ──────────────────────────────────────
     for (const item of itemsNorm) {
@@ -845,8 +876,8 @@ export async function crearPedidoApp(request, reply) {
       }
     }
 
-    // ── Calcular total (precios de BD) ────────────────────────────────────
-    const TotalUSD = itemsNorm.reduce((acc, i) => acc + i.PrecioUnitario * i.Cantidad, 0);
+    // ── Calcular total con los subtotales exactos (precios/promos de BD) ──
+    const TotalUSD = +itemsNorm.reduce((acc, i) => acc + i.Subtotal, 0).toFixed(2);
 
     // ── Obtener nombre de sucursal para broadcast ─────────────────────────
     const pvR = await pool.request()

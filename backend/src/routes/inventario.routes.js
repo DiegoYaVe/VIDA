@@ -3,6 +3,7 @@ import { requireRole } from '../middlewares/auth.js';
 import {
   listarCategorias, crearCategoria, editarCategoria, toggleCategoria,
   listarProductos, obtenerProducto, crearProducto, editarProducto, toggleProducto,
+  actualizarPreciosLote,
   verStock,
   registrarMovimiento, listarMovimientos,
   subirImagenProducto,
@@ -38,6 +39,9 @@ export async function inventarioRoutes(fastify) {
 
   fastify.post('/inventario/productos',
     { preHandler: [requireRole(...ESCRITURA)] }, crearProducto);
+
+  fastify.put('/inventario/productos/precios',
+    { preHandler: [requireRole(...ESCRITURA)] }, actualizarPreciosLote);
 
   fastify.put('/inventario/productos/:idProducto',
     { preHandler: [requireRole(...ESCRITURA)] }, editarProducto);

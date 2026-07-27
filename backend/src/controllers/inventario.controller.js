@@ -389,6 +389,37 @@ export async function editarProducto(request, reply) {
   }
 }
 
+// PUT /api/inventario/productos/precios
+// Actualización de precios en lote — Body: [{ idProducto, PrecioUSD }]
+export async function actualizarPreciosLote(request, reply) {
+  const { idBranch, idCuenta, idUsuario } = request.user;
+  const items = Array.isArray(request.body) ? request.body : [];
+  if (!items.length) return reply.code(400).send({ error: 'No se recibieron precios' });
+
+  try {
+    const pool = await getPool();
+    let actualizados = 0;
+    for (const it of items) {
+      const precio = parseFloat(it.PrecioUSD);
+      if (it.idProducto == null || isNaN(precio) || precio < 0) continue;
+      const r = await pool.request()
+        .input('idBranch',   sql.BigInt,       idBranch)
+        .input('idCuenta',   sql.BigInt,       idCuenta)
+        .input('idProducto', sql.BigInt,       it.idProducto)
+        .input('PrecioUSD',  sql.Decimal(18,4), precio)
+        .input('UsuMod',     sql.VarChar(30),  `U:${idUsuario}`)
+        .query(`UPDATE VIDA_INVENTARIO_PRODUCTOS
+                SET PrecioUSD=@PrecioUSD, FechaMod=GETDATE(), UsuMod=@UsuMod
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProducto=@idProducto`);
+      actualizados += r.rowsAffected[0];
+    }
+    return reply.send({ ok: true, actualizados });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al actualizar precios' });
+  }
+}
+
 // PATCH /api/inventario/productos/:idProducto/status
 export async function toggleProducto(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
