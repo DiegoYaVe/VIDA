@@ -202,7 +202,7 @@ function ModalPago({ total, onConfirmar, onCerrar, procesando }) {
         <div className="p-5 space-y-4">
 
           {/* Total destacado */}
-          <div className="rounded-2xl p-4 text-center" style={{ background: 'linear-gradient(135deg, #1A6A9A15, #27AE6015)' }}>
+          <div className="rounded-2xl p-4 text-center" style={{ background: 'linear-gradient(135deg, #0A1E3F15, #5BBE6A15)' }}>
             <p className="text-xs text-gray-500 mb-1 font-medium">Total a cobrar</p>
             <p className="text-5xl font-black text-vida-blue">${total.toFixed(2)}</p>
             <p className="text-xs text-gray-400 mt-1">USD</p>
@@ -382,7 +382,7 @@ function ModalPago({ total, onConfirmar, onCerrar, procesando }) {
           </button>
           <button onClick={handleConfirmar} disabled={procesando}
             className="flex-[2] text-white rounded-xl px-6 py-3 text-sm font-black hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
-            style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
+            style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
             <Check size={18}/>
             {procesando ? 'Procesando...' : 'Confirmar cobro'}
           </button>

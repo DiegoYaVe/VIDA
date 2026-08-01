@@ -245,8 +245,8 @@ function TabVentas({ filtros }) {
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} />
                   <Tooltip formatter={(v, n) => [n === 'total' ? USD(v) : v, n === 'total' ? 'Total USD' : 'Ventas']} />
                   <Legend formatter={v => v === 'total' ? 'Total USD' : 'N° Ventas'} />
-                  <Bar dataKey="total"  fill="#1A6A9A" radius={[4,4,0,0]} name="total" />
-                  <Bar dataKey="ventas" fill="#27AE60" radius={[4,4,0,0]} name="ventas" />
+                  <Bar dataKey="total"  fill="#0A1E3F" radius={[4,4,0,0]} name="total" />
+                  <Bar dataKey="ventas" fill="#5BBE6A" radius={[4,4,0,0]} name="ventas" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -403,7 +403,7 @@ function TabProductos({ filtros }) {
                   <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => `$${v}`} />
                   <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={115} />
                   <Tooltip formatter={(v) => [USD(v), 'Ingresos']} />
-                  <Bar dataKey="ingresos" fill="#1A6A9A" radius={[0,4,4,0]} />
+                  <Bar dataKey="ingresos" fill="#0A1E3F" radius={[0,4,4,0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -732,7 +732,7 @@ function TabMovimientos({ filtros }) {
 const METODO_PIE_COLOR = {
   EFECTIVO:   '#F39C12',
   PAGO_MOVIL: '#8E44AD',
-  TARJETA:    '#2980B9',
+  TARJETA:    '#2CA6C4',
   USDT:       '#16A085',
   OTRO:       '#95A5A6',
 };
@@ -844,8 +844,8 @@ function TabDelivery({ filtros }) {
                     <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} />
                     <Tooltip formatter={(v, n) => [n === 'total' ? USD(v) : v, n === 'total' ? 'Total USD' : 'Pedidos']} />
                     <Legend formatter={v => v === 'total' ? 'Total USD' : 'N° Pedidos'} />
-                    <Line type="monotone" dataKey="total" stroke="#1A6A9A" strokeWidth={2.5} dot={{ r: 3 }} name="total" />
-                    <Line type="monotone" dataKey="pedidos" stroke="#27AE60" strokeWidth={2} dot={{ r: 2 }} name="pedidos" />
+                    <Line type="monotone" dataKey="total" stroke="#0A1E3F" strokeWidth={2.5} dot={{ r: 3 }} name="total" />
+                    <Line type="monotone" dataKey="pedidos" stroke="#5BBE6A" strokeWidth={2} dot={{ r: 2 }} name="pedidos" />
                   </LineChart>
                 </ResponsiveContainer>
               )}

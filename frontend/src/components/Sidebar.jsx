@@ -18,7 +18,7 @@ function Avatar({ nombre, apellidos, imagen }) {
   );
   const initials = `${nombre?.[0] || ''}${apellidos?.[0] || ''}`.toUpperCase();
   return (
-    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-vida-blue to-vida-green
+    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-vida-aqua to-vida-green
                     flex items-center justify-center text-white font-bold text-sm shadow">
       {initials}
     </div>
@@ -53,7 +53,7 @@ export default function Sidebar() {
         {/* Fallback texto (se muestra si no hay imagen) */}
         <div className="items-center gap-3 hidden">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
+            style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
             <span className="text-white font-black text-lg">V</span>
           </div>
           <div>

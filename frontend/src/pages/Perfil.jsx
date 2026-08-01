@@ -169,7 +169,7 @@ export default function Perfil() {
                 <img src={fotoUrl} alt="Avatar"
                   className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg mx-auto" />
               ) : (
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-vida-blue to-vida-green
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-vida-aqua to-vida-green
                                 flex items-center justify-center text-white font-black text-3xl shadow-lg mx-auto">
                   {perfil?.Nombre?.[0]}{perfil?.Apellidos?.[0]}
                 </div>

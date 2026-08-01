@@ -274,10 +274,10 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 var capas = [];
 function icono(html){ return L.divIcon({html:html,className:'',iconAnchor:[16,16]}); }
 function pinRep(nombre,activos){
-  var color = activos>0 ? '#E67E22' : '#27AE60';
+  var color = activos>0 ? '#E67E22' : '#5BBE6A';
   return icono('<div style="background:'+color+';width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.35)">🛵</div>');
 }
-function pinSuc(){ return icono('<div style="background:#1A6A9A;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🏪</div>'); }
+function pinSuc(){ return icono('<div style="background:#0A1E3F;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🏪</div>'); }
 function pinEnt(){ return icono('<div style="background:#8E44AD;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🏠</div>'); }
 
 window.pintar = function(data){

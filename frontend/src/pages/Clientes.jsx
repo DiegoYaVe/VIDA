@@ -37,7 +37,7 @@ function Spinner() {
 function Avatar({ nombre, apellidos, size = 40 }) {
   const ini = `${(nombre || '?')[0]}${(apellidos || '')[0] || ''}`.toUpperCase();
   return (
-    <div className="rounded-full bg-gradient-to-br from-vida-blue to-vida-green flex items-center justify-center text-white font-bold shrink-0"
+    <div className="rounded-full bg-gradient-to-br from-vida-aqua to-vida-green flex items-center justify-center text-white font-bold shrink-0"
       style={{ width: size, height: size, fontSize: size * 0.38 }}>
       {ini}
     </div>

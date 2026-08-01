@@ -137,7 +137,7 @@ function ModalCategoria({ data, onClose, onSaved }) {
           </button>
           <button type="submit" disabled={saving}
             className="flex-1 rounded-xl py-2 text-sm font-bold text-white transition"
-            style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
+            style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
             {saving ? 'Guardando...' : 'Guardar'}
           </button>
         </div>
@@ -236,7 +236,7 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
 
         {/* Foto del producto — es lo que ven los clientes en la app */}
         <div className="flex items-center gap-4">
-          <label className="relative w-24 h-24 rounded-2xl border-2 border-dashed border-gray-300 hover:border-[#1A6A9A] cursor-pointer overflow-hidden flex items-center justify-center bg-gray-50 transition shrink-0">
+          <label className="relative w-24 h-24 rounded-2xl border-2 border-dashed border-gray-300 hover:border-[#0A1E3F] cursor-pointer overflow-hidden flex items-center justify-center bg-gray-50 transition shrink-0">
             {preview ? (
               <img src={preview} alt="" className="w-full h-full object-cover" />
             ) : (
@@ -327,7 +327,7 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
           </button>
           <button type="submit" disabled={saving}
             className="flex-1 rounded-xl py-2 text-sm font-bold text-white transition"
-            style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
+            style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
             {saving ? 'Guardando...' : 'Guardar'}
           </button>
         </div>
@@ -425,7 +425,7 @@ function ModalMovimiento({ producto, puntoVentaInicial, onClose, onSaved }) {
       {/* Producto */}
       <div className="bg-gray-50 rounded-xl p-3 mb-4 flex items-center gap-3">
         <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-          style={{ background: 'linear-gradient(135deg, #1A6A9A22, #27AE6022)' }}>
+          style={{ background: 'linear-gradient(135deg, #0A1E3F22, #5BBE6A22)' }}>
           <Package size={16} className="text-vida-blue" />
         </div>
         <div>
@@ -520,7 +520,7 @@ function ModalMovimiento({ producto, puntoVentaInicial, onClose, onSaved }) {
           </button>
           <button type="submit" disabled={saving || loadingSucs}
             className="flex-1 rounded-xl py-2 text-sm font-bold text-white transition disabled:opacity-50"
-            style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
+            style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
             {saving ? 'Guardando...' : 'Confirmar'}
           </button>
         </div>
@@ -567,7 +567,7 @@ function TabCategorias({ puedeEscribir }) {
         {puedeEscribir && (
           <button onClick={() => setModal({})}
             className="flex items-center gap-2 text-sm font-bold text-white px-4 py-2 rounded-xl transition"
-            style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
+            style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
             <Plus size={16} /> Nueva Categoría
           </button>
         )}
@@ -586,7 +586,7 @@ function TabCategorias({ puedeEscribir }) {
             <div key={cat.idCategoria}
               className="bg-white border border-gray-100 rounded-2xl p-4 flex items-center gap-3 shadow-sm">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
+                style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
                 <DynamicIcon name={cat.Icono} size={18} />
               </div>
               <div className="flex-1 min-w-0">
@@ -688,7 +688,7 @@ function TabProductos({ puedeEscribir }) {
         {puedeEscribir && (
           <button onClick={() => setModal({})}
             className="flex items-center gap-2 text-sm font-bold text-white px-4 py-2 rounded-xl transition"
-            style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
+            style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
             <Plus size={16} /> Nuevo Producto
           </button>
         )}
@@ -989,7 +989,7 @@ export default function Inventario() {
               ${tab === key
                 ? 'text-white shadow-sm'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
-            style={tab === key ? { background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' } : {}}>
+            style={tab === key ? { background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' } : {}}>
             <Icon size={15} />
             {label}
           </button>

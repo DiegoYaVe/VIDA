@@ -40,7 +40,7 @@ function Avatar({ nombre, apellidos, imagen }) {
   );
   const initials = `${nombre?.[0] || ''}${apellidos?.[0] || ''}`.toUpperCase();
   return (
-    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-vida-blue to-vida-green
+    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-vida-aqua to-vida-green
                     flex items-center justify-center text-white font-bold text-sm shadow">
       {initials}
     </div>

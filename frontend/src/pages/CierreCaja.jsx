@@ -93,7 +93,7 @@ function StatusBadge({ status }) {
 
 // ── KPI Card ───────────────────────────────────────────────────────────────
 
-function KpiCard({ icon: Icon, label, value, color = 'text-[#1A6A9A]', sub }) {
+function KpiCard({ icon: Icon, label, value, color = 'text-[#0A1E3F]', sub }) {
   return (
     <div className="card p-5 flex flex-col gap-1">
       <div className="flex items-center gap-2 text-gray-500 text-sm font-medium">
@@ -195,7 +195,7 @@ function ModalCierre({ turno, ventas, efectivoEsperado, onClose, onCerrado }) {
             <>
               <div className="bg-blue-50 rounded-xl p-4 text-sm space-y-1">
                 <p className="text-gray-600">Efectivo esperado en caja:</p>
-                <p className="text-2xl font-bold text-[#1A6A9A]">{fmt(efectivoEsperado)}</p>
+                <p className="text-2xl font-bold text-[#0A1E3F]">{fmt(efectivoEsperado)}</p>
                 <p className="text-xs text-gray-400">
                   Inicial {fmt(turno.MontoApertura)} + Ventas en efectivo {fmt(ventas?.TotalEfectivo)}
                 </p>
@@ -416,7 +416,7 @@ export default function CierreCaja() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-[#1A6A9A] to-[#27AE60] px-6 py-5">
+      <div className="bg-gradient-to-r from-[#0A1E3F] to-[#5BBE6A] px-6 py-5">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-white text-2xl font-bold">Cierre de Caja</h1>
@@ -443,7 +443,7 @@ export default function CierreCaja() {
               onClick={() => { setTab(t.id); if (t.id === 'historial') cargarHistorial(1); }}
               className={`px-5 py-2 rounded-lg text-sm font-medium transition ${
                 tab === t.id
-                  ? 'bg-[#1A6A9A] text-white shadow'
+                  ? 'bg-[#0A1E3F] text-white shadow'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
@@ -461,7 +461,7 @@ export default function CierreCaja() {
                 <div className="card p-8 max-w-md mx-auto text-center space-y-5">
                   <div className="flex justify-center">
                     <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center">
-                      <Wallet size={32} className="text-[#1A6A9A]" />
+                      <Wallet size={32} className="text-[#0A1E3F]" />
                     </div>
                   </div>
                   <div>
@@ -583,13 +583,13 @@ export default function CierreCaja() {
                     icon={DollarSign}
                     label="Ventas del turno"
                     value={fmt(ventas?.TotalVentas)}
-                    color="text-[#1A6A9A]"
+                    color="text-[#0A1E3F]"
                   />
                   <KpiCard
                     icon={Wallet}
                     label="Efectivo recibido"
                     value={fmt(ventas?.TotalEfectivo)}
-                    color="text-[#27AE60]"
+                    color="text-[#5BBE6A]"
                   />
                   <KpiCard
                     icon={CreditCard}
@@ -619,7 +619,7 @@ export default function CierreCaja() {
                     </div>
                     <div className="flex justify-between border-t pt-2 font-bold text-gray-800 text-base">
                       <span>Efectivo esperado en caja</span>
-                      <span className="text-[#1A6A9A]">{fmt(efectivoEsperado)}</span>
+                      <span className="text-[#0A1E3F]">{fmt(efectivoEsperado)}</span>
                     </div>
                   </div>
                 </div>

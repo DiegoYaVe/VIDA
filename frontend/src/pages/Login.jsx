@@ -34,7 +34,7 @@ export default function Login() {
 
       {/* Panel izquierdo — branding */}
       <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden flex-col justify-between p-12"
-        style={{ background: 'linear-gradient(135deg, #1A6A9A 0%, #27AE60 100%)' }}>
+        style={{ background: 'linear-gradient(135deg, #54C4E0 0%, #5BBE6A 100%)' }}>
 
         {/* Formas decorativas */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">

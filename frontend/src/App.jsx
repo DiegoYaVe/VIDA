@@ -76,7 +76,7 @@ export default function App() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
         <div className="w-12 h-12 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-          style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
+          style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
           <span className="text-white font-black text-xl">V</span>
         </div>
         <svg className="animate-spin h-6 w-6 text-vida-green mx-auto" viewBox="0 0 24 24" fill="none">

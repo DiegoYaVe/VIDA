@@ -169,11 +169,11 @@ function DashboardAdmin({ stats, conexiones, setConexiones }) {
 
       {/* KPIs principales */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard icon={DollarSign}   label="Ventas hoy"        valor={USD(ventas.hoy)}      variacion={ventas.variacion} color="#27AE60"
+        <KpiCard icon={DollarSign}   label="Ventas hoy"        valor={USD(ventas.hoy)}      variacion={ventas.variacion} color="#5BBE6A"
           sub={`${ventas.numHoy} transacciones`} onClick={() => navigate('/ventas')} />
         <KpiCard icon={Banknote}     label="Efectivo hoy"      valor={USD(ventas.efectivoHoy)} color="#F39C12"
           sub="Cobrado en efectivo" />
-        <KpiCard icon={CreditCard}   label="Tarjeta hoy"       valor={USD(ventas.tarjetaHoy)}  color="#2980B9"
+        <KpiCard icon={CreditCard}   label="Tarjeta hoy"       valor={USD(ventas.tarjetaHoy)}  color="#2CA6C4"
           sub="Cobrado con tarjeta" />
         <KpiCard icon={ShoppingCart} label="Pedidos activos"   valor={pedidosActivos?.Total || 0} color="#8E44AD"
           sub={`${pedidosActivos?.Nuevos || 0} nuevos · ${pedidosActivos?.EnCamino || 0} en camino`}
@@ -184,7 +184,7 @@ function DashboardAdmin({ stats, conexiones, setConexiones }) {
       <div className="grid grid-cols-3 gap-3">
         <KpiCard icon={Wifi}   label="Sucursales online"
           valor={`${globales?.SucursalesOnline || 0} / ${globales?.TotalSucursales || 0}`}
-          color="#1ABC9C"
+          color="#54C4E0"
           sub={globales?.SucursalesOnline === globales?.TotalSucursales ? 'Todas conectadas' : `${(globales?.TotalSucursales||0)-(globales?.SucursalesOnline||0)} sin conexión`}
           onClick={() => navigate('/sucursales')} />
         <KpiCard icon={Package} label="Productos"   valor={globales?.TotalProductos  || '—'} color="#E67E22"
@@ -209,8 +209,8 @@ function DashboardAdmin({ stats, conexiones, setConexiones }) {
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v}`} />
                 <Tooltip formatter={(v, n) => [n === 'ventas' ? USD(v) : v, n === 'ventas' ? 'Total USD' : 'N° ventas']} />
                 <Legend formatter={v => v === 'ventas' ? 'Total USD' : 'N° ventas'} wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="ventas" fill="#1A6A9A" radius={[4,4,0,0]} name="ventas" />
-                <Bar dataKey="num"    fill="#27AE60" radius={[4,4,0,0]} name="num" />
+                <Bar dataKey="ventas" fill="#0A1E3F" radius={[4,4,0,0]} name="ventas" />
+                <Bar dataKey="num"    fill="#5BBE6A" radius={[4,4,0,0]} name="num" />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -231,7 +231,7 @@ function DashboardAdmin({ stats, conexiones, setConexiones }) {
                   </div>
                   <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                     <div className="h-full rounded-full transition-all"
-                      style={{ width: `${Math.max(4,(s.TotalUSD/maxSuc)*100)}%`, background:'linear-gradient(90deg,#1A6A9A,#27AE60)' }} />
+                      style={{ width: `${Math.max(4,(s.TotalUSD/maxSuc)*100)}%`, background:'linear-gradient(90deg,#54C4E0, #5BBE6A)' }} />
                   </div>
                   <p className="text-[10px] text-gray-400 mt-0.5">{s.NumVentas} ventas · {s.Ciudad || s.Estado}</p>
                 </div>
@@ -337,10 +337,10 @@ function DashboardCajero({ stats }) {
 
       {/* KPIs del turno */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard icon={DollarSign}   label="Total hoy"       valor={USD(ventas.hoy)}         variacion={ventas.variacion} color="#27AE60"
+        <KpiCard icon={DollarSign}   label="Total hoy"       valor={USD(ventas.hoy)}         variacion={ventas.variacion} color="#5BBE6A"
           sub={`${ventas.numHoy} transacciones`} />
         <KpiCard icon={Banknote}     label="Efectivo"        valor={USD(ventas.efectivoHoy)}  color="#F39C12"  sub="Cobrado en efectivo" />
-        <KpiCard icon={CreditCard}   label="Tarjeta"         valor={USD(ventas.tarjetaHoy)}   color="#2980B9"  sub="Cobrado con tarjeta" />
+        <KpiCard icon={CreditCard}   label="Tarjeta"         valor={USD(ventas.tarjetaHoy)}   color="#2CA6C4"  sub="Cobrado con tarjeta" />
         <KpiCard icon={ShoppingCart} label="Pedidos activos" valor={pedidosActivos?.Total || 0} color="#8E44AD"
           sub={`${pedidosActivos?.Nuevos || 0} nuevos`} onClick={() => navigate('/pedidos')} />
       </div>
@@ -359,7 +359,7 @@ function DashboardCajero({ stats }) {
                 <XAxis dataKey="fecha" tick={{ fontSize:11 }} />
                 <YAxis tick={{ fontSize:11 }} tickFormatter={v => `$${v}`} />
                 <Tooltip formatter={(v,n) => [n==='ventas' ? USD(v) : v, n==='ventas' ? 'Total' : 'Ventas']} />
-                <Bar dataKey="ventas" fill="#1A6A9A" radius={[4,4,0,0]} name="ventas" />
+                <Bar dataKey="ventas" fill="#0A1E3F" radius={[4,4,0,0]} name="ventas" />
               </BarChart>
             </ResponsiveContainer>
           )}

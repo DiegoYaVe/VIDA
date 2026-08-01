@@ -210,7 +210,7 @@ function ModalSucursal({ data, onClose, onSaved }) {
           </button>
           <button onClick={handleSubmit} disabled={saving}
             className="flex-1 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50 hover:opacity-90"
-            style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
+            style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
             {saving ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Crear sucursal')}
           </button>
         </div>
@@ -275,7 +275,7 @@ export default function Sucursales() {
         {puedeEscribir && (
           <button onClick={() => setModal({})}
             className="flex items-center gap-2 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition"
-            style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
+            style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
             <Plus size={16}/> Nueva sucursal
           </button>
         )}
@@ -304,7 +304,7 @@ export default function Sucursales() {
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2.5">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
+                    style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
                     <Store size={18}/>
                   </div>
                   <div>

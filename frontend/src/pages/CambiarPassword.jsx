@@ -63,7 +63,7 @@ export default function CambiarPassword() {
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #1A6A9A, #27AE60)' }}>
+            style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
             <span className="text-white font-black text-2xl">V</span>
           </div>
           <h1 className="text-2xl font-black text-gray-800">Cambia tu contraseña</h1>
