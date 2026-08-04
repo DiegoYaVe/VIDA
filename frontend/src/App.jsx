@@ -20,6 +20,7 @@ import CierreCaja   from './pages/CierreCaja.jsx';
 import Logistica    from './pages/Logistica.jsx';
 import Clientes      from './pages/Clientes.jsx';
 import Precios       from './pages/Precios.jsx';
+import Matriz        from './pages/Matriz.jsx';
 import { ToastContainer } from './components/Toast.jsx';
 
 function ProtectedRoute({ children, skipCambiarPass = false, modulo = null }) {
@@ -152,6 +153,10 @@ export default function App() {
 
         <Route path="/precios" element={
           <ProtectedRoute modulo="/precios"><Layout><Precios /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/matriz" element={
+          <ProtectedRoute modulo="/matriz"><Layout><Matriz /></Layout></ProtectedRoute>
         } />
 
         {[
