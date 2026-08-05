@@ -5,7 +5,7 @@ import {
   Download, FileSpreadsheet, FileText,
   Filter, RefreshCw, AlertTriangle,
   DollarSign, ShoppingCart, CreditCard, Banknote,
-  MapPin, Store, Globe, ChevronDown, Truck, Star, XCircle,
+  MapPin, Store, Globe, ChevronDown, Truck, Star, XCircle, Building2, Award,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -16,12 +16,12 @@ import api from '../services/api.js';
 import {
   exportarVentasExcel, exportarProductosExcel,
   exportarInventarioExcel, exportarMovimientosExcel,
-  exportarDeliveryExcel,
+  exportarDeliveryExcel, exportarRedExcel,
 } from '../utils/exportExcel.js';
 import {
   exportarVentasPDF, exportarProductosPDF,
   exportarInventarioPDF, exportarMovimientosPDF,
-  exportarDeliveryPDF,
+  exportarDeliveryPDF, exportarRedPDF,
 } from '../utils/exportPDF.js';
 import { useAuthStore } from '../store/authStore.js';
 
@@ -938,10 +938,150 @@ function TabDelivery({ filtros }) {
   );
 }
 
+// ─── TAB: Red (ejecutivo) ─────────────────────────────────────────────────────
+function TabRed({ filtros }) {
+  const { usuario } = useAuthStore();
+  const [rango, setRango]   = useState({ ini: HACE7(), fin: HOY() });
+  const [geo, setGeo]       = useState({});
+  const [datos, setDatos]   = useState(null);
+  const [cargando, setCarg] = useState(false);
+  const [error, setError]   = useState(null);
+
+  const cargar = useCallback(async () => {
+    setCarg(true); setError(null);
+    try {
+      const params = new URLSearchParams({
+        fechaInicio: rango.ini, fechaFin: rango.fin,
+        ...(geo.filtroPais         && { filtroPais: geo.filtroPais }),
+        ...(geo.filtroEstado       && { filtroEstado: geo.filtroEstado }),
+        ...(geo.filtroIdPuntoVenta && { filtroIdPuntoVenta: geo.filtroIdPuntoVenta }),
+      });
+      const r = await api.get(`/reportes/red?${params}`);
+      setDatos(r.data);
+    } catch (e) {
+      setError(e.response?.data?.error || 'Error al cargar el reporte de red');
+    } finally { setCarg(false); }
+  }, [rango, geo]);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  // Top 10 tiendas para la gráfica de ranking
+  const rankData = (datos?.filas || []).slice(0, 10).map(r => ({
+    name: (r.NombrePuntoVenta || '').length > 18 ? r.NombrePuntoVenta.slice(0, 18) + '…' : r.NombrePuntoVenta,
+    total: Number(r.TotalUSD || 0),
+  }));
+
+  return (
+    <div className="space-y-5">
+      {/* Filtros */}
+      <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div><label className="block text-xs font-semibold text-gray-500 mb-1">Desde</label>
+            <input type="date" value={rango.ini} onChange={e => setRango(r => ({ ...r, ini: e.target.value }))}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2" /></div>
+          <div><label className="block text-xs font-semibold text-gray-500 mb-1">Hasta</label>
+            <input type="date" value={rango.fin} onChange={e => setRango(r => ({ ...r, fin: e.target.value }))}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2" /></div>
+          <FiltroGeografia usuario={usuario} filtros={filtros} geo={geo} setGeo={setGeo} />
+          <button onClick={cargar} disabled={cargando}
+            className="flex items-center gap-2 px-4 py-2 bg-vida-blue hover:opacity-90 text-white text-sm font-semibold rounded-xl">
+            <RefreshCw size={14} className={cargando ? 'animate-spin' : ''} /> {cargando ? 'Cargando…' : 'Actualizar'}
+          </button>
+          {datos && (
+            <BotonesExport
+              onExcel={() => exportarRedExcel({ ...datos, fechaInicio: rango.ini, fechaFin: rango.fin })}
+              onPDF={()   => exportarRedPDF  ({ ...datos, fechaInicio: rango.ini, fechaFin: rango.fin })}
+              cargando={cargando} />
+          )}
+        </div>
+      </div>
+
+      {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm flex items-center gap-2"><AlertTriangle size={16} /> {error}</div>}
+      {cargando && <Spinner />}
+
+      {!cargando && datos && (
+        <>
+          {/* KPIs de red */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <CardResumen icon={Building2}    label="Tiendas con ventas" valor={`${datos.totales.NumTiendas}/${datos.totales.TotalTiendas}`} color="blue"   />
+            <CardResumen icon={DollarSign}   label="Total red"          valor={USD(datos.totales.TotalUSD)}       color="green"  />
+            <CardResumen icon={Store}        label="Ventas POS"         valor={USD(datos.totales.TotalPOS)}       color="blue"   />
+            <CardResumen icon={Truck}        label="Ventas Delivery"    valor={USD(datos.totales.TotalDelivery)}  color="purple" />
+            <CardResumen icon={ShoppingCart} label="Ticket promedio"    valor={USD(datos.totales.TicketPromedio)} color="amber"  />
+          </div>
+
+          {/* Ranking de tiendas (gráfica) */}
+          {rankData.length > 0 && (
+            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+              <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2"><Award size={16} className="text-vida-blue" /> Ranking de tiendas por ventas (Top 10)</h3>
+              <ResponsiveContainer width="100%" height={Math.max(200, rankData.length * 32)}>
+                <BarChart data={rankData} layout="vertical" margin={{ top: 0, right: 30, bottom: 0, left: 110 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => `$${v}`} />
+                  <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={105} />
+                  <Tooltip formatter={v => [USD(v), 'Total']} />
+                  <Bar dataKey="total" fill="#0A1E3F" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Tabla ranking completa */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-800 flex items-center gap-2"><Building2 size={16} className="text-vida-blue" /> Ventas por tienda (POS + Delivery)</h3>
+              <span className="text-xs text-gray-400">{datos.filas.length} tiendas</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-left">
+                    {['#','Tienda','Ciudad','Onboarding','Transacc.','POS','Delivery','Total USD','% Red'].map(h => (
+                      <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {datos.filas.map((r, i) => (
+                    <tr key={r.idPuntoVenta} className="hover:bg-gray-50/50">
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-black
+                          ${i === 0 ? 'bg-amber-100 text-amber-700' : i === 1 ? 'bg-gray-100 text-gray-600' : i === 2 ? 'bg-orange-100 text-orange-600' : 'text-gray-400'}`}>{i + 1}</span>
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-gray-800">{r.NombrePuntoVenta}</td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">{r.Ciudad || '—'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{r.EstadoOnboarding}</td>
+                      <td className="px-4 py-3 text-center font-bold text-vida-blue">{r.NumTransacciones}</td>
+                      <td className="px-4 py-3 text-right text-blue-700">{USD(r.TotalPOS)}</td>
+                      <td className="px-4 py-3 text-right text-purple-700">{USD(r.TotalDelivery)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-gray-900">{USD(r.TotalUSD)}</td>
+                      <td className="px-4 py-3 text-right text-gray-500">{r.ParticipacionPct}%</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-gray-900 text-white font-bold">
+                    <td colSpan={4} className="px-4 py-3">TOTAL RED</td>
+                    <td className="px-4 py-3 text-center">{datos.totales.NumTransacciones}</td>
+                    <td className="px-4 py-3 text-right">{USD(datos.totales.TotalPOS)}</td>
+                    <td className="px-4 py-3 text-right">{USD(datos.totales.TotalDelivery)}</td>
+                    <td className="px-4 py-3 text-right">{USD(datos.totales.TotalUSD)}</td>
+                    <td className="px-4 py-3 text-right">100%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
+
+const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
 const TABS = [
   { id: 'ventas',       label: 'Ventas',       icon: BarChart2    },
+  { id: 'red',          label: 'Red',          icon: Building2, soloRed: true },
   { id: 'delivery',     label: 'Delivery',      icon: Truck        },
   { id: 'productos',    label: 'Productos',     icon: TrendingUp   },
   { id: 'inventario',   label: 'Inventario',    icon: Package      },
@@ -949,8 +1089,13 @@ const TABS = [
 ];
 
 export default function Reportes() {
+  const { usuario } = useAuthStore();
+  const puedeVerRed = ROLES_RED.includes(usuario?.TipoUsuario);
   const [tab, setTab]       = useState('ventas');
   const [filtros, setFiltros] = useState({ sucursales: [], paises: [], estados: [] });
+
+  // El tab "Red" solo para roles administrativos
+  const tabsVisibles = TABS.filter(t => !t.soloRed || puedeVerRed);
 
   useEffect(() => {
     api.get('/reportes/filtros')
@@ -974,7 +1119,7 @@ export default function Reportes() {
       {/* Tabs */}
       <div className="bg-white border-b border-gray-100 px-6">
         <div className="flex gap-1">
-          {TABS.map(t => {
+          {tabsVisibles.map(t => {
             const Icon = t.icon;
             return (
               <button key={t.id} onClick={() => setTab(t.id)}
@@ -993,6 +1138,7 @@ export default function Reportes() {
       {/* Contenido */}
       <div className="p-6">
         {tab === 'ventas'      && <TabVentas      filtros={filtros} />}
+        {tab === 'red'         && puedeVerRed && <TabRed filtros={filtros} />}
         {tab === 'delivery'    && <TabDelivery    filtros={filtros} />}
         {tab === 'productos'   && <TabProductos   filtros={filtros} />}
         {tab === 'inventario'  && <TabInventario  filtros={filtros} />}

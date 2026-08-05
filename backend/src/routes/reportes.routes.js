@@ -7,6 +7,7 @@ import {
   reporteInventario,
   reporteMovimientos,
   reporteDelivery,
+  reporteRed,
 } from '../controllers/reportes.controller.js';
 
 // Roles con acceso a reportes (todos excepto CASHIER/CAJERO básico que solo ven su sucursal)
@@ -21,4 +22,8 @@ export async function reportesRoutes(fastify) {
   fastify.get('/reportes/inventario',   pre, reporteInventario);
   fastify.get('/reportes/movimientos',  pre, reporteMovimientos);
   fastify.get('/reportes/delivery',     pre, reporteDelivery);
+
+  // Reporte ejecutivo de red: visión corporativa, solo roles administrativos
+  const preRed = { preHandler: [authenticate, requireRole('SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN')] };
+  fastify.get('/reportes/red',          preRed, reporteRed);
 }

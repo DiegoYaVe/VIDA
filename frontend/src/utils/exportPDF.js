@@ -356,6 +356,45 @@ export function exportarMovimientosPDF({ filas, resumen, fechaInicio, fechaFin }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// REPORTE EJECUTIVO DE RED
+// ─────────────────────────────────────────────────────────────────────────────
+export function exportarRedPDF({ filas, totales, fechaInicio, fechaFin }) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
+  agregarEncabezado(doc, 'Reporte Ejecutivo de Red', `Período: ${fechaInicio} al ${fechaFin}`);
+
+  const nextY = tarjetasResumen(doc, [
+    { label: 'Tiendas c/ventas', valor: `${totales.NumTiendas}/${totales.TotalTiendas}`, color: AZUL2 },
+    { label: 'Total red',        valor: USD(totales.TotalUSD),        color: VERDE },
+    { label: 'POS',              valor: USD(totales.TotalPOS),        color: [52, 152, 219] },
+    { label: 'Delivery',         valor: USD(totales.TotalDelivery),   color: [142, 68, 173] },
+    { label: 'Ticket prom.',     valor: USD(totales.TicketPromedio),  color: [39, 174, 96] },
+  ], 33);
+
+  const columns = [
+    { header: '#',            key: '_i',               width: 10, align: 'center' },
+    { header: 'Tienda',       key: 'NombrePuntoVenta', width: 45 },
+    { header: 'Ciudad',       key: 'Ciudad',           width: 28 },
+    { header: 'Onboarding',   key: 'EstadoOnboarding', width: 24 },
+    { header: 'Transacc.',    key: 'NumTransacciones', width: 20, align: 'right' },
+    { header: 'Total POS',    key: '_pos',             width: 26, align: 'right' },
+    { header: 'Total Deliv.', key: '_del',             width: 26, align: 'right' },
+    { header: 'Total USD',    key: '_tot',             width: 26, align: 'right' },
+    { header: '% Red',        key: '_pct',             width: 16, align: 'right' },
+  ];
+  const body = [
+    ...(filas || []).map((r, i) => ({
+      ...r, _i: i + 1, _pos: USD(r.TotalPOS), _del: USD(r.TotalDelivery), _tot: USD(r.TotalUSD), _pct: `${r.ParticipacionPct}%`,
+    })),
+    { _i: '', NombrePuntoVenta: 'TOTAL RED', Ciudad: '', EstadoOnboarding: '',
+      NumTransacciones: totales.NumTransacciones, _pos: USD(totales.TotalPOS), _del: USD(totales.TotalDelivery), _tot: USD(totales.TotalUSD), _pct: '100%' },
+  ];
+
+  autoTable(doc, opTabla(nextY, columns, body));
+  agregarPiePagina(doc);
+  doc.save(`red_${fechaInicio}_${fechaFin}.pdf`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // REPORTE DELIVERY
 // ─────────────────────────────────────────────────────────────────────────────
 export function exportarDeliveryPDF({ porRepartidor, totales, fechaInicio, fechaFin }) {

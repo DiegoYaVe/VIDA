@@ -518,3 +518,94 @@ export async function reporteDelivery(request, reply) {
     return reply.code(500).send({ error: 'Error en reporte de delivery: ' + err.message });
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/reportes/red — Reporte ejecutivo de RED (T-0053)
+// Visión corporativa: consolida TODOS los canales (POS + delivery) y rankea
+// las tiendas. Query: fechaInicio, fechaFin, filtroPais?, filtroEstado?
+// ─────────────────────────────────────────────────────────────────────────────
+export async function reporteRed(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { fechaInicio, fechaFin } = request.query;
+
+  if (!fechaInicio || !fechaFin)
+    return reply.code(400).send({ error: 'fechaInicio y fechaFin son requeridos' });
+
+  try {
+    const pool = await getPool();
+
+    // Ranking de tiendas: POS + delivery consolidados por punto de venta
+    const reqTiendas = pool.request()
+      .input('idBranch',    sql.BigInt, idBranch)
+      .input('idCuenta',    sql.BigInt, idCuenta)
+      .input('fechaInicio', sql.Date,   new Date(fechaInicio))
+      .input('fechaFin',    sql.Date,   new Date(fechaFin));
+    const geoTiendas = buildGeoFilter(request.user, request.query, reqTiendas);
+
+    const tiendas = await reqTiendas.query(`
+      SELECT
+        pv.idPuntoVenta, pv.NomComercial AS NombrePuntoVenta, pv.Ciudad, pv.Estado, pv.Pais,
+        ISNULL(pv.EstadoOnboarding,'ACTIVA') AS EstadoOnboarding,
+        SUM(CASE WHEN p.Canal='POS' THEN 1 ELSE 0 END)              AS VentasPOS,
+        SUM(CASE WHEN p.Canal='APP' THEN 1 ELSE 0 END)              AS VentasDelivery,
+        COUNT(p.idPedido)                                           AS NumTransacciones,
+        SUM(CASE WHEN p.Canal='POS' THEN p.TotalUSD ELSE 0 END)     AS TotalPOS,
+        SUM(CASE WHEN p.Canal='APP' THEN p.TotalUSD ELSE 0 END)     AS TotalDelivery,
+        SUM(p.TotalUSD)                                             AS TotalUSD
+      FROM VIDA_CUENTA_PUNTOS_VENTA pv
+      LEFT JOIN VIDA_PEDIDOS p
+        ON p.idBranch=pv.idBranch AND p.idCuenta=pv.idCuenta AND p.idPuntoVenta=pv.idPuntoVenta
+       AND p.Status='ENTREGADO' AND p.Canal IN ('POS','APP')
+       AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+      WHERE pv.idBranch=@idBranch AND pv.idCuenta=@idCuenta AND pv.Status='ACTIVO'
+        ${geoTiendas}
+      GROUP BY pv.idPuntoVenta, pv.NomComercial, pv.Ciudad, pv.Estado, pv.Pais, pv.EstadoOnboarding
+      ORDER BY SUM(p.TotalUSD) DESC
+    `);
+
+    // Ventas de la red por día (todos los canales) para la gráfica
+    const reqDia = pool.request()
+      .input('idBranch',    sql.BigInt, idBranch)
+      .input('idCuenta',    sql.BigInt, idCuenta)
+      .input('fechaInicio', sql.Date,   new Date(fechaInicio))
+      .input('fechaFin',    sql.Date,   new Date(fechaFin));
+    const geoDia = buildGeoFilter(request.user, request.query, reqDia);
+    const grafica = await reqDia.query(`
+      SELECT CAST(p.FechaAlta AS DATE) AS Fecha,
+             SUM(CASE WHEN p.Canal='POS' THEN p.TotalUSD ELSE 0 END) AS TotalPOS,
+             SUM(CASE WHEN p.Canal='APP' THEN p.TotalUSD ELSE 0 END) AS TotalDelivery,
+             SUM(p.TotalUSD) AS TotalUSD
+      FROM VIDA_PEDIDOS p
+      JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+        ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
+      WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
+        AND p.Status='ENTREGADO' AND p.Canal IN ('POS','APP')
+        AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        ${geoDia}
+      GROUP BY CAST(p.FechaAlta AS DATE)
+      ORDER BY CAST(p.FechaAlta AS DATE)
+    `);
+
+    const rows = tiendas.recordset;
+    const totales = {
+      NumTiendas:       rows.filter(r => r.NumTransacciones > 0).length,
+      TotalTiendas:     rows.length,
+      NumTransacciones: rows.reduce((s, r) => s + (r.NumTransacciones || 0), 0),
+      TotalUSD:         rows.reduce((s, r) => s + (r.TotalUSD || 0), 0),
+      TotalPOS:         rows.reduce((s, r) => s + (r.TotalPOS || 0), 0),
+      TotalDelivery:    rows.reduce((s, r) => s + (r.TotalDelivery || 0), 0),
+    };
+    totales.TicketPromedio = totales.NumTransacciones ? totales.TotalUSD / totales.NumTransacciones : 0;
+
+    // % de participación de cada tienda en la red
+    const filas = rows.map(r => ({
+      ...r,
+      ParticipacionPct: totales.TotalUSD ? +((r.TotalUSD / totales.TotalUSD) * 100).toFixed(1) : 0,
+    }));
+
+    return reply.send({ filas, totales, graficaDiaria: grafica.recordset });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error en reporte de red: ' + err.message });
+  }
+}

@@ -109,6 +109,30 @@ export function exportarProductosExcel({ filas, totales, fechaInicio, fechaFin }
   descargar(wb, `productos_${fechaInicio}_${fechaFin}.xlsx`);
 }
 
+export function exportarRedExcel({ filas, totales, fechaInicio, fechaFin }) {
+  const encabezado = [
+    ['COMERCIALIZADORA VIDA — REPORTE EJECUTIVO DE RED'],
+    [`Período: ${fechaInicio} al ${fechaFin}`, '', '', '', `Generado: ${new Date().toLocaleString('es-VE')}`],
+    [`Tiendas con ventas: ${totales.NumTiendas}/${totales.TotalTiendas} | Total red: ${USD(totales.TotalUSD)} | POS: ${USD(totales.TotalPOS)} | Delivery: ${USD(totales.TotalDelivery)}`],
+    [],
+    ['#', 'Tienda', 'Ciudad', 'Estado geo', 'Onboarding', 'Ventas POS', 'Ventas Delivery', 'Transacciones', 'Total POS', 'Total Delivery', 'Total USD', '% Red'],
+  ];
+  const filasDatos = (filas || []).map((r, i) => [
+    i + 1, r.NombrePuntoVenta, r.Ciudad || '', r.Estado || '', r.EstadoOnboarding,
+    r.VentasPOS, r.VentasDelivery, r.NumTransacciones,
+    Number(r.TotalPOS || 0), Number(r.TotalDelivery || 0), Number(r.TotalUSD || 0), Number(r.ParticipacionPct || 0),
+  ]);
+  const filaTot = [
+    '', 'TOTAL RED', '', '', '',
+    filas.reduce((s, r) => s + (r.VentasPOS || 0), 0),
+    filas.reduce((s, r) => s + (r.VentasDelivery || 0), 0),
+    totales.NumTransacciones,
+    Number(totales.TotalPOS), Number(totales.TotalDelivery), Number(totales.TotalUSD), 100,
+  ];
+  const wb = crearLibro([{ nombre: 'Red', datos: [...encabezado, ...filasDatos, [], filaTot], anchos: [5, 26, 16, 16, 12, 12, 14, 13, 14, 14, 14, 8] }]);
+  descargar(wb, `red_${fechaInicio}_${fechaFin}.xlsx`);
+}
+
 export function exportarDeliveryExcel({ graficaDiaria, porRepartidor, porMetodo, totales, fechaInicio, fechaFin }) {
   // Hoja 1: por repartidor
   const encRep = [
