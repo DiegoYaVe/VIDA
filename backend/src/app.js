@@ -3,6 +3,8 @@ import 'dotenv/config';
 import Fastify from 'fastify';
 import fjwt from '@fastify/jwt';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
 import fws from '@fastify/websocket';
 import { getPool } from './db/sqlserver.js';
 import { authRoutes } from './routes/auth.routes.js';
@@ -33,7 +35,25 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import path from 'path';
 
-const fastify = Fastify({ logger: true });
+const ES_PRODUCCION = process.env.NODE_ENV === 'production';
+const SECRET_DEV = 'pos_venezuela_dev_secret_12345678';
+
+// ── Hardening: en producción el JWT_SECRET es obligatorio y no puede ser el
+// valor de desarrollo (si no, cualquiera podría forjar tokens con el secreto
+// conocido del repo).
+const JWT_SECRET = process.env.JWT_SECRET;
+if (ES_PRODUCCION && (!JWT_SECRET || JWT_SECRET.length < 32 || JWT_SECRET === SECRET_DEV)) {
+  console.error('FATAL: en producción JWT_SECRET debe estar definido, tener 32+ caracteres y NO ser el valor de desarrollo.');
+  process.exit(1);
+}
+
+const fastify = Fastify({
+  // En producción se sube el nivel de log y se redactan cabeceras sensibles
+  logger: ES_PRODUCCION
+    ? { level: 'warn', redact: ['req.headers.authorization', 'req.headers.cookie'] }
+    : true,
+  trustProxy: true, // detrás de IIS/reverse proxy: usa el IP real del cliente
+});
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // CORS — permite llamadas desde el frontend React
@@ -48,12 +68,25 @@ await fastify.register(cors, {
   credentials: true,
 });
 
+// Cabeceras de seguridad (CSP, X-Frame-Options, HSTS, etc.). Se desactiva la
+// CSP por defecto para no bloquear los recursos servidos desde /uploads.
+await fastify.register(helmet, { contentSecurityPolicy: false });
+
+// Rate limiting global — frena abuso/fuerza bruta. El login tiene un límite
+// más estricto configurado en su propia ruta.
+await fastify.register(rateLimit, {
+  global: true,
+  max: 300,               // 300 req/min por IP en general
+  timeWindow: '1 minute',
+  allowList: [],
+});
+
 // WebSocket
 await fastify.register(fws);
 
-// JWT
+// JWT (el secreto ya fue validado arriba en producción)
 await fastify.register(fjwt, {
-  secret: process.env.JWT_SECRET || 'pos_venezuela_dev_secret_12345678',
+  secret: JWT_SECRET || SECRET_DEV,
 });
 
 await fastify.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB máximo

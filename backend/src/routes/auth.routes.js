@@ -6,10 +6,14 @@ import { portalDeRol } from '../config/portales.js';
 
 export async function authRoutes(fastify) {
 
-  fastify.post('/auth/login', { schema: {
-    body: { type:'object', required:['cve','pass'],
-      properties: { cve:{type:'string'}, pass:{type:'string'} } }
-  }}, login);
+  fastify.post('/auth/login', {
+    // Límite estricto anti-fuerza bruta: 10 intentos por minuto por IP
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    schema: {
+      body: { type:'object', required:['cve','pass'],
+        properties: { cve:{type:'string'}, pass:{type:'string'} } }
+    }
+  }, login);
 
   fastify.post('/auth/refresh', { schema: {
     body: { type:'object', required:['refreshToken'],
