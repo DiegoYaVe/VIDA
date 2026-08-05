@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { getPool, sql } from '../db/sqlserver.js';
 import { registrarAuditoria } from '../services/audit.service.js';
+import { promocionesVigentes, mejorPromoUnitaria } from './promociones.controller.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -702,5 +703,79 @@ export async function subirImagenProducto(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al subir imagen del producto' });
+  }
+}
+
+// GET /api/inventario/catalogo
+// Catálogo central de la red (T-0047): vista maestra consolidada de productos
+// con categoría, costo, precio, stock total en la red, # de tiendas con stock
+// y promoción activa. Complementa a Inventario (que es operativo por tienda).
+export async function catalogoCentral(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { search, idCategoria } = request.query;
+  try {
+    const pool = await getPool();
+    const req = pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta);
+    let filtro = '';
+    if (search)      { req.input('search', sql.VarChar(200), `%${search}%`); filtro += ' AND (p.Nombre LIKE @search OR p.SKU LIKE @search)'; }
+    if (idCategoria) { req.input('idCategoria', sql.BigInt, idCategoria);     filtro += ' AND p.idCategoria = @idCategoria'; }
+
+    const r = await req.query(`
+      SELECT p.idProducto, p.Nombre, p.SKU, p.UnidadMedida, p.ImagenProducto, p.Descripcion,
+             p.CostoUSD, p.PrecioUSD, p.idCategoria, cat.Nombre AS NombreCategoria,
+             ISNULL(SUM(inv.Cantidad), 0) AS StockTotal,
+             COUNT(DISTINCT CASE WHEN inv.Cantidad > 0 THEN inv.idPuntoVenta END) AS TiendasConStock
+      FROM VIDA_INVENTARIO_PRODUCTOS p
+      LEFT JOIN VIDA_INVENTARIO_STOCK inv
+        ON inv.idBranch=p.idBranch AND inv.idCuenta=p.idCuenta AND inv.idProducto=p.idProducto
+      LEFT JOIN VIDA_INVENTARIO_CATEGORIAS cat
+        ON cat.idBranch=p.idBranch AND cat.idCuenta=p.idCuenta AND cat.idCategoria=p.idCategoria
+      WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.Status='ACTIVO'
+        ${filtro}
+      GROUP BY p.idProducto, p.Nombre, p.SKU, p.UnidadMedida, p.ImagenProducto, p.Descripcion,
+               p.CostoUSD, p.PrecioUSD, p.idCategoria, cat.Nombre
+      ORDER BY p.Nombre`);
+
+    // Categorías para el filtro + resumen
+    const cats = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .query(`SELECT idCategoria, Nombre FROM VIDA_INVENTARIO_CATEGORIAS
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'
+              ORDER BY OrdenCategoria, Nombre`);
+
+    // Promociones vigentes → badge por producto
+    const promos = await promocionesVigentes(pool, idBranch, idCuenta);
+    const productos = r.recordset.map(p => {
+      const unit = mejorPromoUnitaria(promos, p);
+      const combo = promos.find(x => x.Tipo === 'NXM' &&
+        (x.Alcance === 'TODO'
+         || (x.Alcance === 'PRODUCTO'  && String(x.idProducto)  === String(p.idProducto))
+         || (x.Alcance === 'CATEGORIA' && String(x.idCategoria) === String(p.idCategoria))));
+      return {
+        ...p,
+        PrecioPromo: unit ? unit.precioUnitario : null,
+        PromoBadge: combo ? `${parseInt(combo.Valor)}x${parseInt(combo.Valor2)}`
+                    : (unit && unit.promo.Tipo === 'DESCUENTO_PCT' ? `-${parseInt(unit.promo.Valor)}%`
+                    : (unit ? 'OFERTA' : null)),
+        // Margen sobre el costo (referencia)
+        MargenPct: (p.CostoUSD > 0 && p.PrecioUSD > 0)
+          ? +(((p.PrecioUSD - p.CostoUSD) / p.CostoUSD) * 100).toFixed(0) : null,
+      };
+    });
+
+    const resumen = {
+      TotalProductos: productos.length,
+      Categorias: cats.recordset.length,
+      ValorCatalogoUSD: productos.reduce((s, p) => s + (p.StockTotal * p.CostoUSD), 0),
+      ConPromo: productos.filter(p => p.PromoBadge).length,
+    };
+
+    return reply.send({ productos, categorias: cats.recordset, resumen });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener el catálogo' });
   }
 }

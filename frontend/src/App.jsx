@@ -22,6 +22,7 @@ import Clientes      from './pages/Clientes.jsx';
 import Precios       from './pages/Precios.jsx';
 import Matriz        from './pages/Matriz.jsx';
 import Corporativo   from './pages/Corporativo.jsx';
+import Catalogos     from './pages/Catalogos.jsx';
 import { ToastContainer } from './components/Toast.jsx';
 
 function ProtectedRoute({ children, skipCambiarPass = false, modulo = null }) {
@@ -164,13 +165,9 @@ export default function App() {
           <ProtectedRoute modulo="/corporativo"><Layout><Corporativo /></Layout></ProtectedRoute>
         } />
 
-        {[
-          { path:'/catalogos',   nombre:'Catálogos' },
-        ].map(({ path, nombre }) => (
-          <Route key={path} path={path} element={
-            <ProtectedRoute modulo={path}><Layout><ComingSoon nombre={nombre} /></Layout></ProtectedRoute>
-          } />
-        ))}
+        <Route path="/catalogos" element={
+          <ProtectedRoute modulo="/catalogos"><Layout><Catalogos /></Layout></ProtectedRoute>
+        } />
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

@@ -4,6 +4,7 @@ import {
   listarCategorias, crearCategoria, editarCategoria, toggleCategoria,
   listarProductos, obtenerProducto, crearProducto, editarProducto, toggleProducto,
   actualizarPreciosLote,
+  catalogoCentral,
   verStock,
   registrarMovimiento, listarMovimientos,
   subirImagenProducto,
@@ -31,6 +32,9 @@ export async function inventarioRoutes(fastify) {
     { preHandler: [requireRole(...ESCRITURA)] }, toggleCategoria);
 
   // ── PRODUCTOS ─────────────────────────────────────────────────────────
+  fastify.get('/inventario/catalogo',
+    { preHandler: [requireRole(...LECTURA)] }, catalogoCentral);
+
   fastify.get('/inventario/productos',
     { preHandler: [requireRole(...LECTURA)] }, listarProductos);
 
