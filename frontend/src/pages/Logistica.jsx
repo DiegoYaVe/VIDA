@@ -261,7 +261,63 @@ function TabRepartidores({ puedeEscribir }) {
 }
 
 // ─── TAB: Mapa en vivo ─────────────────────────────────────────────────────────
-function mapaHTML() {
+// Key web de Google Maps (Maps JavaScript API). Si no está, cae a Leaflet gratis.
+const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY || '';
+
+// Mapa con Google Maps JavaScript API
+function mapaHTMLGoogle(key) {
+  return `<!DOCTYPE html><html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body,#map{margin:0;padding:0;width:100%;height:100%;background:#eef2f6;}</style>
+</head><body><div id="map"></div>
+<script>
+var map, capas=[], info;
+function svg(color,size){
+  return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'"><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+(size/2-3)+'" fill="'+color+'" stroke="#fff" stroke-width="3"/></svg>');
+}
+function pin(pos,color,size,emoji,titulo,html){
+  var m=new google.maps.Marker({position:pos,map:map,title:titulo,
+    icon:{url:svg(color,size),scaledSize:new google.maps.Size(size,size),anchor:new google.maps.Point(size/2,size/2),labelOrigin:new google.maps.Point(size/2,size/2)},
+    label:{text:emoji,fontSize:(size*0.45)+'px'}});
+  if(html){ m.addListener('click',function(){ info.setContent(html); info.open(map,m); }); }
+  capas.push(m); return m;
+}
+window.pintar = function(data){
+  capas.forEach(function(c){ c.setMap(null); }); capas=[];
+  var b=new google.maps.LatLngBounds(), n=0;
+  (data.repartidores||[]).forEach(function(r){
+    if(r.UltimaLatitud==null) return;
+    var pos={lat:+r.UltimaLatitud,lng:+r.UltimaLongitud};
+    pin(pos, r.PedidosActivos>0?'#E67E22':'#5BBE6A', 36, '🛵', r.Nombre,
+      '<b>'+r.Nombre+'</b><br>'+(r.PedidosActivos>0?r.PedidosActivos+' pedido(s) activos':'disponible'));
+    b.extend(pos); n++;
+  });
+  (data.pedidos||[]).forEach(function(p){
+    if(p.SucursalLat!=null){ var s={lat:+p.SucursalLat,lng:+p.SucursalLon}; pin(s,'#0A1E3F',28,'🏪','Sucursal','Sucursal: '+(p.NombreSucursal||'')); b.extend(s); n++; }
+    if(p.EntregaLat!=null){ var e={lat:+p.EntregaLat,lng:+p.EntregaLon};
+      var eta = (p.MinutosRestantes!=null && p.MinutosRestantes>=0) ? '<br>⏱ llega en ~'+p.MinutosRestantes+' min' : '';
+      pin(e,'#8E44AD',28,'🏠','Entrega','<b>Pedido #'+p.idPedido+'</b><br>'+(p.NombreCliente||'')+'<br>'+(p.DireccionEntrega||'')+(p.NombreRepartidor?'<br>🛵 '+p.NombreRepartidor:'')+eta); b.extend(e); n++; }
+    if(p.SucursalLat!=null && p.EntregaLat!=null){
+      var l=new google.maps.Polyline({path:[{lat:+p.SucursalLat,lng:+p.SucursalLon},{lat:+p.EntregaLat,lng:+p.EntregaLon}],
+        strokeColor:'#94A3B8',strokeOpacity:0.8,strokeWeight:2,map:map}); capas.push(l);
+    }
+  });
+  if(n>=2 && (data.reajustar || !window._ajustado)){ map.fitBounds(b,60); window._ajustado=true; }
+  else if(n===1 && data.reajustar){ map.setCenter(b.getCenter()); map.setZoom(15); }
+};
+window.initMap = function(){
+  map=new google.maps.Map(document.getElementById('map'),{center:{lat:10.4806,lng:-66.9036},zoom:12,disableDefaultUI:false,streetViewControl:false,mapTypeControl:false});
+  info=new google.maps.InfoWindow();
+  window.parent.postMessage({tipo:'mapa-listo'},'*');
+};
+</script>
+<script async src="https://maps.googleapis.com/maps/api/js?key=${key}&callback=initMap"></script>
+</body></html>`;
+}
+
+// Mapa gratis (Leaflet + OpenStreetMap) — fallback cuando no hay key de Google
+function mapaHTMLLeaflet() {
   return `<!DOCTYPE html><html><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -273,33 +329,24 @@ var map = L.map('map',{zoomControl:true,attributionControl:false}).setView([10.4
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 var capas = [];
 function icono(html){ return L.divIcon({html:html,className:'',iconAnchor:[16,16]}); }
-function pinRep(nombre,activos){
-  var color = activos>0 ? '#E67E22' : '#5BBE6A';
-  return icono('<div style="background:'+color+';width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.35)">🛵</div>');
-}
+function pinRep(activos){ var color=activos>0?'#E67E22':'#5BBE6A'; return icono('<div style="background:'+color+';width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.35)">🛵</div>'); }
 function pinSuc(){ return icono('<div style="background:#0A1E3F;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🏪</div>'); }
 function pinEnt(){ return icono('<div style="background:#8E44AD;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🏠</div>'); }
-
 window.pintar = function(data){
   capas.forEach(function(c){ map.removeLayer(c); }); capas = [];
   var puntos = [];
   (data.repartidores||[]).forEach(function(r){
     if(r.UltimaLatitud==null) return;
-    var m = L.marker([r.UltimaLatitud,r.UltimaLongitud],{icon:pinRep(r.Nombre,r.PedidosActivos)})
-      .bindPopup('<b>'+r.Nombre+'</b><br>'+(r.PedidosActivos>0?r.PedidosActivos+' pedido(s) activos':'disponible'));
+    var m = L.marker([r.UltimaLatitud,r.UltimaLongitud],{icon:pinRep(r.PedidosActivos)}).bindPopup('<b>'+r.Nombre+'</b><br>'+(r.PedidosActivos>0?r.PedidosActivos+' pedido(s) activos':'disponible'));
     m.addTo(map); capas.push(m); puntos.push([r.UltimaLatitud,r.UltimaLongitud]);
   });
   (data.pedidos||[]).forEach(function(p){
     if(p.SucursalLat!=null){ var s=L.marker([p.SucursalLat,p.SucursalLon],{icon:pinSuc()}).bindPopup('Sucursal: '+(p.NombreSucursal||'')); s.addTo(map); capas.push(s); puntos.push([p.SucursalLat,p.SucursalLon]); }
-    if(p.EntregaLat!=null){ var e=L.marker([p.EntregaLat,p.EntregaLon],{icon:pinEnt()}).bindPopup('Pedido #'+p.idPedido+'<br>'+(p.NombreCliente||'')+'<br>'+(p.DireccionEntrega||'')); e.addTo(map); capas.push(e); puntos.push([p.EntregaLat,p.EntregaLon]); }
+    if(p.EntregaLat!=null){ var eta=(p.MinutosRestantes!=null&&p.MinutosRestantes>=0)?'<br>⏱ llega en ~'+p.MinutosRestantes+' min':''; var e=L.marker([p.EntregaLat,p.EntregaLon],{icon:pinEnt()}).bindPopup('<b>Pedido #'+p.idPedido+'</b><br>'+(p.NombreCliente||'')+'<br>'+(p.DireccionEntrega||'')+eta); e.addTo(map); capas.push(e); puntos.push([p.EntregaLat,p.EntregaLon]); }
     if(p.SucursalLat!=null && p.EntregaLat!=null){ var l=L.polyline([[p.SucursalLat,p.SucursalLon],[p.EntregaLat,p.EntregaLon]],{color:'#94A3B8',weight:2,dashArray:'4,6'}); l.addTo(map); capas.push(l); }
   });
-  if(puntos.length>=2 && !window._ajustado){ map.fitBounds(L.latLngBounds(puntos).pad(0.25)); window._ajustado=true; }
-};
-// Mover un repartidor sin repintar todo (evento WS)
-window.moverRep = function(id,lat,lon){
-  window._pos = window._pos || {};
-  window._pos[id] = [lat,lon];
+  if(puntos.length>=2 && (data.reajustar || !window._ajustado)){ map.fitBounds(L.latLngBounds(puntos).pad(0.25)); window._ajustado=true; }
+  else if(puntos.length===1 && data.reajustar){ map.setView(puntos[0],15); }
 };
 window.parent.postMessage({tipo:'mapa-listo'},'*');
 </script></body></html>`;
@@ -310,7 +357,18 @@ function TabMapa() {
   const [data, setData] = useState(null);
   const [cargando, setCarg] = useState(true);
   const [ultAct, setUltAct] = useState(null);
+  const [foco, setFoco] = useState('GENERAL'); // 'GENERAL' | idPedido
   const listoRef = useRef(false);
+
+  // Filtra los datos según el foco (un pedido concreto o toda la red)
+  const dataParaMapa = useCallback((d, focoActual, reajustar) => {
+    if (!d) return { repartidores: [], pedidos: [], reajustar };
+    if (focoActual === 'GENERAL') return { ...d, reajustar };
+    const ped = (d.pedidos || []).find(p => String(p.idPedido) === String(focoActual));
+    if (!ped) return { ...d, reajustar };
+    const rep = (d.repartidores || []).filter(r => String(r.idRepartidor) === String(ped.idRepartidor));
+    return { repartidores: rep, pedidos: [ped], reajustar };
+  }, []);
 
   const cargar = useCallback(async () => {
     try {
@@ -318,41 +376,45 @@ function TabMapa() {
       setData(r.data);
       setUltAct(new Date());
       if (listoRef.current && iframeRef.current) {
-        iframeRef.current.contentWindow.pintar(r.data);
+        iframeRef.current.contentWindow.pintar(dataParaMapa(r.data, foco, false));
       }
     } catch { /* silencioso */ }
     finally { setCarg(false); }
-  }, []);
+  }, [foco, dataParaMapa]);
 
   useEffect(() => {
     cargar();
-    const t = setInterval(cargar, 20_000); // refresco de respaldo cada 20s
+    const t = setInterval(cargar, 20_000);
     return () => clearInterval(t);
   }, [cargar]);
 
-  // Cuando el iframe avisa que está listo, pinta los datos que ya tengamos
+  // Al cambiar el foco, repinta y reajusta el encuadre
+  useEffect(() => {
+    if (listoRef.current && iframeRef.current && data) {
+      iframeRef.current.contentWindow.pintar(dataParaMapa(data, foco, true));
+    }
+  }, [foco]);
+
   useEffect(() => {
     function onMsg(e) {
       if (e.data?.tipo === 'mapa-listo') {
         listoRef.current = true;
-        if (data && iframeRef.current) iframeRef.current.contentWindow.pintar(data);
+        if (data && iframeRef.current) iframeRef.current.contentWindow.pintar(dataParaMapa(data, foco, true));
       }
     }
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
-  }, [data]);
+  }, [data, foco, dataParaMapa]);
 
-  // Actualización en vivo por WebSocket: cuando un repartidor se mueve, refrescar
   const handleWs = useCallback((msg) => {
-    if (msg.tipo === 'repartidor_ubicacion' || msg.tipo === 'pedido_status' || msg.tipo === 'pedido_asignado') {
-      cargar();
-    }
+    if (msg.tipo === 'repartidor_ubicacion' || msg.tipo === 'pedido_status' || msg.tipo === 'pedido_asignado') cargar();
   }, [cargar]);
   useWebSocket(handleWs, true);
 
   const totalRep = data?.repartidores?.length || 0;
   const enRuta   = (data?.repartidores || []).filter(r => r.PedidosActivos > 0).length;
-  const pedidos  = data?.pedidos?.length || 0;
+  const pedidos  = data?.pedidos || [];
+  const pedidoFoco = foco !== 'GENERAL' ? pedidos.find(p => String(p.idPedido) === String(foco)) : null;
 
   return (
     <div className="space-y-4">
@@ -367,14 +429,27 @@ function TabMapa() {
         </div>
         <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center"><Package size={18} className="text-purple-600" /></div>
-          <div><p className="text-xs text-gray-400 font-semibold uppercase">Pedidos en curso</p><p className="text-xl font-black text-gray-900">{pedidos}</p></div>
+          <div><p className="text-xs text-gray-400 font-semibold uppercase">Pedidos en curso</p><p className="text-xl font-black text-gray-900">{pedidos.length}</p></div>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-bold text-gray-800 flex items-center gap-2"><MapPin size={16} className="text-vida-blue" /> Mapa en vivo</h3>
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-3">
+            <h3 className="font-bold text-gray-800 flex items-center gap-2"><MapPin size={16} className="text-vida-blue" /> Mapa en vivo</h3>
+            {/* Selector General / por pedido */}
+            <select value={foco} onChange={e => setFoco(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5">
+              <option value="GENERAL">🌐 General (toda la red)</option>
+              {pedidos.map(p => (
+                <option key={p.idPedido} value={p.idPedido}>
+                  #{p.idPedido} · {p.NombreCliente || 'cliente'}{p.MinutosRestantes != null && p.MinutosRestantes >= 0 ? ` · ~${p.MinutosRestantes} min` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-center gap-3 text-xs text-gray-400">
+            {!MAPS_KEY && <span className="text-amber-500 font-semibold">mapa gratis (sin key de Google)</span>}
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> disponible</span>
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500" /> en ruta</span>
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-vida-blue" /> sucursal</span>
@@ -382,11 +457,25 @@ function TabMapa() {
             {ultAct && <span>· {ultAct.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>}
           </div>
         </div>
+
+        {/* Panel de detalle del pedido enfocado */}
+        {pedidoFoco && (
+          <div className="px-5 py-2.5 bg-vida-blue-light border-b border-gray-100 flex items-center gap-4 text-sm flex-wrap">
+            <span className="font-bold text-vida-blue">Pedido #{pedidoFoco.idPedido}</span>
+            {pedidoFoco.NombreCliente && <span className="text-gray-600">👤 {pedidoFoco.NombreCliente}</span>}
+            {pedidoFoco.NombreRepartidor && <span className="text-gray-600">🛵 {pedidoFoco.NombreRepartidor}</span>}
+            {pedidoFoco.MinutosRestantes != null && pedidoFoco.MinutosRestantes >= 0 && (
+              <span className="font-semibold text-vida-blue">⏱ llega en ~{pedidoFoco.MinutosRestantes} min</span>
+            )}
+            {pedidoFoco.DireccionEntrega && <span className="text-gray-500 text-xs truncate max-w-[280px]">📍 {pedidoFoco.DireccionEntrega}</span>}
+          </div>
+        )}
+
         {cargando && !data ? <Spinner /> : (
           <iframe
             ref={iframeRef}
             title="Mapa en vivo"
-            srcDoc={mapaHTML()}
+            srcDoc={MAPS_KEY ? mapaHTMLGoogle(MAPS_KEY) : mapaHTMLLeaflet()}
             style={{ width: '100%', height: '520px', border: 'none' }}
           />
         )}
