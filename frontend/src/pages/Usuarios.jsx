@@ -289,20 +289,24 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                {/* País — siempre visible en roles no SUPER_ADMIN */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1">País</label>
-                  <select value={form.idPais} onChange={e => handlePaisChange(e.target.value)}
-                    className="input-field text-sm">
-                    <option value="">— Seleccionar país —</option>
-                    {paises.map(p => (
-                      <option key={p.idPais} value={p.idPais}>{p.NombrePais}</option>
-                    ))}
-                  </select>
-                </div>
+                {/* País — solo para roles cuyo ÁMBITO es geográfico (Admin País / Admin Estado).
+                    Para roles operativos (Admin Tienda / Supervisor / Cajero) el país y el
+                    estado están de sobra: lo que define su alcance es la tienda. */}
+                {['ADMIN_PAIS', 'ADMIN_ESTADO'].includes(form.TipoUsuario) && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">País</label>
+                    <select value={form.idPais} onChange={e => handlePaisChange(e.target.value)}
+                      className="input-field text-sm">
+                      <option value="">— Seleccionar país —</option>
+                      {paises.map(p => (
+                        <option key={p.idPais} value={p.idPais}>{p.NombrePais}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
-                {/* Estado — visible excepto ADMIN_PAIS */}
-                {['ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR', 'CAJERO'].includes(form.TipoUsuario) && (
+                {/* Estado — solo para Admin Estado (es su ámbito) */}
+                {form.TipoUsuario === 'ADMIN_ESTADO' && (
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Estado</label>
                     <select value={form.idEstado}
@@ -316,26 +320,21 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
                   </div>
                 )}
 
-                {/* Sucursal — solo roles operativos, filtrada por estado */}
+                {/* Tienda — roles operativos: se elige directo, sin filtrar por país/estado */}
                 {['ADMIN', 'SUPERVISOR', 'CAJERO'].includes(form.TipoUsuario) && (
                   <div className="col-span-2">
-                    <label className="block text-xs font-bold text-gray-600 mb-1">Sucursal</label>
+                    <label className="block text-xs font-bold text-gray-600 mb-1">Tienda</label>
                     <div className="relative">
                       <Building size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <select value={form.idPuntoVenta}
                         onChange={e => setForm(f=>({...f,idPuntoVenta:e.target.value}))}
-                        className="input-field text-sm pl-9"
-                        disabled={!form.idEstado}>
-                        <option value="">
-                          {!form.idEstado ? '— Selecciona un estado primero —' : '— Sin sucursal asignada —'}
-                        </option>
-                        {sucursales
-                          .filter(s => !form.idEstado || String(s.idEstado) === String(form.idEstado))
-                          .map(s => (
-                            <option key={s.idPuntoVenta} value={s.idPuntoVenta}>
-                              {s.NomComercial || s.Nombre}
-                            </option>
-                          ))}
+                        className="input-field text-sm pl-9">
+                        <option value="">— Sin tienda asignada —</option>
+                        {sucursales.map(s => (
+                          <option key={s.idPuntoVenta} value={s.idPuntoVenta}>
+                            {s.NomComercial || s.Nombre}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>

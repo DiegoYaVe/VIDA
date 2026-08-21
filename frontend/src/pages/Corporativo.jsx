@@ -57,42 +57,73 @@ function MedidorMeta({ activas, meta, porcentaje }) {
 function WizardOnboarding({ onClose, onListo }) {
   const { pantallas } = useAuthStore();
   const [paso, setPaso] = useState(1);
-  const [tienda, setTienda] = useState({ NomComercial: '', Encargado: '', Telefono: '', Correo: '', Ciudad: '', Calle: '' });
+  const [tienda, setTienda] = useState({ NomComercial: '', Encargado: '', Telefono: '', Correo: '', idPais: '', idEstado: '', Ciudad: '', Calle: '' });
   const [emp, setEmp] = useState({ Nombre: '', Apellidos: '', Correo: '', Cve: '' });
   const [idPuntoVenta, setIdPV] = useState(null);
   const [proc, setProc] = useState(false);
   const [error, setError] = useState('');
+  const [paises, setPaises]   = useState([]);
+  const [estados, setEstados] = useState([]);
+
+  useEffect(() => {
+    api.get('/paises').then(r => {
+      setPaises(r.data);
+      // País por defecto: Venezuela
+      const ve = r.data.find(p => /venezuela/i.test(p.NombrePais));
+      if (ve) {
+        setTienda(s => ({ ...s, idPais: String(ve.idPais) }));
+        api.get(`/estados?idPais=${ve.idPais}`).then(er => setEstados(er.data)).catch(() => {});
+      }
+    }).catch(() => {});
+  }, []);
 
   const setT = (k, v) => setTienda(s => ({ ...s, [k]: v }));
   const setE = (k, v) => setEmp(s => ({ ...s, [k]: v }));
 
-  async function crearTienda() {
+  // País → carga estados en cascada y limpia el estado elegido
+  const cambiarPais = (idPais) => {
+    setTienda(s => ({ ...s, idPais, idEstado: '' }));
+    setEstados([]);
+    if (idPais) api.get(`/estados?idPais=${idPais}`).then(r => setEstados(r.data)).catch(() => {});
+  };
+
+  // Paso 1 → 2: solo valida los datos de la tienda (aún NO se crea nada)
+  function irAEmpresario() {
     if (!tienda.NomComercial.trim()) { setError('El nombre comercial es obligatorio'); return; }
-    setProc(true); setError('');
-    try {
-      const r = await api.post('/corporativo/tiendas', tienda);
-      setIdPV(r.data.idPuntoVenta);
-      setPaso(2);
-    } catch (e) {
-      setError(e.response?.data?.error || 'Error al crear la tienda');
-    } finally { setProc(false); }
+    if (!tienda.idPais)   { setError('Selecciona el país'); return; }
+    if (!tienda.idEstado) { setError('Selecciona el estado'); return; }
+    setError('');
+    setPaso(2);
   }
 
-  async function crearEmpresario() {
+  // Paso 2: crea la tienda y su empresario juntos (hasta el final, para poder
+  // regresar sin duplicar). Si la tienda ya se creó (reintento), no la duplica.
+  async function crearTodo() {
     if (!emp.Nombre.trim() || !emp.Correo.trim() || !emp.Cve.trim()) { setError('Nombre, correo y usuario son obligatorios'); return; }
     setProc(true); setError('');
     try {
+      let idPV = idPuntoVenta;
+      if (!idPV) {
+        const r = await api.post('/corporativo/tiendas', {
+          ...tienda,
+          idPais:   tienda.idPais   ? Number(tienda.idPais)   : null,
+          idEstado: tienda.idEstado ? Number(tienda.idEstado) : null,
+        });
+        idPV = r.data.idPuntoVenta;
+        setIdPV(idPV);
+      }
       await api.post('/usuarios', {
         Nombre: emp.Nombre.trim(), Apellidos: emp.Apellidos.trim(),
         Correo: emp.Correo.trim(), Cve: emp.Cve.trim(),
-        TipoUsuario: 'ADMIN', idPuntoVenta,
-        // El empresario opera su tienda con las mismas pantallas del admin que lo da de alta
-        pantallas: (pantallas || []).map(p => p.idPantalla),
+        TipoUsuario: 'ADMIN', idPuntoVenta: idPV,
+        // El empresario es admin de SU tienda: recibe las pantallas operativas
+        // pero NO el Portal Corporativo (no debe ver toda la red ni todas las tiendas)
+        pantallas: (pantallas || []).filter(p => p.Link !== '/corporativo').map(p => p.idPantalla),
       });
       setPaso(3);
       onListo?.();
     } catch (e) {
-      setError(e.response?.data?.error || 'Error al crear el empresario');
+      setError(e.response?.data?.error || 'Error al crear la tienda o el empresario');
     } finally { setProc(false); }
   }
 
@@ -135,6 +166,20 @@ function WizardOnboarding({ onClose, onListo }) {
                   <input value={tienda.Telefono} onChange={e => setT('Telefono', e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-xs font-semibold text-gray-500 mb-1">País *</label>
+                  <select value={tienda.idPais} onChange={e => cambiarPais(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                    <option value="">— Seleccionar —</option>
+                    {paises.map(p => <option key={p.idPais} value={p.idPais}>{p.NombrePais}</option>)}
+                  </select></div>
+                <div><label className="block text-xs font-semibold text-gray-500 mb-1">Estado *</label>
+                  <select value={tienda.idEstado} onChange={e => setT('idEstado', e.target.value)} disabled={!tienda.idPais}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50">
+                    <option value="">— Seleccionar —</option>
+                    {estados.map(e => <option key={e.idEstado} value={e.idEstado}>{e.NombreEstado}</option>)}
+                  </select></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-semibold text-gray-500 mb-1">Ciudad</label>
                   <input value={tienda.Ciudad} onChange={e => setT('Ciudad', e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" /></div>
                 <div><label className="block text-xs font-semibold text-gray-500 mb-1">Correo de la tienda</label>
@@ -174,10 +219,17 @@ function WizardOnboarding({ onClose, onListo }) {
           )}
         </div>
 
-        <div className="p-5 border-t flex justify-end gap-2">
-          {paso === 1 && <button onClick={crearTienda} disabled={proc} className="flex items-center gap-2 bg-vida-blue text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50"><ArrowRight size={15} /> {proc ? 'Creando…' : 'Siguiente'}</button>}
-          {paso === 2 && <button onClick={crearEmpresario} disabled={proc} className="flex items-center gap-2 bg-vida-green text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50"><Save size={15} /> {proc ? 'Creando…' : 'Crear empresario'}</button>}
-          {paso === 3 && <button onClick={onClose} className="bg-vida-blue text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90">Cerrar</button>}
+        <div className="p-5 border-t flex justify-between gap-2">
+          {/* Botón Atrás (paso 2) */}
+          {paso === 2
+            ? <button onClick={() => { setError(''); setPaso(1); }} disabled={proc}
+                className="flex items-center gap-2 border border-gray-200 text-gray-600 rounded-xl px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50">
+                ← Atrás
+              </button>
+            : <span />}
+          {paso === 1 && <button onClick={irAEmpresario} className="flex items-center gap-2 bg-vida-blue text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90"><ArrowRight size={15} /> Siguiente</button>}
+          {paso === 2 && <button onClick={crearTodo} disabled={proc} className="flex items-center gap-2 bg-vida-green text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50"><Save size={15} /> {proc ? 'Creando…' : 'Crear tienda y empresario'}</button>}
+          {paso === 3 && <button onClick={onClose} className="ml-auto bg-vida-blue text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90">Cerrar</button>}
         </div>
       </div>
     </div>

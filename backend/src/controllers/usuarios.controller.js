@@ -117,10 +117,11 @@ function esRolValido(rol) {
   return Object.prototype.hasOwnProperty.call(NIVELES_ROL, rol);
 }
 
-// Un usuario solo puede asignar/gestionar roles de su mismo nivel o inferior
-// (nivel numérico mayor = menos privilegios; SUPER_ADMIN=0 puede todo)
+// Un usuario solo puede asignar/gestionar roles ESTRICTAMENTE inferiores al suyo
+// (nivel numérico mayor = menos privilegios; SUPER_ADMIN=0 puede todo).
+// No puede gestionar usuarios de su mismo nivel ni superiores.
 function puedeGestionarRol(rolCaller, rolTarget) {
-  return nivelPorRol(rolTarget) >= nivelPorRol(rolCaller);
+  return nivelPorRol(rolTarget) > nivelPorRol(rolCaller);
 }
 
 async function obtenerRolUsuario(pool, idBranch, idCuenta, idUsuario) {
@@ -243,6 +244,20 @@ export async function crearUsuario(request, reply) {
 
     if (existe.recordset.length > 0) {
       return reply.code(409).send({ error: 'El nombre de usuario ya está en uso' });
+    }
+
+    // Solo puede existir un administrador (ADMIN) por tienda
+    if (TipoUsuario === 'ADMIN' && idPuntoVenta) {
+      const yaHayAdmin = await pool.request()
+        .input('idBranch',     sql.BigInt, idBranch)
+        .input('idCuenta',     sql.BigInt, idCuenta)
+        .input('idPuntoVenta', sql.BigInt, idPuntoVenta)
+        .query(`SELECT TOP 1 idUsuario FROM VIDA_CUENTA_USUARIOS
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                  AND idPuntoVenta=@idPuntoVenta AND TipoUsuario='ADMIN' AND Status='ACTIVO'`);
+      if (yaHayAdmin.recordset.length) {
+        return reply.code(409).send({ error: 'Esta tienda ya tiene un administrador. Solo puede haber uno por tienda.' });
+      }
     }
 
     const maxId = await pool.request()
