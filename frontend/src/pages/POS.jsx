@@ -509,7 +509,7 @@ export default function POS() {
   // una sola transacción). Con red sincroniza al instante; sin red queda en
   // cola y el motor la envía cuando vuelva la conexión.
   async function confirmarVenta(pagoInfo) {
-    if (!idPuntoVenta) { setError('Selecciona un punto de venta'); return; }
+    if (!idPuntoVenta) { setError('Selecciona una tienda'); return; }
     if (carrito.length === 0) return;
     setProcesando(true); setError('');
 

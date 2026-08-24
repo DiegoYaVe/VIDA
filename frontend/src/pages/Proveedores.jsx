@@ -428,7 +428,7 @@ function ModalCrearOrden({ onClose, onSaved }) {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.idProveedor) { setError('Selecciona un proveedor'); return; }
-    if (!form.idPuntoVenta) { setError('Selecciona el punto de venta'); return; }
+    if (!form.idPuntoVenta) { setError('Selecciona la tienda'); return; }
     if (items.length === 0) { setError('Agrega al menos un producto'); return; }
     if (items.some(i => !i.idProducto)) { setError('Todos los items deben tener un producto'); return; }
     setLoading(true); setError('');
@@ -472,7 +472,7 @@ function ModalCrearOrden({ onClose, onSaved }) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Punto de venta *</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Tienda *</label>
               <select value={form.idPuntoVenta} onChange={e => setForm(f => ({ ...f, idPuntoVenta: e.target.value }))}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
                 <option value="">Selecciona...</option>

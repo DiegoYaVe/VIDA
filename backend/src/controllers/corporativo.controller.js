@@ -119,7 +119,7 @@ export async function listarTiendasRed(request, reply) {
 export async function crearTiendaRed(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const { NomComercial, Nombre, Encargado, Correo, Telefono,
-          Calle, Ciudad, idEstado, idPais, EstadoOnboarding } = request.body || {};
+          Calle, Ciudad, idCiudad, idEstado, idPais, EstadoOnboarding } = request.body || {};
   if (!NomComercial?.trim() && !Nombre?.trim())
     return reply.code(400).send({ error: 'El nombre comercial es obligatorio' });
 
@@ -139,6 +139,7 @@ export async function crearTiendaRed(request, reply) {
       .input('Telefono',        sql.VarChar(50),  Telefono?.trim() || null)
       .input('Calle',           sql.VarChar(200), Calle?.trim() || null)
       .input('Ciudad',          sql.VarChar(200), Ciudad?.trim() || null)
+      .input('idCiudad',        sql.BigInt,       idCiudad || null)
       .input('idEstado',        sql.BigInt,       idEstado || null)
       .input('idPais',          sql.BigInt,       idPais || null)
       .input('EstadoOnboarding',sql.VarChar(20),  estadoInicial)
@@ -146,11 +147,11 @@ export async function crearTiendaRed(request, reply) {
       .input('UsuAlta',         sql.VarChar(20),  String(idUsuario))
       .query(`INSERT INTO VIDA_CUENTA_PUNTOS_VENTA
                 (idBranch,idCuenta,idPuntoVenta,Nombre,NomComercial,TipoPuntoVenta,
-                 Encargado,Correo,Telefono,Calle,Ciudad,idEstado,idPais,
+                 Encargado,Correo,Telefono,Calle,Ciudad,idCiudad,idEstado,idPais,
                  EstadoOnboarding,FechaActivacion,StatusPuntoVenta,Status,UsuAlta)
               VALUES
                 (@idBranch,@idCuenta,@idPuntoVenta,@Nombre,@NomComercial,'TIENDA',
-                 @Encargado,@Correo,@Telefono,@Calle,@Ciudad,@idEstado,@idPais,
+                 @Encargado,@Correo,@Telefono,@Calle,@Ciudad,@idCiudad,@idEstado,@idPais,
                  @EstadoOnboarding,@FechaActivacion,'ACTIVO','ACTIVO',@UsuAlta)`);
     return reply.code(201).send({ idPuntoVenta, EstadoOnboarding: estadoInicial });
   } catch (err) {

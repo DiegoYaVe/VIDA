@@ -44,13 +44,13 @@ function SinMatriz({ puntosVenta, puedeEscribir, onDesignada }) {
       </div>
       <h2 className="text-lg font-black text-gray-800">Aún no has designado tu Matriz</h2>
       <p className="text-sm text-gray-500 mt-2 mb-6">
-        La Matriz es tu almacén central: desde ahí surtes de mercancía a las tiendas. Elige qué punto de venta será la Matriz.
+        La Matriz es tu almacén central: desde ahí surtes de mercancía a las tiendas. Elige qué tienda será la Matriz.
       </p>
       {puedeEscribir ? (
         <div className="flex gap-2 justify-center">
           <select value={sel} onChange={e => setSel(e.target.value)}
             className="border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            <option value="">— Selecciona el punto de venta —</option>
+            <option value="">— Selecciona la tienda —</option>
             {puntosVenta.map(pv => <option key={pv.idPuntoVenta} value={pv.idPuntoVenta}>{pv.NomComercial}</option>)}
           </select>
           <button disabled={!sel || guardando}

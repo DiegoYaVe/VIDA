@@ -126,7 +126,7 @@ export default function Ventas() {
       {/* ── Encabezado ── */}
       <div className="mb-6">
         <h1 className="text-2xl font-black text-gray-900">Historial de Ventas</h1>
-        <p className="text-gray-500 text-sm mt-1">Ventas en punto de venta · reimpresión de tickets</p>
+        <p className="text-gray-500 text-sm mt-1">Ventas en tienda · reimpresión de tickets</p>
       </div>
 
       {/* ── Filtros ── */}

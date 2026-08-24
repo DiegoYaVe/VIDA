@@ -872,7 +872,7 @@ function TabStock({ puedeEscribir, usuario }) {
       {!puntoVenta ? (
         <div className="text-center py-12 text-gray-400">
           <SlidersHorizontal size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="font-bold">Selecciona un punto de venta</p>
+          <p className="font-bold">Selecciona una tienda</p>
         </div>
       ) : loading ? (
         <div className="text-center py-12 text-gray-400">Cargando...</div>

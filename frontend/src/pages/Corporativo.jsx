@@ -57,13 +57,14 @@ function MedidorMeta({ activas, meta, porcentaje }) {
 function WizardOnboarding({ onClose, onListo }) {
   const { pantallas } = useAuthStore();
   const [paso, setPaso] = useState(1);
-  const [tienda, setTienda] = useState({ NomComercial: '', Encargado: '', Telefono: '', Correo: '', idPais: '', idEstado: '', Ciudad: '', Calle: '' });
+  const [tienda, setTienda] = useState({ NomComercial: '', Encargado: '', Telefono: '', Correo: '', idPais: '', idEstado: '', idCiudad: '', Ciudad: '', Calle: '' });
   const [emp, setEmp] = useState({ Nombre: '', Apellidos: '', Correo: '', Cve: '' });
   const [idPuntoVenta, setIdPV] = useState(null);
   const [proc, setProc] = useState(false);
   const [error, setError] = useState('');
   const [paises, setPaises]   = useState([]);
   const [estados, setEstados] = useState([]);
+  const [ciudades, setCiudades] = useState([]);
 
   useEffect(() => {
     api.get('/paises').then(r => {
@@ -80,11 +81,24 @@ function WizardOnboarding({ onClose, onListo }) {
   const setT = (k, v) => setTienda(s => ({ ...s, [k]: v }));
   const setE = (k, v) => setEmp(s => ({ ...s, [k]: v }));
 
-  // País → carga estados en cascada y limpia el estado elegido
+  // País → carga estados en cascada y limpia estado/ciudad elegidos
   const cambiarPais = (idPais) => {
-    setTienda(s => ({ ...s, idPais, idEstado: '' }));
-    setEstados([]);
+    setTienda(s => ({ ...s, idPais, idEstado: '', idCiudad: '', Ciudad: '' }));
+    setEstados([]); setCiudades([]);
     if (idPais) api.get(`/estados?idPais=${idPais}`).then(r => setEstados(r.data)).catch(() => {});
+  };
+
+  // Estado → carga ciudades del estado y limpia la ciudad elegida
+  const cambiarEstado = (idEstado) => {
+    setTienda(s => ({ ...s, idEstado, idCiudad: '', Ciudad: '' }));
+    setCiudades([]);
+    if (idEstado) api.get(`/ciudades?idEstado=${idEstado}`).then(r => setCiudades(r.data)).catch(() => {});
+  };
+
+  // Ciudad (select) → guarda id + nombre (para display sin JOIN)
+  const cambiarCiudad = (idCiudad) => {
+    const c = ciudades.find(x => String(x.idCiudad) === String(idCiudad));
+    setTienda(s => ({ ...s, idCiudad, Ciudad: c ? c.NombreCiudad : '' }));
   };
 
   // Paso 1 → 2: solo valida los datos de la tienda (aún NO se crea nada)
@@ -108,6 +122,7 @@ function WizardOnboarding({ onClose, onListo }) {
           ...tienda,
           idPais:   tienda.idPais   ? Number(tienda.idPais)   : null,
           idEstado: tienda.idEstado ? Number(tienda.idEstado) : null,
+          idCiudad: tienda.idCiudad ? Number(tienda.idCiudad) : null,
         });
         idPV = r.data.idPuntoVenta;
         setIdPV(idPV);
@@ -173,7 +188,7 @@ function WizardOnboarding({ onClose, onListo }) {
                     {paises.map(p => <option key={p.idPais} value={p.idPais}>{p.NombrePais}</option>)}
                   </select></div>
                 <div><label className="block text-xs font-semibold text-gray-500 mb-1">Estado *</label>
-                  <select value={tienda.idEstado} onChange={e => setT('idEstado', e.target.value)} disabled={!tienda.idPais}
+                  <select value={tienda.idEstado} onChange={e => cambiarEstado(e.target.value)} disabled={!tienda.idPais}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50">
                     <option value="">— Seleccionar —</option>
                     {estados.map(e => <option key={e.idEstado} value={e.idEstado}>{e.NombreEstado}</option>)}
@@ -181,7 +196,19 @@ function WizardOnboarding({ onClose, onListo }) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-semibold text-gray-500 mb-1">Ciudad</label>
-                  <input value={tienda.Ciudad} onChange={e => setT('Ciudad', e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" /></div>
+                  {ciudades.length > 0 ? (
+                    <select value={tienda.idCiudad} onChange={e => cambiarCiudad(e.target.value)} disabled={!tienda.idEstado}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-50">
+                      <option value="">— Seleccionar —</option>
+                      {ciudades.map(c => <option key={c.idCiudad} value={c.idCiudad}>{c.NombreCiudad}</option>)}
+                    </select>
+                  ) : (
+                    // El estado no tiene ciudades en el catálogo: se captura a mano
+                    <input value={tienda.Ciudad} onChange={e => setT('Ciudad', e.target.value)} disabled={!tienda.idEstado}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50"
+                      placeholder={tienda.idEstado ? 'Escribe la ciudad' : 'Elige un estado primero'} />
+                  )}
+                </div>
                 <div><label className="block text-xs font-semibold text-gray-500 mb-1">Correo de la tienda</label>
                   <input value={tienda.Correo} onChange={e => setT('Correo', e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" /></div>
               </div>
@@ -193,7 +220,7 @@ function WizardOnboarding({ onClose, onListo }) {
 
           {paso === 2 && (
             <>
-              <p className="text-xs text-gray-500 bg-blue-50 rounded-lg px-3 py-2">Tienda creada ✓ — ahora crea al empresario (dueño) que la administrará.</p>
+              <p className="text-xs text-gray-500 bg-blue-50 rounded-lg px-3 py-2">Ahora crea al empresario (dueño) que administrará la tienda. Al confirmar se crearán la tienda y su empresario.</p>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-semibold text-gray-500 mb-1">Nombre *</label>
                   <input value={emp.Nombre} onChange={e => setE('Nombre', e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" /></div>

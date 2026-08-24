@@ -24,6 +24,7 @@ import { matrizRoutes }      from './routes/matriz.routes.js';
 import { corporativoRoutes } from './routes/corporativo.routes.js';
 import { paisesRoutes }     from './routes/paises.routes.js';
 import { estadosRoutes }    from './routes/estados.routes.js';
+import { ciudadesRoutes }   from './routes/ciudades.routes.js';
 import { auditRoutes }      from './routes/audit.routes.js';
 import { marcarInactivos }  from './controllers/heartbeat.controller.js';
 import { expirarPedidosVencidos } from './controllers/pedidos.controller.js';
@@ -126,6 +127,7 @@ fastify.register(matrizRoutes,      { prefix: '/api' });
 fastify.register(corporativoRoutes, { prefix: '/api' });
 fastify.register(paisesRoutes,     { prefix: '/api' });
 fastify.register(estadosRoutes,    { prefix: '/api' });
+fastify.register(ciudadesRoutes,   { prefix: '/api' });
 fastify.register(auditRoutes,      { prefix: '/api' });
 fastify.register(wsRoutes,         { prefix: '/api' });
 
