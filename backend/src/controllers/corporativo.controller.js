@@ -118,7 +118,7 @@ export async function listarTiendasRed(request, reply) {
 // ══════════════════════════════════════════════════════════════════════════
 export async function crearTiendaRed(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
-  const { NomComercial, Nombre, Encargado, Correo, Telefono,
+  const { NomComercial, Nombre, RazonSocial, Encargado, Correo, Telefono,
           Calle, Ciudad, idCiudad, idEstado, idPais, EstadoOnboarding } = request.body || {};
   if (!NomComercial?.trim() && !Nombre?.trim())
     return reply.code(400).send({ error: 'El nombre comercial es obligatorio' });
@@ -134,6 +134,7 @@ export async function crearTiendaRed(request, reply) {
       .input('idPuntoVenta',    sql.BigInt,       idPuntoVenta)
       .input('Nombre',          sql.VarChar(200), (Nombre || NomComercial).trim())
       .input('NomComercial',    sql.VarChar(200), (NomComercial || Nombre).trim())
+      .input('RazonSocial',     sql.VarChar(200), RazonSocial?.trim() || null)
       .input('Encargado',       sql.VarChar(200), Encargado?.trim() || null)
       .input('Correo',          sql.VarChar(100), Correo?.trim() || null)
       .input('Telefono',        sql.VarChar(50),  Telefono?.trim() || null)
@@ -146,11 +147,11 @@ export async function crearTiendaRed(request, reply) {
       .input('FechaActivacion', sql.DateTime,     estadoInicial === 'ACTIVA' ? new Date() : null)
       .input('UsuAlta',         sql.VarChar(20),  String(idUsuario))
       .query(`INSERT INTO VIDA_CUENTA_PUNTOS_VENTA
-                (idBranch,idCuenta,idPuntoVenta,Nombre,NomComercial,TipoPuntoVenta,
+                (idBranch,idCuenta,idPuntoVenta,Nombre,NomComercial,RazonSocial,TipoPuntoVenta,
                  Encargado,Correo,Telefono,Calle,Ciudad,idCiudad,idEstado,idPais,
                  EstadoOnboarding,FechaActivacion,StatusPuntoVenta,Status,UsuAlta)
               VALUES
-                (@idBranch,@idCuenta,@idPuntoVenta,@Nombre,@NomComercial,'TIENDA',
+                (@idBranch,@idCuenta,@idPuntoVenta,@Nombre,@NomComercial,@RazonSocial,'TIENDA',
                  @Encargado,@Correo,@Telefono,@Calle,@Ciudad,@idCiudad,@idEstado,@idPais,
                  @EstadoOnboarding,@FechaActivacion,'ACTIVO','ACTIVO',@UsuAlta)`);
     return reply.code(201).send({ idPuntoVenta, EstadoOnboarding: estadoInicial });

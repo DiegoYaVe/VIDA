@@ -8,7 +8,7 @@ import {
   DollarSign, ShoppingCart, Store, Package,
   TrendingUp, TrendingDown, AlertTriangle,
   Clock, Banknote, CreditCard, Activity,
-  RefreshCw, ArrowRight, BarChart2, Wifi, WifiOff,
+  RefreshCw, ArrowRight, BarChart2, Wifi, WifiOff, Truck,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -181,14 +181,16 @@ function DashboardAdmin({ stats, conexiones, setConexiones }) {
       </div>
 
       {/* KPIs secundarios */}
-      <div className="grid grid-cols-3 gap-3">
-        <KpiCard icon={Wifi}   label="Sucursales online"
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard icon={Wifi}   label="Tiendas online"
           valor={`${globales?.SucursalesOnline || 0} / ${globales?.TotalSucursales || 0}`}
           color="#54C4E0"
           sub={globales?.SucursalesOnline === globales?.TotalSucursales ? 'Todas conectadas' : `${(globales?.TotalSucursales||0)-(globales?.SucursalesOnline||0)} sin conexión`}
           onClick={() => navigate('/sucursales')} />
         <KpiCard icon={Package} label="Productos"   valor={globales?.TotalProductos  || '—'} color="#E67E22"
           sub="En inventario" onClick={() => navigate('/inventarios')} />
+        <KpiCard icon={Truck} label="Proveedores activos" valor={globales?.TotalProveedores ?? '—'} color="#5BBE6A"
+          sub="Registrados y activos" onClick={() => navigate('/proveedores')} />
         <KpiCard icon={AlertTriangle} label="Bajo stock" valor={stockBajo?.total || 0} color="#E74C3C"
           sub="Productos por reponer" onClick={() => navigate('/reportes')} />
       </div>

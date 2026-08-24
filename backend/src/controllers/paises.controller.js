@@ -20,7 +20,7 @@ export async function listarPaises(request, reply) {
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
       .query(`
-        SELECT p.idPais, p.NombrePais, p.CodigoISO, p.Status,
+        SELECT p.idPais, p.NombrePais, p.CodigoISO, p.LadaTelefono, p.Status,
                COUNT(e.idEstado) AS totalEstados
         FROM VIDA_CUENTA_PAISES p
         LEFT JOIN VIDA_CUENTA_ESTADOS e
@@ -28,7 +28,7 @@ export async function listarPaises(request, reply) {
           AND e.idPais = p.idPais AND e.Status = 'ACTIVO'
         WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
           AND p.Status = 'ACTIVO'
-        GROUP BY p.idPais, p.NombrePais, p.CodigoISO, p.Status
+        GROUP BY p.idPais, p.NombrePais, p.CodigoISO, p.LadaTelefono, p.Status
         ORDER BY p.NombrePais
       `);
     return reply.send(r.recordset);

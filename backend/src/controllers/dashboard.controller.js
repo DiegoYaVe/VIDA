@@ -216,7 +216,8 @@ export async function getStats(request, reply) {
             (SELECT COUNT(*) FROM VIDA_CUENTA_PUNTOS_VENTA WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO')                               AS TotalSucursales,
             (SELECT COUNT(*) FROM VIDA_CUENTA_PUNTOS_VENTA WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO' AND StatusConexion='ONLINE')    AS SucursalesOnline,
             (SELECT COUNT(*) FROM VIDA_CUENTA_USUARIOS       WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO')                              AS TotalUsuarios,
-            (SELECT COUNT(*) FROM VIDA_INVENTARIO_PRODUCTOS  WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO')                              AS TotalProductos
+            (SELECT COUNT(*) FROM VIDA_INVENTARIO_PRODUCTOS  WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO')                              AS TotalProductos,
+            (SELECT COUNT(*) FROM VIDA_PROVEEDORES           WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO')                              AS TotalProveedores
         `);
       totalesGlobales = qGlobal.recordset[0];
 

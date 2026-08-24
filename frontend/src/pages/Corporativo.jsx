@@ -57,7 +57,7 @@ function MedidorMeta({ activas, meta, porcentaje }) {
 function WizardOnboarding({ onClose, onListo }) {
   const { pantallas } = useAuthStore();
   const [paso, setPaso] = useState(1);
-  const [tienda, setTienda] = useState({ NomComercial: '', Encargado: '', Telefono: '', Correo: '', idPais: '', idEstado: '', idCiudad: '', Ciudad: '', Calle: '' });
+  const [tienda, setTienda] = useState({ NomComercial: '', RazonSocial: '', Encargado: '', Telefono: '', Correo: '', idPais: '', idEstado: '', idCiudad: '', Ciudad: '', Calle: '' });
   const [emp, setEmp] = useState({ Nombre: '', Apellidos: '', Correo: '', Cve: '' });
   const [idPuntoVenta, setIdPV] = useState(null);
   const [proc, setProc] = useState(false);
@@ -80,6 +80,9 @@ function WizardOnboarding({ onClose, onListo }) {
 
   const setT = (k, v) => setTienda(s => ({ ...s, [k]: v }));
   const setE = (k, v) => setEmp(s => ({ ...s, [k]: v }));
+
+  // Lada telefónica del país elegido (ej. +58). Sirve de prefijo en Teléfono.
+  const ladaActual = paises.find(p => String(p.idPais) === String(tienda.idPais))?.LadaTelefono || '';
 
   // País → carga estados en cascada y limpia estado/ciudad elegidos
   const cambiarPais = (idPais) => {
@@ -120,6 +123,8 @@ function WizardOnboarding({ onClose, onListo }) {
       if (!idPV) {
         const r = await api.post('/corporativo/tiendas', {
           ...tienda,
+          // Guarda el teléfono con su lada (ej. +58 424...) si el usuario capturó número
+          Telefono: tienda.Telefono?.trim() ? `${ladaActual} ${tienda.Telefono.trim()}`.trim() : null,
           idPais:   tienda.idPais   ? Number(tienda.idPais)   : null,
           idEstado: tienda.idEstado ? Number(tienda.idEstado) : null,
           idCiudad: tienda.idCiudad ? Number(tienda.idCiudad) : null,
@@ -174,11 +179,20 @@ function WizardOnboarding({ onClose, onListo }) {
                 <input value={tienda.NomComercial} onChange={e => setT('NomComercial', e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Ej. VIDA Chacao" />
               </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Razón social</label>
+                <input value={tienda.RazonSocial} onChange={e => setT('RazonSocial', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Ej. Comercializadora VIDA Chacao, C.A." />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-semibold text-gray-500 mb-1">Encargado</label>
                   <input value={tienda.Encargado} onChange={e => setT('Encargado', e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" /></div>
                 <div><label className="block text-xs font-semibold text-gray-500 mb-1">Teléfono</label>
-                  <input value={tienda.Telefono} onChange={e => setT('Telefono', e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" /></div>
+                  <div className="flex">
+                    {ladaActual && <span className="inline-flex items-center px-2 border border-r-0 border-gray-200 rounded-l-lg bg-gray-50 text-sm text-gray-500 font-semibold">{ladaActual}</span>}
+                    <input value={tienda.Telefono} onChange={e => setT('Telefono', e.target.value)}
+                      className={`w-full border border-gray-200 px-3 py-2 text-sm ${ladaActual ? 'rounded-r-lg' : 'rounded-lg'}`}
+                      placeholder="424 000 0000" /></div></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-semibold text-gray-500 mb-1">País *</label>
