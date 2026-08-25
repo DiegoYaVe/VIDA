@@ -11,11 +11,21 @@ import path from 'path';
 import fs from 'fs';
 import { createTransport } from 'nodemailer';
 
-// URL pública del backend — se usa en links de confirmación de email y OAuth.
-// Debe definirse en .env; el fallback a localhost solo sirve en desarrollo local.
-const BASE_URL = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
-if (!process.env.BASE_URL) {
-  console.warn('[delivery] BASE_URL no definido en .env — links de email/OAuth usarán ' + BASE_URL);
+// URL pública del backend (API) para los links de confirmación de email.
+// Se resuelve detectando el ambiente, para que en local apunte a localhost y en
+// producción al dominio real sin cambiar código:
+//   1) BASE_URL del .env      → si está, manda (override explícito por ambiente)
+//   2) si NO es producción     → http://localhost:PORT (backend local)
+//   3) en producción sin .env  → se deriva del propio request (proto + host,
+//      respetando proxy/x-forwarded-*), que es el dominio por el que entró la app
+function resolverBaseUrl(request) {
+  const limpiar = (u) => (u || '').trim().replace(/\/+$/, '');
+  if (process.env.BASE_URL) return limpiar(process.env.BASE_URL);
+  const esProd = (process.env.NODE_ENV || 'development') === 'production';
+  if (!esProd) return `http://localhost:${process.env.PORT || 3001}`;
+  const proto = request?.headers['x-forwarded-proto'] || request?.protocol || 'https';
+  const host  = request?.headers['x-forwarded-host']  || request?.headers?.host;
+  return host ? `${proto}://${host}` : '';
 }
 
 // ── Helper ─────────────────────────────────────────────────────────────────
@@ -124,7 +134,7 @@ export async function registrarCliente(request, reply) {
           tls: { rejectUnauthorized: false },
         });
 
-        const confirmUrl = `${BASE_URL}/api/delivery/cliente/confirmar-email?token=${confirmToken}`;
+        const confirmUrl = `${resolverBaseUrl(request)}/api/delivery/cliente/confirmar-email?token=${confirmToken}`;
         const htmlEmail = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/></head>
 <body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="padding:32px 0;">
