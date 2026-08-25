@@ -11,6 +11,21 @@ async function getConfig(pool, idBranch, clave) {
   return r.recordset[0]?.Valor ?? null;
 }
 
+// Resuelve la URL del frontend (para los links de los correos) detectando el
+// ambiente, de modo que en local apunte a Vite y en producción al dominio real
+// sin tener que cambiar la config manualmente:
+//   1) FRONTEND_URL del .env  → si está, manda (override explícito por ambiente)
+//   2) si NO es producción     → http://localhost:5173 (dev server de Vite)
+//   3) en producción           → el valor guardado en BD (URL_SISTEMA)
+//   4) último recurso          → el dominio de producción
+function resolverUrlSistema(urlConfigBD) {
+  const limpiar = (u) => (u || '').trim().replace(/\/+$/, ''); // sin '/' final
+  if (process.env.FRONTEND_URL) return limpiar(process.env.FRONTEND_URL);
+  const esProd = (process.env.NODE_ENV || 'development') === 'production';
+  if (!esProd) return 'http://localhost:5173';
+  return limpiar(urlConfigBD) || 'https://app.comercializadoravida.com';
+}
+
 function generarPasswordTemporal() {
   const letras   = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz';
   const numeros  = '23456789';
@@ -29,7 +44,7 @@ async function enviarEmailInvitacion(pool, usuario, passwordTemporal, idBranch) 
   const smtpPass   = await getConfig(pool, idBranch, 'SMTP_PASS');
   const smtpFrom   = await getConfig(pool, idBranch, 'SMTP_FROM');
   const smtpName   = await getConfig(pool, idBranch, 'SMTP_NAME');
-  const urlSistema = await getConfig(pool, idBranch, 'URL_SISTEMA');
+  const urlSistema = resolverUrlSistema(await getConfig(pool, idBranch, 'URL_SISTEMA'));
 
   const { createTransport } = await import('nodemailer');
   const transporter = createTransport({
