@@ -8,8 +8,9 @@ import {
 
 // Ver/pedir a la matriz: dueños/gerentes de tienda + corporativo
 const LECTURA  = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN', 'ADMIN_ESTADO', 'SUPERVISOR'];
-// Designar la matriz: solo corporativo/admin
-const ADMIN    = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
+// Designar la matriz (qué tienda es el almacén central) es una decisión de red:
+// solo corporativo/regionales, no un ADMIN de tienda.
+const ADMIN    = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
 
 export async function matrizRoutes(fastify) {
   fastify.get('/matriz',

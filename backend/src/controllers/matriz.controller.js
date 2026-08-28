@@ -5,6 +5,12 @@
 import { getPool, sql } from '../db/sqlserver.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 
+// Roles de RED: ven/gestionan los pedidos de todas las tiendas (bandeja de la
+// Matriz). Los roles de tienda (ADMIN, SUPERVISOR) solo pueden pedir, ver y
+// recibir el reabasto de SU propia tienda.
+const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
+const esRed = (user) => ROLES_RED.includes(user.TipoUsuario);
+
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
   const r = await pool.request()
     .input('idBranch', sql.BigInt, idBranch)
@@ -127,8 +133,13 @@ export async function catalogoMatriz(request, reply) {
 // POST /matriz/pedidos  { idPuntoVentaSolicita, items:[{idProducto,Cantidad}], Notas }
 // ══════════════════════════════════════════════════════════════════════════
 export async function crearPedidoMatriz(request, reply) {
-  const { idBranch, idCuenta, idUsuario } = request.user;
-  const { idPuntoVentaSolicita, items, Notas } = request.body || {};
+  const { idBranch, idCuenta, idUsuario, idPuntoVenta: pvUsuario } = request.user;
+  const { items, Notas } = request.body || {};
+  // Roles de tienda solo pueden pedir reabasto para SU tienda; los de red
+  // pueden crear a nombre de la tienda que indiquen.
+  const idPuntoVentaSolicita = esRed(request.user)
+    ? request.body?.idPuntoVentaSolicita
+    : pvUsuario;
   if (!idPuntoVentaSolicita || !items?.length)
     return reply.code(400).send({ error: 'idPuntoVentaSolicita e items son requeridos' });
 
@@ -206,8 +217,11 @@ export async function crearPedidoMatriz(request, reply) {
 // GET /matriz/pedidos?idPuntoVenta=&status=
 // ══════════════════════════════════════════════════════════════════════════
 export async function listarPedidosMatriz(request, reply) {
-  const { idBranch, idCuenta } = request.user;
-  const { idPuntoVenta, status } = request.query;
+  const { idBranch, idCuenta, idPuntoVenta: pvUsuario } = request.user;
+  const { status } = request.query;
+  // Roles de tienda solo ven sus pedidos; los de red ven la bandeja completa
+  // y pueden filtrar por la tienda que pasen en la query.
+  const idPuntoVenta = esRed(request.user) ? request.query.idPuntoVenta : pvUsuario;
   try {
     const pool = await getPool();
     const req = pool.request()
@@ -253,6 +267,11 @@ export async function obtenerPedidoMatriz(request, reply) {
                 ON pvm.idBranch=pm.idBranch AND pvm.idCuenta=pm.idCuenta AND pvm.idPuntoVenta=pm.idPuntoVentaMatriz
               WHERE pm.idBranch=@idBranch AND pm.idCuenta=@idCuenta AND pm.idPedidoMatriz=@idPedidoMatriz`);
     if (!cab.recordset.length) return reply.code(404).send({ error: 'Pedido no encontrado' });
+
+    // Un rol de tienda solo puede ver su propio pedido de reabasto.
+    if (!esRed(request.user) &&
+        String(cab.recordset[0].idPuntoVentaSolicita) !== String(request.user.idPuntoVenta))
+      return reply.code(404).send({ error: 'Pedido no encontrado' });
 
     const det = await pool.request()
       .input('idBranch', sql.BigInt, idBranch)
@@ -315,6 +334,13 @@ export async function cambiarEstadoPedidoMatriz(request, reply) {
     if (!cabR.recordset.length) return reply.code(404).send({ error: 'Pedido no encontrado' });
 
     const ped = cabR.recordset[0];
+    // Un rol de tienda solo puede cambiar el estado de su propio pedido
+    // (p. ej. recibir el reabasto o cancelar su solicitud).
+    if (!esRed(request.user) &&
+        String(ped.idPuntoVentaSolicita) !== String(request.user.idPuntoVenta)) {
+      if (enTx) { try { await transaction.rollback(); } catch {} }
+      return reply.code(403).send({ error: 'No puedes modificar el pedido de otra tienda' });
+    }
     const permitidos = TRANSICIONES[ped.Status] ?? [];
     if (!permitidos.includes(StatusNuevo))
       return reply.code(422).send({ error: `Transición inválida: ${ped.Status} → ${StatusNuevo}`, permitidos });

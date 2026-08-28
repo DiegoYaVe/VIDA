@@ -21,10 +21,13 @@ async function nextIdTx(transaction, tabla, campo, idBranch, idCuenta) {
   return r.recordset[0].next;
 }
 
-const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR'];
+// Solo los roles de RED pueden operar/ver la caja de OTRA tienda (pasando
+// idPuntoVenta). Los roles de tienda (ADMIN, SUPERVISOR, CAJERO) quedan
+// forzados a su propio punto de venta.
+const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
 
-function isAdmin(user) {
-  return ADMIN_ROLES.includes(user.TipoUsuario);
+function esRed(user) {
+  return ROLES_RED.includes(user.TipoUsuario);
 }
 
 // ── Calcular totales del turno desde VIDA_PEDIDOS ───────────────────────────
@@ -71,7 +74,7 @@ export async function turnoActivo(request, reply) {
   const pvQuery = request.query.idPuntoVenta;
 
   // Admin puede consultar cualquier PV; cajero usa el suyo del JWT
-  const pvId = isAdmin({ TipoUsuario }) && pvQuery ? BigInt(pvQuery) : (pvJwt ? BigInt(pvJwt) : null);
+  const pvId = esRed({ TipoUsuario }) && pvQuery ? BigInt(pvQuery) : (pvJwt ? BigInt(pvJwt) : null);
 
   if (!pvId) {
     return reply.code(400).send({ error: 'Se requiere idPuntoVenta' });
@@ -107,7 +110,7 @@ export async function abrirCaja(request, reply) {
   const { idBranch, idCuenta, idUsuario, TipoUsuario, idPuntoVenta: pvJwt } = request.user;
   const { MontoApertura = 0, Observaciones = null, idPuntoVenta: pvBody } = request.body || {};
 
-  const pvId = isAdmin({ TipoUsuario }) && pvBody ? BigInt(pvBody) : (pvJwt ? BigInt(pvJwt) : null);
+  const pvId = esRed({ TipoUsuario }) && pvBody ? BigInt(pvBody) : (pvJwt ? BigInt(pvJwt) : null);
 
   if (!pvId) {
     return reply.code(400).send({ error: 'Se requiere idPuntoVenta para abrir caja' });
@@ -216,7 +219,7 @@ export async function resumenTurno(request, reply) {
   const { idBranch, idCuenta, idPuntoVenta: pvJwt, TipoUsuario } = request.user;
   const { idTurno: idTurnoQ, idPuntoVenta: pvQuery } = request.query;
 
-  const pvId = isAdmin({ TipoUsuario }) && pvQuery ? BigInt(pvQuery) : (pvJwt ? BigInt(pvJwt) : null);
+  const pvId = esRed({ TipoUsuario }) && pvQuery ? BigInt(pvQuery) : (pvJwt ? BigInt(pvJwt) : null);
 
   try {
     const pool = await getPool();
@@ -343,7 +346,7 @@ export async function cerrarCaja(request, reply) {
     }
 
     // Cajero solo puede cerrar su propio PV
-    if (!isAdmin({ TipoUsuario }) && pvJwt && BigInt(turno.idPuntoVenta) !== BigInt(pvJwt)) {
+    if (!esRed({ TipoUsuario }) && pvJwt && BigInt(turno.idPuntoVenta) !== BigInt(pvJwt)) {
       return reply.code(403).send({ error: 'No tienes permiso para cerrar este turno' });
     }
 
@@ -427,7 +430,7 @@ export async function historialTurnos(request, reply) {
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   // Cajero siempre ve solo su PV
-  const pvFiltro = isAdmin({ TipoUsuario }) ? (pvQuery ? BigInt(pvQuery) : null) : (pvJwt ? BigInt(pvJwt) : null);
+  const pvFiltro = esRed({ TipoUsuario }) ? (pvQuery ? BigInt(pvQuery) : null) : (pvJwt ? BigInt(pvJwt) : null);
 
   try {
     const pool = await getPool();
