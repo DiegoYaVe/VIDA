@@ -153,8 +153,10 @@ function PanelConexion({ sucursales }) {
 
 function DashboardAdmin({ stats, conexiones, setConexiones }) {
   const navigate = useNavigate();
-  const { ventas, graficaDiaria, topProductos, topSucursales, stockBajo, pedidosActivos, recientes, globales } = stats;
-  const sucursalesConexion = conexiones || stats.sucursalesConexion || [];
+  const { ventas, graficaDiaria, topProductos, topSucursales, stockBajo, pedidosActivos, recientes, globales, esRed } = stats;
+  // Roles de tienda (no-red) no ven datos de otras tiendas de la red.
+  const verRed = esRed ?? (globales?.TotalSucursales != null);
+  const sucursalesConexion = verRed ? (conexiones || stats.sucursalesConexion || []) : [];
 
   const grafData = (graficaDiaria || []).map(r => ({
     fecha: new Date(r.Fecha).toLocaleDateString('es-VE', { weekday:'short', day:'2-digit' }),
@@ -181,12 +183,14 @@ function DashboardAdmin({ stats, conexiones, setConexiones }) {
       </div>
 
       {/* KPIs secundarios */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard icon={Wifi}   label="Tiendas online"
-          valor={`${globales?.SucursalesOnline || 0} / ${globales?.TotalSucursales || 0}`}
-          color="#54C4E0"
-          sub={globales?.SucursalesOnline === globales?.TotalSucursales ? 'Todas conectadas' : `${(globales?.TotalSucursales||0)-(globales?.SucursalesOnline||0)} sin conexión`}
-          onClick={() => navigate('/sucursales')} />
+      <div className={`grid grid-cols-2 gap-3 ${verRed ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+        {verRed && (
+          <KpiCard icon={Wifi}   label="Tiendas online"
+            valor={`${globales?.SucursalesOnline || 0} / ${globales?.TotalSucursales || 0}`}
+            color="#54C4E0"
+            sub={globales?.SucursalesOnline === globales?.TotalSucursales ? 'Todas conectadas' : `${(globales?.TotalSucursales||0)-(globales?.SucursalesOnline||0)} sin conexión`}
+            onClick={() => navigate('/sucursales')} />
+        )}
         <KpiCard icon={Package} label="Productos"   valor={globales?.TotalProductos  || '—'} color="#E67E22"
           sub="En inventario" onClick={() => navigate('/inventarios')} />
         <KpiCard icon={Truck} label="Proveedores activos" valor={globales?.TotalProveedores ?? '—'} color="#5BBE6A"
@@ -199,7 +203,7 @@ function DashboardAdmin({ stats, conexiones, setConexiones }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
         {/* Gráfica 7 días */}
-        <div className="lg:col-span-2 bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+        <div className={`${verRed ? 'lg:col-span-2' : 'lg:col-span-3'} bg-white rounded-2xl p-5 border border-gray-100 shadow-sm`}>
           <SeccionTitulo icon={TrendingUp} titulo="Ventas últimos 7 días (USD)" linkLabel="Reporte completo" linkTo="/reportes" />
           {grafData.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-gray-300 text-sm">Sin ventas en el período</div>
@@ -218,7 +222,8 @@ function DashboardAdmin({ stats, conexiones, setConexiones }) {
           )}
         </div>
 
-        {/* Top sucursales */}
+        {/* Top sucursales — solo roles de red */}
+        {verRed && (
         <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
           <SeccionTitulo icon={Store} titulo="Top sucursales hoy" linkLabel="Ver reportes" linkTo="/reportes" />
           {topSucursales?.length === 0 ? (
@@ -241,10 +246,11 @@ function DashboardAdmin({ stats, conexiones, setConexiones }) {
             </div>
           )}
         </div>
+        )}
       </div>
 
-      {/* Panel de conexión de sucursales */}
-      {sucursalesConexion.length > 0 && (
+      {/* Panel de conexión de sucursales — solo roles de red */}
+      {verRed && sucursalesConexion.length > 0 && (
         <PanelConexion sucursales={sucursalesConexion} />
       )}
 

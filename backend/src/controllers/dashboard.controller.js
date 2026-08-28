@@ -8,16 +8,18 @@ const HACE7 = () => { const d = new Date(); d.setDate(d.getDate()-6); return d.t
 export async function getStats(request, reply) {
   const { idBranch, idCuenta, TipoUsuario, idPuntoVenta } = request.user;
 
-  const esAdmin  = ['SUPER_ADMIN','ADMIN_PAIS','ADMIN'].includes(TipoUsuario);
-  const esCajero = ['SUPERVISOR','CAJERO','CASHIER'].includes(TipoUsuario);
+  // Roles de RED (ven toda la red): corporativo y regionales.
+  const esRed = ['SUPER_ADMIN','ADMIN_PAIS','ADMIN_ESTADO'].includes(TipoUsuario);
+  // Todos los demás (ADMIN de tienda, SUPERVISOR, CAJERO) ven SOLO su punto de venta.
+  const alcanceTienda = !esRed;
 
   try {
     const pool = await getPool();
 
     // ── Filtro de acceso ─────────────────────────────────────────────────────
     // Para cajeros/supervisores filtramos por su punto de venta
-    const pvWhere = esCajero ? ' AND p.idPuntoVenta = @pvId' : '';
-    const pvWhereM = esCajero ? ' AND s.idPuntoVenta = @pvId' : '';
+    const pvWhere = alcanceTienda ? ' AND p.idPuntoVenta = @pvId' : '';
+    const pvWhereM = alcanceTienda ? ' AND s.idPuntoVenta = @pvId' : '';
 
     const base = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
@@ -26,7 +28,7 @@ export async function getStats(request, reply) {
       .input('ayer',      sql.Date,   new Date(AYER()))
       .input('hace7',     sql.Date,   new Date(HACE7()));
 
-    if (esCajero) base.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base.input('pvId', sql.BigInt, idPuntoVenta);
 
     // ── 1. Ventas HOY y AYER ─────────────────────────────────────────────────
     const qVentas = await base.query(`
@@ -50,7 +52,7 @@ export async function getStats(request, reply) {
       .input('idCuenta',  sql.BigInt, idCuenta)
       .input('hace7',     sql.Date,   new Date(HACE7()))
       .input('hoy',       sql.Date,   new Date(HOY()));
-    if (esCajero) base2.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base2.input('pvId', sql.BigInt, idPuntoVenta);
 
     const qGrafica = await base2.query(`
       SELECT
@@ -71,7 +73,7 @@ export async function getStats(request, reply) {
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta',  sql.BigInt, idCuenta)
       .input('hoy',       sql.Date,   new Date(HOY()));
-    if (esCajero) base3.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base3.input('pvId', sql.BigInt, idPuntoVenta);
 
     const qTop = await base3.query(`
       SELECT TOP 5
@@ -93,7 +95,7 @@ export async function getStats(request, reply) {
 
     // ── 4. Top 5 sucursales HOY (solo admins) ─────────────────────────────────
     let topSucursales = [];
-    if (esAdmin) {
+    if (esRed) {
       const qSuc = await pool.request()
         .input('idBranch', sql.BigInt, idBranch)
         .input('idCuenta',  sql.BigInt, idCuenta)
@@ -122,7 +124,7 @@ export async function getStats(request, reply) {
     const base5 = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta',  sql.BigInt, idCuenta);
-    if (esCajero) base5.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base5.input('pvId', sql.BigInt, idPuntoVenta);
 
     const qStock = await base5.query(`
       SELECT COUNT(*) AS TotalBajoStock
@@ -140,7 +142,7 @@ export async function getStats(request, reply) {
     const base5b = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta',  sql.BigInt, idCuenta);
-    if (esCajero) base5b.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base5b.input('pvId', sql.BigInt, idPuntoVenta);
 
     const qStockDet = await base5b.query(`
       SELECT TOP 5
@@ -166,7 +168,7 @@ export async function getStats(request, reply) {
     const base6 = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta',  sql.BigInt, idCuenta);
-    if (esCajero) base6.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base6.input('pvId', sql.BigInt, idPuntoVenta);
 
     const qPedidos = await base6.query(`
       SELECT
@@ -185,7 +187,7 @@ export async function getStats(request, reply) {
     const base7 = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta',  sql.BigInt, idCuenta);
-    if (esCajero) base7.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base7.input('pvId', sql.BigInt, idPuntoVenta);
 
     const qRecientes = await base7.query(`
       SELECT TOP 8
@@ -204,24 +206,35 @@ export async function getStats(request, reply) {
       ORDER BY p.FechaAlta DESC
     `);
 
-    // ── 8. Totales generales + estado de conexión (solo admins) ──────────────
-    let totalesGlobales = null;
+    // ── 8. Conteos de catálogo (todos) + red (solo roles de red) ─────────────
+    // Productos y proveedores son de la cuenta (catálogo), no revelan sucursales,
+    // así que se muestran a cualquier rol. Los conteos y la lista de TIENDAS de
+    // la red solo se calculan para roles de red (corporativo/regionales).
     let sucursalesConexion = [];
-    if (esAdmin) {
-      const qGlobal = await pool.request()
+
+    const qCat = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .query(`
+        SELECT
+          (SELECT COUNT(*) FROM VIDA_INVENTARIO_PRODUCTOS WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO') AS TotalProductos,
+          (SELECT COUNT(*) FROM VIDA_PROVEEDORES          WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO') AS TotalProveedores
+      `);
+    let totalesGlobales = qCat.recordset[0];
+
+    if (esRed) {
+      const qRed = await pool.request()
         .input('idBranch', sql.BigInt, idBranch)
         .input('idCuenta',  sql.BigInt, idCuenta)
         .query(`
           SELECT
             (SELECT COUNT(*) FROM VIDA_CUENTA_PUNTOS_VENTA WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO')                               AS TotalSucursales,
             (SELECT COUNT(*) FROM VIDA_CUENTA_PUNTOS_VENTA WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO' AND StatusConexion='ONLINE')    AS SucursalesOnline,
-            (SELECT COUNT(*) FROM VIDA_CUENTA_USUARIOS       WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO')                              AS TotalUsuarios,
-            (SELECT COUNT(*) FROM VIDA_INVENTARIO_PRODUCTOS  WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO')                              AS TotalProductos,
-            (SELECT COUNT(*) FROM VIDA_PROVEEDORES           WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO')                              AS TotalProveedores
+            (SELECT COUNT(*) FROM VIDA_CUENTA_USUARIOS       WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO')                              AS TotalUsuarios
         `);
-      totalesGlobales = qGlobal.recordset[0];
+      totalesGlobales = { ...totalesGlobales, ...qRed.recordset[0] };
 
-      // Lista de sucursales con su estado de conexión
+      // Lista de tiendas con su estado de conexión (solo red)
       const qConex = await pool.request()
         .input('idBranch', sql.BigInt, idBranch)
         .input('idCuenta',  sql.BigInt, idCuenta)
@@ -243,6 +256,7 @@ export async function getStats(request, reply) {
 
     return reply.send({
       rol: TipoUsuario,
+      esRed,  // true = ve datos de toda la red; false = solo su tienda
       ventas: {
         hoy:          Number(v.VentasHoy   || 0),
         ayer:         Number(v.VentasAyer  || 0),
