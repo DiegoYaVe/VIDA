@@ -473,8 +473,10 @@ export default function POS() {
         Cantidad:      1,
       }];
     });
+    // No vaciamos la lista: al limpiar el buscador se mantiene visible el
+    // catálogo de la tienda para poder seguir agregando productos. (Si había
+    // una búsqueda escrita, al limpiarla el efecto recarga el catálogo.)
     setBusqueda('');
-    setProductos([]);
     searchRef.current?.focus();
   }
 
