@@ -1214,10 +1214,11 @@ export async function loginRepartidor(request, reply) {
       .input('idBranch', sql.BigInt,    idBranch)
       .input('idCuenta', sql.BigInt,    idCuenta)
       .input('Telefono', sql.VarChar(30), Telefono)
-      .query(`SELECT idRepartidor, Nombre, StatusRepartidor, StatusAprobacion, Contrasena
+      .query(`SELECT TOP 1 idRepartidor, Nombre, StatusRepartidor, StatusAprobacion, Contrasena
               FROM VIDA_REPARTIDORES
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta
-                AND Telefono=@Telefono AND Status='ACTIVO'`);
+                AND Telefono=@Telefono AND Status='ACTIVO'
+              ORDER BY CASE WHEN Contrasena IS NOT NULL THEN 0 ELSE 1 END, idRepartidor`);
 
     if (!r.recordset.length) {
       return reply.code(404).send({ error: 'Repartidor no encontrado. ¿Ya te registraste?' });
@@ -2140,6 +2141,20 @@ export async function crearRepartidor(request, reply) {
 
   try {
     const pool = await getPool();
+
+    // Evitar duplicar un repartidor con el mismo teléfono (causa ambigüedad al
+    // iniciar sesión y al asignar pedidos).
+    if (Telefono?.trim()) {
+      const dup = await pool.request()
+        .input('idBranch', sql.BigInt, idBranch)
+        .input('idCuenta', sql.BigInt, idCuenta)
+        .input('Telefono', sql.VarChar(30), Telefono.trim())
+        .query(`SELECT TOP 1 idRepartidor FROM VIDA_REPARTIDORES
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Telefono=@Telefono AND Status='ACTIVO'`);
+      if (dup.recordset.length)
+        return reply.code(409).send({ error: 'Ya existe un repartidor activo con ese teléfono' });
+    }
+
     const idRepartidor = await nextId(pool, 'VIDA_REPARTIDORES', 'idRepartidor', idBranch, idCuenta);
 
     await pool.request()
