@@ -8,14 +8,27 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import Constants from 'expo-constants';
 
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import { ID_BRANCH, ID_CUENTA, GOOGLE_WEB_CLIENT_ID } from '../../constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
+// Google Sign-In es un módulo NATIVO que Expo Go no incluye: importarlo en Expo
+// Go revienta con "RNGoogleSignin could not be found". Por eso se carga de forma
+// perezosa y solo fuera de Expo Go (dev client / build de EAS). En Expo Go el
+// login con Google queda deshabilitado, pero el login por teléfono sí funciona.
+const EN_EXPO_GO = Constants.executionEnvironment === 'storeClient';
+let GoogleSignin = null;
+if (!EN_EXPO_GO) {
+  try {
+    GoogleSignin = require('@react-native-google-signin/google-signin').GoogleSignin;
+    GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
+  } catch {
+    GoogleSignin = null;
+  }
+}
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -63,6 +76,10 @@ export default function LoginScreen() {
 
   const handleGoogleSignIn = async () => {
     setError('');
+    if (!GoogleSignin) {
+      setError('El acceso con Google no está disponible en Expo Go. Usa tu teléfono y contraseña, o instala la app compilada (APK/dev client).');
+      return;
+    }
     setGoogleLoading(true);
     try {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -202,27 +219,31 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            {/* Google */}
-            <TouchableOpacity
-              style={styles.googleBtn}
-              onPress={handleGoogleSignIn}
-              disabled={googleLoading}
-              activeOpacity={0.85}
-            >
-              {googleLoading
-                ? <ActivityIndicator color="#555" />
-                : <>
-                    <Text style={styles.googleIcon}>G</Text>
-                    <Text style={styles.googleBtnText}>Continuar con Google</Text>
-                  </>
-              }
-            </TouchableOpacity>
+            {/* Google — solo si el módulo nativo está disponible (no en Expo Go) */}
+            {GoogleSignin && (
+              <>
+                <TouchableOpacity
+                  style={styles.googleBtn}
+                  onPress={handleGoogleSignIn}
+                  disabled={googleLoading}
+                  activeOpacity={0.85}
+                >
+                  {googleLoading
+                    ? <ActivityIndicator color="#555" />
+                    : <>
+                        <Text style={styles.googleIcon}>G</Text>
+                        <Text style={styles.googleBtnText}>Continuar con Google</Text>
+                      </>
+                  }
+                </TouchableOpacity>
 
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>o con tu teléfono</Text>
-              <View style={styles.dividerLine} />
-            </View>
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>o con tu teléfono</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+              </>
+            )}
 
             {tab === 'login' ? (
               <View style={styles.form}>
