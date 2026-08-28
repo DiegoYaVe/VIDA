@@ -45,6 +45,7 @@ function ModalRepartidor({ repartidor, onClose, onGuardado }) {
     PlacaVehiculo: repartidor?.PlacaVehiculo || '',
     ComisionPct:   repartidor?.ComisionPct   ?? '',
     Status:        repartidor?.Status        || 'ACTIVO',
+    Contrasena:    '',
   });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -64,6 +65,11 @@ function ModalRepartidor({ repartidor, onClose, onGuardado }) {
       };
       if (esEdicion) {
         await api.put(`/delivery/admin/repartidores/${repartidor.idRepartidor}`, { ...payload, Status: form.Status });
+        // Cambiar contraseña solo si el admin escribió una nueva
+        if (form.Contrasena.trim()) {
+          if (form.Contrasena.trim().length < 6) { setError('La contraseña debe tener mínimo 6 caracteres'); setGuardando(false); return; }
+          await api.patch(`/delivery/admin/repartidores/${repartidor.idRepartidor}/contrasena`, { Contrasena: form.Contrasena.trim() });
+        }
       } else {
         await api.post('/delivery/admin/repartidores', payload);
       }
@@ -121,6 +127,16 @@ function ModalRepartidor({ repartidor, onClose, onGuardado }) {
                 <option value="ACTIVO">Activo</option>
                 <option value="INACTIVO">Inactivo</option>
               </select>
+            </div>
+          )}
+          {esEdicion && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Nueva contraseña</label>
+              <input type="password" value={form.Contrasena} onChange={e => set('Contrasena', e.target.value)}
+                autoComplete="new-password"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                placeholder="Mínimo 6 caracteres" />
+              <p className="text-xs text-gray-400 mt-1">Déjalo vacío para no cambiarla. El repartidor la usará en su próximo inicio de sesión.</p>
             </div>
           )}
         </div>

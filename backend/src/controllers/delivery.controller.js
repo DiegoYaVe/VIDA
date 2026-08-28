@@ -2201,6 +2201,39 @@ export async function editarRepartidor(request, reply) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// ADMIN — CAMBIAR/RESETEAR CONTRASEÑA DE UN REPARTIDOR
+// PATCH /delivery/admin/repartidores/:id/contrasena  { Contrasena }
+// ══════════════════════════════════════════════════════════════════════════
+export async function resetContrasenaRepartidor(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { id } = request.params;
+  const { Contrasena } = request.body || {};
+
+  if (!Contrasena || Contrasena.length < 6)
+    return reply.code(400).send({ error: 'La contraseña debe tener mínimo 6 caracteres' });
+
+  try {
+    const pool = await getPool();
+    const hash = await bcrypt.hash(Contrasena, 10);
+    const r = await pool.request()
+      .input('idBranch',     sql.BigInt,        idBranch)
+      .input('idCuenta',     sql.BigInt,        idCuenta)
+      .input('idRepartidor', sql.BigInt,        id)
+      .input('Contrasena',   sql.NVarChar(200), hash)
+      .query(`UPDATE VIDA_REPARTIDORES SET Contrasena=@Contrasena
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+
+    if (r.rowsAffected[0] === 0)
+      return reply.code(404).send({ error: 'Repartidor no encontrado' });
+
+    return reply.send({ message: 'Contraseña actualizada' });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al cambiar la contraseña' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // ADMIN — LIQUIDAR REPARTIDOR
 // POST /delivery/admin/liquidar/:idRepartidor
 // ══════════════════════════════════════════════════════════════════════════

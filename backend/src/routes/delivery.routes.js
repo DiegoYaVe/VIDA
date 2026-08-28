@@ -50,6 +50,7 @@ import {
   listarRepartidores,
   crearRepartidor,
   editarRepartidor,
+  resetContrasenaRepartidor,
   liquidarRepartidor,
   getConfigDelivery,
   setConfigDelivery,
@@ -215,6 +216,10 @@ export async function deliveryRoutes(fastify) {
   fastify.put('/delivery/admin/repartidores/:id',
     { preHandler: [authenticate, requireRole(...ADMIN_ROLES)] },
     editarRepartidor);
+
+  fastify.patch('/delivery/admin/repartidores/:id/contrasena',
+    { preHandler: [authenticate, requireRole(...ADMIN_ROLES)] },
+    resetContrasenaRepartidor);
 
   fastify.post('/delivery/admin/liquidar/:idRepartidor',
     { preHandler: [authenticate, requireRole(...ADMIN_ROLES)] },
