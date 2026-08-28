@@ -432,25 +432,26 @@ export default function POS() {
     }).catch(() => {});
   }, []);
 
-  // Búsqueda con debounce
+  // Carga de productos con debounce. Con el buscador vacío muestra el catálogo
+  // de la tienda por defecto (para poder ver los productos sin escribir); al
+  // escribir, filtra. Sin red usa el catálogo cacheado en IndexedDB.
   useEffect(() => {
-    if (!busqueda.trim()) { setProductos([]); return; }
     clearTimeout(busquedaTimer.current);
+    const q = busqueda.trim();
     busquedaTimer.current = setTimeout(async () => {
       setBuscando(true);
       try {
         const r = await api.get('/inventario/productos', {
-          params: { search: busqueda, limit: 20, page: 1 },
+          params: { search: q, limit: 50, page: 1 },
         });
         setProductos(r.data.data || []);
       } catch {
-        // Sin red: buscar en el catálogo cacheado en IndexedDB
-        const locales = await buscarEnCatalogo(busqueda, 20);
+        const locales = await buscarEnCatalogo(q, 50);
         setProductos(locales);
       } finally {
         setBuscando(false);
       }
-    }, 300);
+    }, q ? 300 : 0);
     return () => clearTimeout(busquedaTimer.current);
   }, [busqueda]);
 
@@ -608,16 +609,17 @@ export default function POS() {
           </div>
         )}
 
-        {/* Resultados de búsqueda */}
-        {busqueda.trim() ? (
+        {/* Catálogo de la tienda / resultados de búsqueda */}
+        {buscando && productos.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-gray-400 text-sm">Cargando productos…</p>
+          </div>
+        ) : productos.length > 0 ? (
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden flex-1">
-            {buscando ? (
-              <p className="text-center text-gray-400 py-8 text-sm">Buscando...</p>
-            ) : productos.length === 0 ? (
-              <p className="text-center text-gray-400 py-8 text-sm">Sin resultados para "{busqueda}"</p>
-            ) : (
-              <div className="overflow-y-auto h-full divide-y divide-gray-50">
-                {productos.map(p => (
+            <div className="overflow-y-auto h-full divide-y divide-gray-50">
+              {productos.map(p => {
+                const stock = p.StockDisponible ?? p.StockTotal;
+                return (
                   <button key={p.idProducto} onClick={() => agregarAlCarrito(p)}
                     className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-vida-blue-light transition-colors text-left">
                     <div className="min-w-0">
@@ -626,20 +628,22 @@ export default function POS() {
                     </div>
                     <div className="text-right shrink-0 ml-4">
                       <p className="font-bold text-vida-blue text-lg">${parseFloat(p.PrecioUSD).toFixed(2)}</p>
-                      <p className="text-xs text-gray-400">Stock: {p.StockTotal ?? '–'}</p>
+                      <p className={`text-xs ${Number(stock) > 0 ? 'text-gray-400' : 'text-red-400'}`}>Stock: {stock ?? '–'}</p>
                     </div>
                   </button>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
           </div>
         ) : (
-          /* Estado vacío — instrucciones */
+          /* Sin productos */
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center text-gray-300">
               <Search size={56} className="mx-auto mb-4 opacity-30"/>
-              <p className="text-gray-400 font-medium">Busca un producto para comenzar</p>
-              <p className="text-gray-300 text-sm mt-1">Nombre, SKU o código de barras</p>
+              <p className="text-gray-400 font-medium">
+                {busqueda.trim() ? `Sin resultados para "${busqueda}"` : 'No hay productos en esta tienda'}
+              </p>
+              <p className="text-gray-300 text-sm mt-1">Busca por nombre, SKU o código de barras</p>
             </div>
           </div>
         )}
