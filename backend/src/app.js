@@ -71,7 +71,13 @@ await fastify.register(cors, {
 
 // Cabeceras de seguridad (CSP, X-Frame-Options, HSTS, etc.). Se desactiva la
 // CSP por defecto para no bloquear los recursos servidos desde /uploads.
-await fastify.register(helmet, { contentSecurityPolicy: false });
+// Cross-Origin-Resource-Policy se pone en 'cross-origin' porque el frontend
+// (otro origen/puerto) debe poder mostrar las imágenes servidas desde /uploads;
+// con el valor por defecto ('same-origin') el navegador las bloquea.
+await fastify.register(helmet, {
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+});
 
 // Rate limiting global — frena abuso/fuerza bruta. El login tiene un límite
 // más estricto configurado en su propia ruta.

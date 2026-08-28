@@ -143,6 +143,9 @@ export async function listarProductos(request, reply) {
 
   // Cajeros y cashiers solo ven productos con stock en su punto de venta
   const esCajero = ['CAJERO', 'CASHIER', 'SUPERVISOR'].includes(TipoUsuario);
+  // Roles de red ven el stock sumado de TODA la red; los demás (incluido el
+  // ADMIN de tienda) ven solo el stock de su propio punto de venta.
+  const esRed = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'].includes(TipoUsuario);
 
   try {
     const pool = await getPool();
@@ -185,7 +188,14 @@ export async function listarProductos(request, reply) {
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
       `;
     } else {
-      // Admin/supervisor global: todos los productos con stock sumado
+      // Todos los productos del catálogo. El stock mostrado es:
+      //  - red (SUPER_ADMIN/ADMIN_PAIS/ADMIN_ESTADO): suma de toda la red
+      //  - ADMIN de tienda: solo el de su propio punto de venta
+      let filtroStockPv = '';
+      if (!esRed && pvUsuario) {
+        req.input('pvStock', sql.BigInt, pvUsuario);
+        filtroStockPv = ' AND s2.idPuntoVenta = @pvStock';
+      }
       query = `
         SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
@@ -193,7 +203,7 @@ export async function listarProductos(request, reply) {
                p.ImagenProducto, p.Notas, p.Status, p.FechaAlta,
                ISNULL((SELECT SUM(s2.Cantidad) FROM VIDA_INVENTARIO_STOCK s2
                        WHERE s2.idBranch=p.idBranch AND s2.idCuenta=p.idCuenta
-                         AND s2.idProducto=p.idProducto), 0) AS StockDisponible
+                         AND s2.idProducto=p.idProducto${filtroStockPv}), 0) AS StockDisponible
         FROM VIDA_INVENTARIO_PRODUCTOS p
         LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
           ON c.idBranch = p.idBranch AND c.idCuenta = p.idCuenta AND c.idCategoria = p.idCategoria
@@ -455,8 +465,13 @@ export async function toggleProducto(request, reply) {
 
 // GET /api/inventario/stock?idPuntoVenta=X
 export async function verStock(request, reply) {
-  const { idBranch, idCuenta } = request.user;
-  const { idPuntoVenta, soloStockBajo = false } = request.query;
+  const { idBranch, idCuenta, TipoUsuario, idPuntoVenta: pvUsuario } = request.user;
+  const { soloStockBajo = false } = request.query;
+
+  // Roles de tienda quedan forzados a su propio punto de venta; los de red
+  // pueden consultar el que pasen por query.
+  const esRed = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'].includes(TipoUsuario);
+  const idPuntoVenta = esRed ? request.query.idPuntoVenta : pvUsuario;
 
   if (!idPuntoVenta)
     return reply.code(400).send({ error: 'idPuntoVenta es requerido' });

@@ -43,8 +43,11 @@ const TRANSICIONES = {
 // LISTAR PEDIDOS
 // ══════════════════════════════════════════════════════════════════════════
 export async function listarPedidos(request, reply) {
-  const { idBranch, idCuenta } = request.user;
-  const { page = 1, limit = 20, status = '', canal = '', idPuntoVenta = '', requiereRevision = '' } = request.query;
+  const { idBranch, idCuenta, TipoUsuario, idPuntoVenta: pvUsuario } = request.user;
+  const { page = 1, limit = 20, status = '', canal = '', requiereRevision = '' } = request.query;
+  // Roles de tienda quedan forzados a su punto de venta; los de red filtran por query.
+  const esRed = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'].includes(TipoUsuario);
+  const idPuntoVenta = esRed ? (request.query.idPuntoVenta || '') : pvUsuario;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   try {
@@ -1096,8 +1099,13 @@ export async function aprobarRepartidor(request, reply) {
 // GET /api/pedidos/pos/ventas?fecha=YYYY-MM-DD&idPuntoVenta=X
 // ══════════════════════════════════════════════════════════════════════════
 export async function listarVentasPOS(request, reply) {
-  const { idBranch, idCuenta } = request.user;
-  const { fecha, idPuntoVenta } = request.query;
+  const { idBranch, idCuenta, TipoUsuario, idPuntoVenta: pvUsuario } = request.user;
+  const { fecha } = request.query;
+
+  // Roles de tienda quedan forzados a su propio punto de venta; los de red
+  // pueden filtrar por el que pasen en la query (o ver todas).
+  const esRed = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'].includes(TipoUsuario);
+  const idPuntoVenta = esRed ? request.query.idPuntoVenta : pvUsuario;
 
   // Por defecto: hoy
   const fechaFiltro = fecha || new Date().toISOString().slice(0, 10);

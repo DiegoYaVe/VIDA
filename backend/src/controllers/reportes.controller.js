@@ -9,23 +9,11 @@ function buildGeoFilter(user, query, dbReq) {
   const { TipoUsuario, idPuntoVenta } = user;
   const { filtroPais, filtroEstado, filtroIdPuntoVenta } = query;
 
-  // Roles de solo-su-sucursal
-  if (['SUPERVISOR', 'CAJERO', 'CASHIER'].includes(TipoUsuario)) {
+  // Roles de solo-su-tienda: ADMIN de tienda, supervisor y cajero quedan
+  // forzados a su propio punto de venta (no ven reportes de otras tiendas).
+  if (['ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'].includes(TipoUsuario)) {
     dbReq.input('geoForzado', sql.BigInt, idPuntoVenta);
     return ' AND pv.idPuntoVenta = @geoForzado';
-  }
-
-  // ADMIN: puede filtrar por estado o sucursal (no por país)
-  if (TipoUsuario === 'ADMIN') {
-    if (filtroIdPuntoVenta) {
-      dbReq.input('geoPV', sql.BigInt, filtroIdPuntoVenta);
-      return ' AND pv.idPuntoVenta = @geoPV';
-    }
-    if (filtroEstado) {
-      dbReq.input('geoEstado', sql.VarChar(100), filtroEstado);
-      return ' AND pv.Estado = @geoEstado';
-    }
-    return '';
   }
 
   // SUPER_ADMIN / ADMIN_PAIS: acceso completo con filtros opcionales
@@ -56,7 +44,8 @@ export async function obtenerFiltros(request, reply) {
       .input('idCuenta', sql.BigInt, idCuenta);
 
     let whereExtra = '';
-    if (['SUPERVISOR', 'CAJERO', 'CASHIER'].includes(TipoUsuario)) {
+    // El dropdown de tiendas solo muestra la propia para roles de tienda.
+    if (['ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'].includes(TipoUsuario)) {
       req.input('pvFilt', sql.BigInt, idPuntoVenta);
       whereExtra = ' AND idPuntoVenta = @pvFilt';
     }
