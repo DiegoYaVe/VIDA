@@ -38,6 +38,7 @@ export default function PerfilScreen() {
   const [subiendoFoto, setSubiendoFoto] = useState(false);
   const [pedidosCount, setPedidosCount] = useState(null);
   const [puntos, setPuntos] = useState(null);
+  const [agua, setAgua] = useState(null);
 
   useEffect(() => {
     if (!token) return;
@@ -46,6 +47,9 @@ export default function PerfilScreen() {
       .catch(() => {});
     api.get('/delivery/cliente/puntos')
       .then(r => setPuntos(r.data?.saldo ?? 0))
+      .catch(() => {});
+    api.get('/delivery/cliente/hidratacion')
+      .then(r => setAgua(r.data))
       .catch(() => {});
   }, [token]);
 
@@ -185,6 +189,26 @@ export default function PerfilScreen() {
           <Ionicons name="chevron-forward" size={20} color="#fff" />
         </TouchableOpacity>
 
+        {/* Mi Consumo Vida — hidratación */}
+        <TouchableOpacity
+          style={styles.aguaCard}
+          onPress={() => router.push('/mi-consumo')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.aguaIcon}>
+            <Ionicons name="water" size={22} color="#fff" />
+          </View>
+          <View style={styles.pedidosInfo}>
+            <Text style={styles.aguaTitle}>Mi Consumo Vida</Text>
+            <Text style={styles.aguaSub}>
+              {agua?.activa
+                ? `Hoy: ${agua.vasosHoy ?? 0}/${agua.meta ?? 8} vasos${agua.racha > 0 ? ` · 🔥 ${agua.racha}d` : ''}`
+                : 'Activa tu programa de hidratación'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#fff" />
+        </TouchableOpacity>
+
         {/* Pedidos — botón prominente */}
         <TouchableOpacity
           style={styles.pedidosCard}
@@ -317,6 +341,18 @@ const styles = StyleSheet.create({
   },
   puntosTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
   puntosSub: { fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 2 },
+  aguaCard: {
+    marginHorizontal: 16, marginTop: 12, marginBottom: 4,
+    backgroundColor: '#2CA6C4',
+    borderRadius: 16, padding: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+  },
+  aguaIcon: {
+    width: 50, height: 50, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center',
+  },
+  aguaTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
+  aguaSub: { fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 2 },
   pedidosCard: {
     marginHorizontal: 16, marginTop: 12, marginBottom: 4,
     backgroundColor: '#EBF8FF',

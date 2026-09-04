@@ -47,6 +47,7 @@ pos-venezuela/
 - **Config de cuenta:** dos tablas de config → `VIDA_CONFIGURACION` (clave/valor, ej. SMTP_*, `URL_SISTEMA`) y `VIDA_CONFIG_DELIVERY` (clave/valor, ej. `PuntosPorDolar`, `PuntosPorDolarCanje`, `RadioBusquedaKm`). Helpers `getConfig` (usuarios) y `getConfigVal` (delivery).
 - **URLs por ambiente:** los links de correo/API se resuelven por ambiente: `usuarios.controller.resolverUrlSistema()` (frontend) y `delivery.controller.resolverBaseUrl(request)` (API). Prioridad: env var → si no es producción `localhost` → en prod valor de BD / derivado del request. En `.env` de prod conviene fijar `NODE_ENV=production`, `FRONTEND_URL`, `BASE_URL`.
 - **Imágenes:** se sirven desde `/uploads/...` (backend). Helmet lleva `crossOriginResourcePolicy: { policy: 'cross-origin' }` para que el front (otro origen) pueda mostrarlas. Producto: `POST /inventario/productos/:id/imagen` (multipart) → `uploads/productos/`.
+- **Body JSON vacío:** `app.js` registra un content-type parser que trata un body JSON vacío como `{}` (acciones POST sin payload, ej. "+1 vaso"). Sin esto Fastify responde 400 `FST_ERR_CTP_EMPTY_JSON_BODY`.
 - **Migraciones:** ejecutar los `.sql` de `sql/` en orden en SQL Server. Contienen `GO` como separador de batch. En esta sesión las corrí contra QA con un runner temporal Node (`mssql`), no hay migrador automático en el repo.
 - **Runner temporal:** varias veces creé `backend/run-migration.mjs` para correr SQL o probar endpoints con un JWT forjado (HS256 con `JWT_SECRET` del `.env`), y **lo borré al terminar**. Es un patrón útil para verificar sin front.
 
@@ -63,7 +64,7 @@ pos-venezuela/
 | G) Tracking de pedidos (estados + mapa en vivo) | ✅ |
 | H) Perfil (compras, direcciones, tarjetas, contraseña) | ✅ |
 | Login OTP / Apple | ❌ (hay teléfono+password y Google) |
-| D) Salud – consumo de agua | ❌ |
+| **D) Salud – consumo de agua** ("Mi Consumo Vida": activar, meta diaria, registrar vasos, gráfica 14 días, racha 7 días → puntos extra) | ✅ v1 (esta sesión). Falta: **push recordatorio cada 2h** (notificación local del dispositivo) |
 | E) Membresía Club Vida | ❌ |
 | F) Servicios integrados (Amazon, recargas) | ❌ |
 | Landing "¿Cómo quieres unirte?" (redes + roles + form→WhatsApp) | ✅ (la hizo **otro dev**, ya existe) |
@@ -89,6 +90,7 @@ pos-venezuela/
 
 Del más reciente al más antiguo:
 
+- **Salud — "Mi Consumo Vida"** (hidratación) — columnas `Hidratacion*` en cliente + tabla `VIDA_CLIENTE_HIDRATACION_DIA` + config `PuntosRachaHidratacion=50` (sql/23). Endpoints cliente `GET/PUT /delivery/cliente/hidratacion`, `POST .../vaso`, `POST .../quitar`. Gamificación: al cumplir la meta y completar múltiplo de 7 días de racha → acredita puntos (helper `acreditarPuntosCliente`). Pantalla `app-cliente/app/mi-consumo.jsx` (activar, botón "Tomé 1 vaso", progreso, racha, gráfica 14 días, meta ajustable) + tarjeta en perfil. **Fix backend general:** `app.js` ahora acepta **body JSON vacío** en POST/PUT (content-type parser) — antes Fastify respondía 400 `FST_ERR_CTP_EMPTY_JSON_BODY` (rompía acciones sin payload como "+1 vaso"). Pendiente: **push recordatorio cada 2h** (usar `expo-notifications` con notificación local repetida; Expo Go tiene límites, va mejor en dev build/APK).
 - **Marketing — Flyer + QR** (frontend, tab "Flyer" en Precios): "Crear promo hoy" — elige un producto de su inventario, precio de promoción opcional y mensaje; genera un **flyer 1080×1350 en canvas** (header VIDA, foto, nombre, precio normal tachado + promo, badge PLUS, **QR** que apunta a `https://app.comercializadoravida.com/t/{idPuntoVenta}`) y lo **descarga en PNG** o comparte texto por WhatsApp. **Nueva dependencia frontend: `qrcode@1.5.4`** (correr `npm install` en `frontend/` al desplegar). Sin cambios de backend ni migración.
 - `87c50fa9` **DOCS**: este HANDOFF.
 - `e14c4c34` **Metas del empresario** — tab "Metas" en Reportes. Tabla `VIDA_TIENDA_METAS`; endpoints `GET/PUT /metas`, `GET /metas/progreso` (ventas POS entregadas hoy / últimos 7 días / mes actual vs meta, % + insignia). (sql/22)
@@ -140,6 +142,12 @@ Del más reciente al más antiguo:
 - Ojo CORS: para exportar la foto del producto en el canvas, la imagen se carga con `crossOrigin='anonymous'`; el backend ya manda CORP cross-origin y CORS a `FRONTEND_URL`. Si la imagen "tainta" el canvas, se captura el error y se avisa (fallback sin foto).
 - **Pendiente:** replicar publicaciones de la matriz en redes de la tienda; cupones automáticos ("cliente no viene hace 15 días").
 
+### Salud — "Mi Consumo Vida" (hidratación) (`delivery.controller.js` + `app-cliente/app/mi-consumo.jsx`)
+- Config en el cliente: `HidratacionActiva/MetaVasos/MlVaso`. Registro diario en `VIDA_CLIENTE_HIDRATACION_DIA` (upsert +1 por tap). Config global `PuntosRachaHidratacion=50`.
+- Endpoints (authenticateCliente): `GET/PUT /delivery/cliente/hidratacion`, `POST /delivery/cliente/hidratacion/vaso` (+1, devuelve vasosHoy/meta/mlHoy/racha/bonus), `POST /delivery/cliente/hidratacion/quitar` (-1).
+- **Racha:** `contarRachaHidratacion` cuenta días consecutivos (UTC) terminando hoy con vasos≥meta. Al alcanzar exactamente la meta hoy y `racha % 7 === 0`, acredita `PuntosRachaHidratacion` (una vez por día, vía `acreditarPuntosCliente`).
+- **Pendiente fase 2:** push recordatorio cada 2h (notificación local con `expo-notifications`).
+
 ---
 
 ## 6. Cosas de entorno / operación (para no tropezar)
@@ -154,8 +162,8 @@ Del más reciente al más antiguo:
 
 ## 7. Próximos candidatos (sugerencia de prioridad)
 
-Ganchos grandes de empresario (Rentabilidad+Plus+Metas+**Flyer**) y consumidor (Puntos completo) ya están. Siguientes de mayor impacto:
-1. **Salud – consumo de agua (D)** — engagement diario del consumidor (meta de vasos, push, gráfica, puntos extra por racha).
+Ganchos grandes de empresario (Rentabilidad+Plus+Metas+**Flyer**) y consumidor (Puntos completo + **Salud/agua**) ya están. Siguientes de mayor impacto:
+1. **Push recordatorio de hidratación** — cerrar fase 2 de Salud con `expo-notifications` (notificación local repetida cada 2h).
 3. **Membresía Club Vida (E)** — QR de membresía por nivel, eventos, beneficios.
 4. **Academia Vida (F)** — cursos + puntos al empresario.
 5. **Fidelización fase 3** — catálogo de premios + vencimiento de puntos.

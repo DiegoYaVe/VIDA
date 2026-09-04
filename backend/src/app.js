@@ -97,6 +97,14 @@ await fastify.register(fjwt, {
   secret: JWT_SECRET || SECRET_DEV,
 });
 
+// Permitir POST/PUT con body JSON vacío (ej. acciones tipo "+1 vaso" sin payload):
+// sin esto Fastify responde 400 FST_ERR_CTP_EMPTY_JSON_BODY.
+fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+  if (!body || body.trim() === '') return done(null, {});
+  try { done(null, JSON.parse(body)); }
+  catch (err) { err.statusCode = 400; done(err); }
+});
+
 await fastify.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB máximo
 
 await fastify.register(staticFiles, {

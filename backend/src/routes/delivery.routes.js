@@ -23,6 +23,7 @@ import {
   estadoPedidoCliente,
   historialPedidosCliente,
   puntosCliente,
+  obtenerHidratacion, guardarHidratacion, registrarVaso, quitarVaso,
   extenderBusquedaPedido,
   cancelarPedidoCliente,
   // Repartidor
@@ -100,6 +101,15 @@ export async function deliveryRoutes(fastify) {
   fastify.get('/delivery/cliente/puntos',
     { preHandler: [authenticateCliente] },
     puntosCliente);
+
+  fastify.get('/delivery/cliente/hidratacion',
+    { preHandler: [authenticateCliente] }, obtenerHidratacion);
+  fastify.put('/delivery/cliente/hidratacion',
+    { preHandler: [authenticateCliente] }, guardarHidratacion);
+  fastify.post('/delivery/cliente/hidratacion/vaso',
+    { preHandler: [authenticateCliente] }, registrarVaso);
+  fastify.post('/delivery/cliente/hidratacion/quitar',
+    { preHandler: [authenticateCliente] }, quitarVaso);
 
   fastify.get('/delivery/pedido/:idPedido/estado',
     { preHandler: [authenticateCliente] },

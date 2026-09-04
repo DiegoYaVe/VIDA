@@ -1284,6 +1284,166 @@ export async function puntosCliente(request, reply) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — SALUD: "Mi Consumo Vida" (hidratación)
+// ══════════════════════════════════════════════════════════════════════════
+
+// Acredita puntos al cliente (pool, no transacción). Actualiza saldo + ledger.
+async function acreditarPuntosCliente(pool, idBranch, idCuenta, idCliente, puntos, descripcion) {
+  if (!puntos || puntos <= 0) return;
+  const movId = await nextId(pool, 'VIDA_CLIENTE_PUNTOS', 'idMovimiento', idBranch, idCuenta);
+  await pool.request()
+    .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+    .input('idMovimiento', sql.BigInt, movId).input('idCliente', sql.BigInt, idCliente)
+    .input('Puntos', sql.Int, puntos).input('Descripcion', sql.VarChar(200), descripcion)
+    .query(`INSERT INTO VIDA_CLIENTE_PUNTOS (idBranch,idCuenta,idMovimiento,idCliente,Tipo,Puntos,idPedido,Descripcion)
+            VALUES (@idBranch,@idCuenta,@idMovimiento,@idCliente,'GANADO',@Puntos,NULL,@Descripcion)`);
+  await pool.request()
+    .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+    .input('idCliente', sql.BigInt, idCliente).input('Puntos', sql.Int, puntos)
+    .query(`UPDATE VIDA_APP_CLIENTES SET PuntosSaldo = ISNULL(PuntosSaldo,0) + @Puntos
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+}
+
+// Cuenta días consecutivos (terminando en hoy) que cumplieron la meta.
+function contarRachaHidratacion(mapaFechaVasos, hoyStr, meta) {
+  let count = 0;
+  const d = new Date(hoyStr + 'T00:00:00Z');
+  while ((mapaFechaVasos.get(d.toISOString().slice(0, 10)) || 0) >= meta && meta > 0) {
+    count++; d.setUTCDate(d.getUTCDate() - 1);
+  }
+  return count;
+}
+
+async function leerCfgHidratacion(pool, idBranch, idCuenta, idCliente) {
+  const r = await pool.request()
+    .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
+    .query(`SELECT ISNULL(HidratacionActiva,0) AS Activa, ISNULL(HidratacionMetaVasos,8) AS Meta, ISNULL(HidratacionMlVaso,250) AS MlVaso
+            FROM VIDA_APP_CLIENTES WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+  const c = r.recordset[0] || {};
+  return { activa: !!c.Activa, meta: c.Meta ?? 8, mlVaso: c.MlVaso ?? 250 };
+}
+
+// GET /delivery/cliente/hidratacion
+export async function obtenerHidratacion(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  try {
+    const pool = await getPool();
+    const cfg = await leerCfgHidratacion(pool, idBranch, idCuenta, idCliente);
+    const logR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT CONVERT(varchar(10),Fecha,23) AS F, Vasos FROM VIDA_CLIENTE_HIDRATACION_DIA
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente
+                AND Fecha >= DATEADD(DAY,-40, CAST(GETDATE() AS DATE))
+              ORDER BY Fecha`);
+    const tR = await pool.request().query(`SELECT CONVERT(varchar(10),CAST(GETDATE() AS DATE),23) AS T`);
+    const hoyStr = tR.recordset[0].T;
+    const mapa = new Map(logR.recordset.map(r => [r.F, r.Vasos]));
+    const vasosHoy = mapa.get(hoyStr) || 0;
+    const racha = contarRachaHidratacion(mapa, hoyStr, cfg.meta);
+    // historial últimos 14 días para la gráfica
+    const historial = [];
+    const d = new Date(hoyStr + 'T00:00:00Z');
+    for (let i = 13; i >= 0; i--) {
+      const dd = new Date(d); dd.setUTCDate(d.getUTCDate() - i);
+      const k = dd.toISOString().slice(0, 10);
+      historial.push({ fecha: k, vasos: mapa.get(k) || 0 });
+    }
+    return reply.send({
+      ...cfg, hoy: hoyStr, vasosHoy, racha,
+      mlHoy: vasosHoy * cfg.mlVaso, metaMl: cfg.meta * cfg.mlVaso,
+      historial,
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener hidratación' });
+  }
+}
+
+// PUT /delivery/cliente/hidratacion  { activa, meta, mlVaso }
+export async function guardarHidratacion(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  const b = request.body || {};
+  const meta = Math.max(1, Math.min(30, parseInt(b.meta) || 8));
+  const mlVaso = Math.max(50, Math.min(1000, parseInt(b.mlVaso) || 250));
+  try {
+    const pool = await getPool();
+    await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
+      .input('Activa', sql.Bit, b.activa ? 1 : 0).input('Meta', sql.Int, meta).input('MlVaso', sql.Int, mlVaso)
+      .query(`UPDATE VIDA_APP_CLIENTES
+              SET HidratacionActiva=@Activa, HidratacionMetaVasos=@Meta, HidratacionMlVaso=@MlVaso
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+    return reply.send({ message: 'Programa actualizado', activa: !!b.activa, meta, mlVaso });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al guardar' });
+  }
+}
+
+// POST /delivery/cliente/hidratacion/vaso   (+1 vaso)
+export async function registrarVaso(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  try {
+    const pool = await getPool();
+    const cfg = await leerCfgHidratacion(pool, idBranch, idCuenta, idCliente);
+
+    await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
+      .query(`MERGE VIDA_CLIENTE_HIDRATACION_DIA AS t
+              USING (SELECT @idBranch AS idBranch, @idCuenta AS idCuenta, @idCliente AS idCliente, CAST(GETDATE() AS DATE) AS Fecha) AS s
+                ON (t.idBranch=s.idBranch AND t.idCuenta=s.idCuenta AND t.idCliente=s.idCliente AND t.Fecha=s.Fecha)
+              WHEN MATCHED THEN UPDATE SET Vasos = t.Vasos + 1, FechaMod=GETDATE()
+              WHEN NOT MATCHED THEN INSERT (idBranch,idCuenta,idCliente,Fecha,Vasos) VALUES (@idBranch,@idCuenta,@idCliente,CAST(GETDATE() AS DATE),1);`);
+
+    // Releer estado + racha
+    const logR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT CONVERT(varchar(10),Fecha,23) AS F, Vasos FROM VIDA_CLIENTE_HIDRATACION_DIA
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente
+                AND Fecha >= DATEADD(DAY,-40, CAST(GETDATE() AS DATE))`);
+    const tR = await pool.request().query(`SELECT CONVERT(varchar(10),CAST(GETDATE() AS DATE),23) AS T`);
+    const hoyStr = tR.recordset[0].T;
+    const mapa = new Map(logR.recordset.map(r => [r.F, r.Vasos]));
+    const vasosHoy = mapa.get(hoyStr) || 0;
+    const racha = contarRachaHidratacion(mapa, hoyStr, cfg.meta);
+
+    // Gamificación: al alcanzar exactamente la meta hoy y completar múltiplo de 7 días
+    let bonus = 0;
+    if (vasosHoy === cfg.meta && racha > 0 && racha % 7 === 0) {
+      const pts = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'PuntosRachaHidratacion', '50')) || 50;
+      await acreditarPuntosCliente(pool, idBranch, idCuenta, idCliente, pts, `Racha de ${racha} días de hidratación 💧`);
+      bonus = pts;
+    }
+    return reply.send({ vasosHoy, meta: cfg.meta, mlHoy: vasosHoy * cfg.mlVaso, racha, bonus });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al registrar vaso' });
+  }
+}
+
+// POST /delivery/cliente/hidratacion/quitar   (-1 vaso, mínimo 0)
+export async function quitarVaso(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  try {
+    const pool = await getPool();
+    await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
+      .query(`UPDATE VIDA_CLIENTE_HIDRATACION_DIA SET Vasos = CASE WHEN Vasos > 0 THEN Vasos - 1 ELSE 0 END, FechaMod=GETDATE()
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente AND Fecha=CAST(GETDATE() AS DATE)`);
+    const cfg = await leerCfgHidratacion(pool, idBranch, idCuenta, idCliente);
+    const hoyR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT ISNULL(Vasos,0) AS Vasos FROM VIDA_CLIENTE_HIDRATACION_DIA
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente AND Fecha=CAST(GETDATE() AS DATE)`);
+    const vasosHoy = hoyR.recordset[0]?.Vasos ?? 0;
+    return reply.send({ vasosHoy, meta: cfg.meta, mlHoy: vasosHoy * cfg.mlVaso });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al quitar vaso' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // REPARTIDOR — REGISTRO DESDE LA APP (queda pendiente de aprobación)
 // POST /delivery/repartidor/registro
 // ══════════════════════════════════════════════════════════════════════════
