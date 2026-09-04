@@ -22,6 +22,7 @@ import {
   crearPedidoApp,
   estadoPedidoCliente,
   historialPedidosCliente,
+  puntosCliente,
   extenderBusquedaPedido,
   cancelarPedidoCliente,
   // Repartidor
@@ -95,6 +96,10 @@ export async function deliveryRoutes(fastify) {
   fastify.get('/delivery/cliente/pedidos',
     { preHandler: [authenticateCliente] },
     historialPedidosCliente);
+
+  fastify.get('/delivery/cliente/puntos',
+    { preHandler: [authenticateCliente] },
+    puntosCliente);
 
   fastify.get('/delivery/pedido/:idPedido/estado',
     { preHandler: [authenticateCliente] },

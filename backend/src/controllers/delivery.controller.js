@@ -1142,6 +1142,44 @@ export async function historialPedidosCliente(request, reply) {
 // REPARTIDOR — LOGIN
 // POST /delivery/repartidor/login
 // ══════════════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — BILLETERA DE PUNTOS (saldo + historial)
+// GET /delivery/cliente/puntos
+// ══════════════════════════════════════════════════════════════════════════
+export async function puntosCliente(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  try {
+    const pool = await getPool();
+    const puntosPorDolar = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'PuntosPorDolar', '10')) || 10;
+
+    const saldoR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT ISNULL(PuntosSaldo,0) AS PuntosSaldo FROM VIDA_APP_CLIENTES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+
+    const movR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('idCliente', sql.BigInt, idCliente)
+      .query(`SELECT TOP 50 idMovimiento, Tipo, Puntos, idPedido, Descripcion, FechaAlta
+              FROM VIDA_CLIENTE_PUNTOS
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente
+              ORDER BY FechaAlta DESC, idMovimiento DESC`);
+
+    return reply.send({
+      saldo: saldoR.recordset[0]?.PuntosSaldo ?? 0,
+      puntosPorDolar,
+      movimientos: movR.recordset,
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener puntos' });
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // REPARTIDOR — REGISTRO DESDE LA APP (queda pendiente de aprobación)
 // POST /delivery/repartidor/registro
@@ -1669,6 +1707,41 @@ export async function actualizarStatusPedido(request, reply) {
           .query(`UPDATE VIDA_REPARTIDORES
                   SET SaldoPendiente = ISNULL(SaldoPendiente,0) + @efectivo
                   WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+      }
+
+      // ── Fidelización: acreditar puntos al cliente (idempotente por pedido) ──
+      if (pedido.idCliente) {
+        const puntosPorDolar = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'PuntosPorDolar', '10')) || 10;
+        const puntos = Math.round(parseFloat(pedido.TotalUSD || 0) * puntosPorDolar);
+        if (puntos > 0) {
+          const yaR = await new sql.Request(transaction)
+            .input('idBranch', sql.BigInt, idBranch)
+            .input('idCuenta', sql.BigInt, idCuenta)
+            .input('idPedido', sql.BigInt, idPedido)
+            .query(`SELECT TOP 1 idMovimiento FROM VIDA_CLIENTE_PUNTOS
+                    WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido AND Tipo='GANADO'`);
+          if (!yaR.recordset.length) {
+            const movId = await nextIdTx(transaction, 'VIDA_CLIENTE_PUNTOS', 'idMovimiento', idBranch, idCuenta);
+            await new sql.Request(transaction)
+              .input('idBranch',     sql.BigInt,      idBranch)
+              .input('idCuenta',     sql.BigInt,      idCuenta)
+              .input('idMovimiento', sql.BigInt,      movId)
+              .input('idCliente',    sql.BigInt,      pedido.idCliente)
+              .input('Puntos',       sql.Int,         puntos)
+              .input('idPedido',     sql.BigInt,      idPedido)
+              .input('Descripcion',  sql.VarChar(200), `Compra pedido #${idPedido}`)
+              .query(`INSERT INTO VIDA_CLIENTE_PUNTOS
+                        (idBranch, idCuenta, idMovimiento, idCliente, Tipo, Puntos, idPedido, Descripcion)
+                      VALUES (@idBranch, @idCuenta, @idMovimiento, @idCliente, 'GANADO', @Puntos, @idPedido, @Descripcion)`);
+            await new sql.Request(transaction)
+              .input('idBranch',  sql.BigInt, idBranch)
+              .input('idCuenta',  sql.BigInt, idCuenta)
+              .input('idCliente', sql.BigInt, pedido.idCliente)
+              .input('Puntos',    sql.Int,    puntos)
+              .query(`UPDATE VIDA_APP_CLIENTES SET PuntosSaldo = ISNULL(PuntosSaldo,0) + @Puntos
+                      WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+          }
+        }
       }
     }
 

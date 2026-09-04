@@ -37,11 +37,15 @@ export default function PerfilScreen() {
   const { cliente, token, logout, setCliente } = useAuthStore();
   const [subiendoFoto, setSubiendoFoto] = useState(false);
   const [pedidosCount, setPedidosCount] = useState(null);
+  const [puntos, setPuntos] = useState(null);
 
   useEffect(() => {
     if (!token) return;
     api.get('/delivery/cliente/pedidos')
       .then(r => setPedidosCount((r.data?.pedidos ?? r.data ?? []).length))
+      .catch(() => {});
+    api.get('/delivery/cliente/puntos')
+      .then(r => setPuntos(r.data?.saldo ?? 0))
       .catch(() => {});
   }, [token]);
 
@@ -163,6 +167,24 @@ export default function PerfilScreen() {
           </View>
         </View>
 
+        {/* Puntos VIDA — billetera */}
+        <TouchableOpacity
+          style={styles.puntosCard}
+          onPress={() => router.push('/mis-puntos')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.puntosIcon}>
+            <Ionicons name="star" size={24} color="#fff" />
+          </View>
+          <View style={styles.pedidosInfo}>
+            <Text style={styles.puntosTitle}>Mis Puntos VIDA</Text>
+            <Text style={styles.puntosSub}>
+              {puntos !== null ? `${puntos.toLocaleString('es-VE')} puntos disponibles` : 'Cargando…'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#fff" />
+        </TouchableOpacity>
+
         {/* Pedidos — botón prominente */}
         <TouchableOpacity
           style={styles.pedidosCard}
@@ -283,8 +305,20 @@ const styles = StyleSheet.create({
   headerName: { fontSize: 19, fontWeight: '800', color: '#fff' },
   headerEmail: { fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 3 },
 
-  pedidosCard: {
+  puntosCard: {
     marginHorizontal: 16, marginTop: 20, marginBottom: 4,
+    backgroundColor: '#F59E0B',
+    borderRadius: 16, padding: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+  },
+  puntosIcon: {
+    width: 50, height: 50, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center',
+  },
+  puntosTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
+  puntosSub: { fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 2 },
+  pedidosCard: {
+    marginHorizontal: 16, marginTop: 12, marginBottom: 4,
     backgroundColor: '#EBF8FF',
     borderRadius: 16, padding: 16,
     flexDirection: 'row', alignItems: 'center', gap: 14,
