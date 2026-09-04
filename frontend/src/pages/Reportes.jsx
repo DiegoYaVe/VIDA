@@ -6,6 +6,7 @@ import {
   Filter, RefreshCw, AlertTriangle,
   DollarSign, ShoppingCart, CreditCard, Banknote,
   MapPin, Store, Globe, ChevronDown, Truck, Star, XCircle, Building2, Award,
+  Calculator, Target, Save,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -1079,6 +1080,203 @@ function TabRed({ filtros }) {
 
 const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
+// ─── TAB: Calculadora de Rentabilidad ─────────────────────────────────────────
+const PCT = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
+
+function CampoNum({ label, value, onChange, sufijo = '$', hint }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{sufijo}</span>
+        <input type="number" step="0.01" value={value}
+          onChange={e => onChange(e.target.value)}
+          className="w-full border border-gray-200 rounded-lg pl-7 pr-3 py-2 text-sm" placeholder="0" />
+      </div>
+      {hint && <p className="text-[11px] text-gray-400 mt-0.5">{hint}</p>}
+    </div>
+  );
+}
+
+function ModoCard({ titulo, color, m }) {
+  return (
+    <div className="rounded-2xl border p-4" style={{ borderColor: `${color}33`, background: `${color}0d` }}>
+      <p className="text-sm font-black mb-2" style={{ color }}>{titulo}</p>
+      {m.nProductos === 0 ? (
+        <p className="text-xs text-gray-400">Sin productos en este grupo</p>
+      ) : (
+        <div className="space-y-1.5 text-sm">
+          <div className="flex justify-between"><span className="text-gray-500">Margen bruto</span><span className="font-bold text-gray-800">{PCT(m.margenBrutoPct)}</span></div>
+          <div className="flex justify-between"><span className="text-gray-500">Margen neto*</span><span className="font-bold text-gray-800">{PCT(m.margenContribPct)}</span></div>
+          <div className="flex justify-between"><span className="text-gray-500">Ganancia/venta</span><span className="font-bold text-gray-800">{USD(m.contribProm)}</span></div>
+          <div className="flex justify-between text-xs pt-1 border-t border-gray-100 mt-1"><span className="text-gray-400">{m.nProductos} productos</span><span className="text-gray-400">precio prom. {USD(m.precioProm)}</span></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TabRentabilidad({ filtros, puedeVerRed }) {
+  const [idPV, setIdPV] = useState('');
+  const [fin, setFin] = useState({
+    CostosFijosMensualUSD: '', PctComisionDelivery: '', PctImpuestos: '',
+    PctPasarela: '', InversionInicialUSD: '', MetaGananciaMensualUSD: '',
+  });
+  const [datos, setDatos] = useState(null);
+  const [cargando, setCargando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
+
+  // Roles de red eligen tienda; el empresario usa la suya (el backend la fuerza).
+  const params = () => (puedeVerRed && idPV ? { idPuntoVenta: idPV } : {});
+
+  const cargar = useCallback(async () => {
+    if (puedeVerRed && !idPV) { setDatos(null); return; }
+    setCargando(true); setError('');
+    try {
+      const [f, r] = await Promise.all([
+        api.get('/finanzas', { params: params() }),
+        api.get('/finanzas/rentabilidad', { params: params() }),
+      ]);
+      setFin({
+        CostosFijosMensualUSD:  f.data.CostosFijosMensualUSD ?? '',
+        PctComisionDelivery:    f.data.PctComisionDelivery ?? '',
+        PctImpuestos:           f.data.PctImpuestos ?? '',
+        PctPasarela:            f.data.PctPasarela ?? '',
+        InversionInicialUSD:    f.data.InversionInicialUSD ?? '',
+        MetaGananciaMensualUSD: f.data.MetaGananciaMensualUSD ?? '',
+      });
+      setDatos(r.data);
+    } catch (e) { setError(e.response?.data?.error || 'Error al cargar'); }
+    finally { setCargando(false); }
+  }, [idPV]); // eslint-disable-line
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const set = (k, v) => setFin(p => ({ ...p, [k]: v }));
+
+  async function guardarYcalcular() {
+    setGuardando(true); setError('');
+    try {
+      await api.put('/finanzas', { ...fin, ...params() });
+      const r = await api.get('/finanzas/rentabilidad', { params: params() });
+      setDatos(r.data);
+    } catch (e) { setError(e.response?.data?.error || 'Error al guardar'); }
+    finally { setGuardando(false); }
+  }
+
+  const pe = datos?.puntoEquilibrio;
+  const meta = datos?.meta;
+  const roi = datos?.roi;
+
+  return (
+    <div className="space-y-5 max-w-5xl">
+      {/* Selector de tienda para roles de red */}
+      {puedeVerRed && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3">
+          <Store size={16} className="text-vida-blue" />
+          <select value={idPV} onChange={e => setIdPV(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="">— Elige una tienda —</option>
+            {(filtros?.sucursales || []).map(s => (
+              <option key={s.idPuntoVenta} value={s.idPuntoVenta}>{s.NombrePuntoVenta || s.NomComercial}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {error && <p className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+
+      {puedeVerRed && !idPV ? (
+        <div className="text-center py-16 text-gray-400">
+          <Calculator size={40} className="mx-auto mb-3 opacity-30" />
+          <p>Elige una tienda para ver su rentabilidad</p>
+        </div>
+      ) : (
+        <>
+          {/* Inputs del empresario */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-5">
+            <h3 className="font-black text-gray-800 flex items-center gap-2 mb-1"><DollarSign size={18} className="text-vida-green" /> Tus números</h3>
+            <p className="text-xs text-gray-400 mb-4">Cárgalos una vez. El sistema calcula todo. (En USD)</p>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+              <CampoNum label="Costos fijos / mes" value={fin.CostosFijosMensualUSD} onChange={v => set('CostosFijosMensualUSD', v)} hint="Alquiler, sueldos, servicios" />
+              <CampoNum label="Inversión inicial" value={fin.InversionInicialUSD} onChange={v => set('InversionInicialUSD', v)} hint="Para calcular el ROI" />
+              <CampoNum label="Meta de ganancia / mes" value={fin.MetaGananciaMensualUSD} onChange={v => set('MetaGananciaMensualUSD', v)} hint="¿Cuánto quieres ganar?" />
+              <CampoNum label="% Comisión delivery" sufijo="%" value={fin.PctComisionDelivery} onChange={v => set('PctComisionDelivery', v)} />
+              <CampoNum label="% Impuestos" sufijo="%" value={fin.PctImpuestos} onChange={v => set('PctImpuestos', v)} />
+              <CampoNum label="% Pasarela de pago" sufijo="%" value={fin.PctPasarela} onChange={v => set('PctPasarela', v)} />
+            </div>
+            <button onClick={guardarYcalcular} disabled={guardando}
+              className="mt-4 flex items-center gap-2 bg-vida-blue text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+              <Save size={15} /> {guardando ? 'Calculando…' : 'Guardar y calcular'}
+            </button>
+          </div>
+
+          {cargando && !datos ? (
+            <p className="text-center text-gray-400 py-8 text-sm">Cargando…</p>
+          ) : datos && (
+            <>
+              {/* Punto de equilibrio */}
+              <div className="bg-vida-blue rounded-2xl p-5 text-white">
+                <p className="text-xs font-bold uppercase tracking-wider opacity-80 flex items-center gap-2"><Target size={14} /> Punto de equilibrio</p>
+                {pe?.ventasMes == null ? (
+                  <p className="mt-2 text-sm opacity-90">Carga tus costos y ten productos con precio y costo para calcularlo.</p>
+                ) : (
+                  <>
+                    <p className="mt-1 text-sm opacity-90">Para no perder, debes vender:</p>
+                    <div className="grid grid-cols-3 gap-4 mt-2">
+                      <div><p className="text-2xl font-black">{USD(pe.ventasMes)}</p><p className="text-xs opacity-70">al mes</p></div>
+                      <div><p className="text-2xl font-black">{USD(pe.ventasDia)}</p><p className="text-xs opacity-70">al día</p></div>
+                      <div><p className="text-2xl font-black">{pe.unidadesDia != null ? Math.ceil(pe.unidadesDia) : '—'}</p><p className="text-xs opacity-70">productos/día</p></div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* 3 modos */}
+              <div>
+                <p className="text-sm font-black text-gray-700 mb-2">Rentabilidad en 3 modos</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <ModoCard titulo="⭐ Solo Producto PLUS" color="#E0A400" m={datos.modos.soloPlus} />
+                  <ModoCard titulo="Mixto (todo)" color="#0A1E3F" m={datos.modos.mixto} />
+                  <ModoCard titulo="Solo Vida normal" color="#64748B" m={datos.modos.soloNormal} />
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1.5">*Margen neto = después de descontar {PCT(datos.pctVariablesTotal)} de costos variables (delivery + impuestos + pasarela).</p>
+              </div>
+
+              {/* Meta diaria + ROI */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                  <p className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2"><Target size={14} className="text-vida-green" /> Meta diaria</p>
+                  {meta?.metaDiaria == null ? (
+                    <p className="mt-2 text-sm text-gray-500">Define tu meta de ganancia y tus costos para calcularla.</p>
+                  ) : (
+                    <>
+                      <p className="mt-1 text-sm text-gray-600">Para ganar <b>{USD(fin.MetaGananciaMensualUSD)}</b> al mes, tu meta diaria es:</p>
+                      <p className="text-3xl font-black text-vida-green mt-1">{USD(meta.metaDiaria)}</p>
+                      <p className="text-sm text-gray-500 mt-1">Hoy llevas {USD(meta.ventasHoy)} · {meta.faltaHoy > 0 ? <span className="text-orange-500 font-bold">te faltan {USD(meta.faltaHoy)}</span> : <span className="text-vida-green font-bold">¡meta alcanzada! 🎉</span>}</p>
+                    </>
+                  )}
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                  <p className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2"><TrendingUp size={14} className="text-vida-blue" /> ROI (últimos 30 días)</p>
+                  <p className="text-3xl font-black text-gray-900 mt-1">{roi?.roiPct == null ? '—' : PCT(roi.roiPct)}</p>
+                  <div className="text-sm text-gray-500 mt-1 space-y-0.5">
+                    <div className="flex justify-between"><span>Ventas 30 días</span><span className="font-semibold text-gray-700">{USD(roi?.ventas30)}</span></div>
+                    <div className="flex justify-between"><span>Ganancia neta est.</span><span className={`font-semibold ${Number(roi?.gananciaNetaMes) >= 0 ? 'text-vida-green' : 'text-red-500'}`}>{USD(roi?.gananciaNetaMes)}</span></div>
+                    <div className="flex justify-between"><span>Inversión inicial</span><span className="font-semibold text-gray-700">{USD(roi?.inversionInicial)}</span></div>
+                  </div>
+                  {roi?.roiPct == null && <p className="text-[11px] text-gray-400 mt-1">Carga tu inversión inicial para ver el ROI.</p>}
+                </div>
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 const TABS = [
   { id: 'ventas',       label: 'Ventas',       icon: BarChart2    },
   { id: 'red',          label: 'Red',          icon: Building2, soloRed: true },
@@ -1086,6 +1284,7 @@ const TABS = [
   { id: 'productos',    label: 'Productos',     icon: TrendingUp   },
   { id: 'inventario',   label: 'Inventario',    icon: Package      },
   { id: 'movimientos',  label: 'Movimientos',   icon: ArrowUpDown  },
+  { id: 'rentabilidad', label: 'Rentabilidad',  icon: Calculator   },
 ];
 
 export default function Reportes() {
@@ -1143,6 +1342,7 @@ export default function Reportes() {
         {tab === 'productos'   && <TabProductos   filtros={filtros} />}
         {tab === 'inventario'  && <TabInventario  filtros={filtros} />}
         {tab === 'movimientos' && <TabMovimientos filtros={filtros} />}
+        {tab === 'rentabilidad' && <TabRentabilidad filtros={filtros} puedeVerRed={puedeVerRed} />}
       </div>
     </div>
   );
