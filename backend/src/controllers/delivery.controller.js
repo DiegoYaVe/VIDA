@@ -816,6 +816,7 @@ export async function crearPedidoApp(request, reply) {
     idPuntoVenta, items, DireccionEntrega,
     UbicacionEntregaLat, UbicacionEntregaLon,
     NotasCliente, MetodoPago = 'EFECTIVO',
+    PuntosUsar = 0,
   } = request.body;
 
   if (!idPuntoVenta || !items?.length) {
@@ -886,8 +887,26 @@ export async function crearPedidoApp(request, reply) {
       }
     }
 
-    // ── Calcular total con los subtotales exactos (precios/promos de BD) ──
-    const TotalUSD = +itemsNorm.reduce((acc, i) => acc + i.Subtotal, 0).toFixed(2);
+    // ── Calcular subtotal con los subtotales exactos (precios/promos de BD) ──
+    const subtotal = +itemsNorm.reduce((acc, i) => acc + i.Subtotal, 0).toFixed(2);
+
+    // ── Canje de puntos (opcional): descuento hasta el subtotal ───────────
+    let puntosUsados = 0, descuentoPuntos = 0;
+    const pedirPuntos = Math.max(0, Math.floor(Number(PuntosUsar) || 0));
+    if (pedirPuntos > 0) {
+      const canjeRate = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'PuntosPorDolarCanje', '100')) || 100;
+      const saldoR = await pool.request()
+        .input('idBranch', sql.BigInt, idBranch)
+        .input('idCuenta', sql.BigInt, idCuenta)
+        .input('idCliente', sql.BigInt, idCliente)
+        .query(`SELECT ISNULL(PuntosSaldo,0) AS PuntosSaldo FROM VIDA_APP_CLIENTES
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+      const saldo = saldoR.recordset[0]?.PuntosSaldo ?? 0;
+      const maxPorSubtotal = Math.floor(subtotal * canjeRate); // no pasar del subtotal
+      puntosUsados = Math.min(pedirPuntos, saldo, maxPorSubtotal);
+      descuentoPuntos = +(puntosUsados / canjeRate).toFixed(2);
+    }
+    const TotalUSD = +(subtotal - descuentoPuntos).toFixed(2);
 
     // ── Obtener nombre de sucursal para broadcast ─────────────────────────
     const pvR = await pool.request()
@@ -919,18 +938,47 @@ export async function crearPedidoApp(request, reply) {
         .input('MetodoPago',          sql.VarChar(20), MetodoPago)
         .input('StatusPago',          sql.VarChar(20), 'PENDIENTE')
         .input('TotalUSD',            sql.Decimal(18,4), TotalUSD)
+        .input('DescuentoPuntosUSD',  sql.Decimal(18,4), descuentoPuntos)
+        .input('PuntosUsados',        sql.Int,           puntosUsados)
         .input('DireccionEntrega',    sql.VarChar(500), DireccionEntrega    || null)
         .input('UbicacionEntregaLat', sql.Decimal(10,7), UbicacionEntregaLat ?? null)
         .input('UbicacionEntregaLon', sql.Decimal(10,7), UbicacionEntregaLon ?? null)
         .input('NotasCliente',        sql.VarChar(500), NotasCliente        || null)
         .query(`INSERT INTO VIDA_PEDIDOS
                   (idBranch,idCuenta,idPedido,idPuntoVenta,idCliente,Canal,Status,
-                   MetodoPago,StatusPago,TotalUSD,DireccionEntrega,
+                   MetodoPago,StatusPago,TotalUSD,DescuentoPuntosUSD,PuntosUsados,DireccionEntrega,
                    UbicacionEntregaLat,UbicacionEntregaLon,NotasCliente,FechaAlta)
                 VALUES
                   (@idBranch,@idCuenta,@idPedido,@idPuntoVenta,@idCliente,@Canal,@Status,
-                   @MetodoPago,@StatusPago,@TotalUSD,@DireccionEntrega,
+                   @MetodoPago,@StatusPago,@TotalUSD,@DescuentoPuntosUSD,@PuntosUsados,@DireccionEntrega,
                    @UbicacionEntregaLat,@UbicacionEntregaLon,@NotasCliente,GETDATE())`);
+
+      // ── Debitar puntos usados (atómico: solo si el saldo alcanza) ────────
+      if (puntosUsados > 0) {
+        const debR = await new sql.Request(transaction)
+          .input('idBranch', sql.BigInt, idBranch)
+          .input('idCuenta', sql.BigInt, idCuenta)
+          .input('idCliente', sql.BigInt, idCliente)
+          .input('Puntos', sql.Int, puntosUsados)
+          .query(`UPDATE VIDA_APP_CLIENTES SET PuntosSaldo = PuntosSaldo - @Puntos
+                  WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente
+                    AND ISNULL(PuntosSaldo,0) >= @Puntos`);
+        if (!debR.rowsAffected[0]) {
+          throw new Error('SALDO_PUNTOS_INSUFICIENTE');
+        }
+        const movId = await nextIdTx(transaction, 'VIDA_CLIENTE_PUNTOS', 'idMovimiento', idBranch, idCuenta);
+        await new sql.Request(transaction)
+          .input('idBranch',    sql.BigInt,      idBranch)
+          .input('idCuenta',    sql.BigInt,      idCuenta)
+          .input('idMovimiento',sql.BigInt,      movId)
+          .input('idCliente',   sql.BigInt,      idCliente)
+          .input('Puntos',      sql.Int,         -puntosUsados)
+          .input('idPedido',    sql.BigInt,      idPedido)
+          .input('Descripcion', sql.VarChar(200), `Canje en pedido #${idPedido} (−$${descuentoPuntos.toFixed(2)})`)
+          .query(`INSERT INTO VIDA_CLIENTE_PUNTOS
+                    (idBranch,idCuenta,idMovimiento,idCliente,Tipo,Puntos,idPedido,Descripcion)
+                  VALUES (@idBranch,@idCuenta,@idMovimiento,@idCliente,'CANJEADO',@Puntos,@idPedido,@Descripcion)`);
+      }
 
       let idDetalle = await nextIdTx(transaction, 'VIDA_PEDIDOS_DETALLE', 'idDetalle', idBranch, idCuenta);
       for (const item of itemsNorm) {
@@ -1047,8 +1095,14 @@ export async function crearPedidoApp(request, reply) {
       request.log,
     );
 
-    return reply.code(201).send({ idPedido, status: 'BUSCANDO_REPARTIDOR' });
+    return reply.code(201).send({
+      idPedido, status: 'BUSCANDO_REPARTIDOR',
+      TotalUSD, subtotal, descuentoPuntos, puntosUsados,
+    });
   } catch (err) {
+    if (String(err.message) === 'SALDO_PUNTOS_INSUFICIENTE') {
+      return reply.code(409).send({ error: 'No tienes puntos suficientes para ese canje.' });
+    }
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al crear pedido' });
   }
@@ -1143,6 +1197,53 @@ export async function historialPedidosCliente(request, reply) {
 // POST /delivery/repartidor/login
 // ══════════════════════════════════════════════════════════════════════════
 
+// Reembolsa al cliente los puntos usados en un pedido cancelado. Idempotente
+// (no reembolsa dos veces). `makeReq` crea un request nuevo sobre el pool o la
+// transacción, según el contexto donde se llame.
+export async function reembolsarPuntosPedido(makeReq, idBranch, idCuenta, idPedido) {
+  const ped = await makeReq()
+    .input('idBranch', sql.BigInt, idBranch)
+    .input('idCuenta', sql.BigInt, idCuenta)
+    .input('idPedido', sql.BigInt, idPedido)
+    .query(`SELECT idCliente, ISNULL(PuntosUsados,0) AS PuntosUsados FROM VIDA_PEDIDOS
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
+  const row = ped.recordset[0];
+  if (!row || !row.idCliente || row.PuntosUsados <= 0) return;
+
+  const ya = await makeReq()
+    .input('idBranch', sql.BigInt, idBranch)
+    .input('idCuenta', sql.BigInt, idCuenta)
+    .input('idPedido', sql.BigInt, idPedido)
+    .query(`SELECT TOP 1 idMovimiento FROM VIDA_CLIENTE_PUNTOS
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido AND Tipo='REEMBOLSO'`);
+  if (ya.recordset.length) return;
+
+  const idR = await makeReq()
+    .input('idBranch', sql.BigInt, idBranch)
+    .input('idCuenta', sql.BigInt, idCuenta)
+    .query(`SELECT ISNULL(MAX(idMovimiento),0)+1 AS next FROM VIDA_CLIENTE_PUNTOS WITH (UPDLOCK, HOLDLOCK)
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+  const movId = idR.recordset[0].next;
+
+  await makeReq()
+    .input('idBranch', sql.BigInt, idBranch)
+    .input('idCuenta', sql.BigInt, idCuenta)
+    .input('idMovimiento', sql.BigInt, movId)
+    .input('idCliente', sql.BigInt, row.idCliente)
+    .input('Puntos', sql.Int, row.PuntosUsados)
+    .input('idPedido', sql.BigInt, idPedido)
+    .input('Descripcion', sql.VarChar(200), `Reembolso por cancelación del pedido #${idPedido}`)
+    .query(`INSERT INTO VIDA_CLIENTE_PUNTOS (idBranch,idCuenta,idMovimiento,idCliente,Tipo,Puntos,idPedido,Descripcion)
+            VALUES (@idBranch,@idCuenta,@idMovimiento,@idCliente,'REEMBOLSO',@Puntos,@idPedido,@Descripcion)`);
+  await makeReq()
+    .input('idBranch', sql.BigInt, idBranch)
+    .input('idCuenta', sql.BigInt, idCuenta)
+    .input('idCliente', sql.BigInt, row.idCliente)
+    .input('Puntos', sql.Int, row.PuntosUsados)
+    .query(`UPDATE VIDA_APP_CLIENTES SET PuntosSaldo = ISNULL(PuntosSaldo,0) + @Puntos
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // CLIENTE — BILLETERA DE PUNTOS (saldo + historial)
 // GET /delivery/cliente/puntos
@@ -1152,6 +1253,7 @@ export async function puntosCliente(request, reply) {
   try {
     const pool = await getPool();
     const puntosPorDolar = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'PuntosPorDolar', '10')) || 10;
+    const puntosPorDolarCanje = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'PuntosPorDolarCanje', '100')) || 100;
 
     const saldoR = await pool.request()
       .input('idBranch', sql.BigInt, idBranch)
@@ -1172,6 +1274,7 @@ export async function puntosCliente(request, reply) {
     return reply.send({
       saldo: saldoR.recordset[0]?.PuntosSaldo ?? 0,
       puntosPorDolar,
+      puntosPorDolarCanje,
       movimientos: movR.recordset,
     });
   } catch (err) {
@@ -1759,6 +1862,11 @@ export async function actualizarStatusPedido(request, reply) {
                     WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
                       AND p.idRepartidor=@idRepartidor
                       AND p.Status IN ('${STATUS_ACTIVOS_REPARTIDOR.join("','")}'))`);
+    }
+
+    // Si se cancela, devolver al cliente los puntos que hubiera canjeado
+    if (nuevoStatus === 'CANCELADO') {
+      await reembolsarPuntosPedido(() => new sql.Request(transaction), idBranch, idCuenta, idPedido);
     }
 
     // Historial del pedido (el panel admin lo muestra como línea de tiempo)
@@ -2833,6 +2941,9 @@ export async function cancelarPedidoCliente(request, reply) {
         error: 'El pedido ya no se puede cancelar (un repartidor ya lo tomó o ya fue procesado)',
       });
     }
+
+    // Devolver los puntos canjeados (si los hubo)
+    await reembolsarPuntosPedido(() => new sql.Request(transaction), idBranch, idCuenta, idPedido);
 
     const histId = await nextIdTx(transaction, 'VIDA_PEDIDOS_HISTORIAL', 'idHistorial', idBranch, idCuenta);
     await new sql.Request(transaction)

@@ -10,6 +10,7 @@
 //   FechaLimiteBusqueda       → cancelación automática (el cliente pudo extenderla)
 import { getPool, sql } from '../db/sqlserver.js';
 import { broadcast } from '../ws/ws.manager.js';
+import { reembolsarPuntosPedido } from '../controllers/delivery.controller.js';
 import { enviarPush } from './push.service.js';
 import { STATUS_ACTIVOS_REPARTIDOR } from './rutas.service.js';
 
@@ -95,6 +96,9 @@ async function cancelarPorTimeout(pool, p, log) {
       .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL
                 (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, UsuAlta)
               VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, @StatusAnterior, @StatusNuevo, @UsuAlta)`);
+
+    // Devolver puntos canjeados si el pedido expiró sin repartidor
+    await reembolsarPuntosPedido(() => new sql.Request(transaction), p.idBranch, p.idCuenta, p.idPedido);
 
     await transaction.commit();
     return true;

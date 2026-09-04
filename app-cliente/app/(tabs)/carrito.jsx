@@ -56,6 +56,18 @@ export default function CarritoScreen() {
   const [referencia, setReferencia] = useState('');
   const [comprobante, setComprobante] = useState(null); // { uri, mimeType, fileName }
 
+  // Puntos / canje
+  const [puntosData, setPuntosData] = useState(null);   // { saldo, puntosPorDolarCanje }
+  const [usarPuntos, setUsarPuntos] = useState(false);
+
+  const canjeRate = puntosData?.puntosPorDolarCanje || 100;
+  const saldoPuntos = puntosData?.saldo || 0;
+  // Puntos aplicables: no más que el saldo ni que el total del carrito
+  const puntosAplicables = Math.min(saldoPuntos, Math.floor(total * canjeRate));
+  const puntosUsar = usarPuntos ? puntosAplicables : 0;
+  const descuentoPuntos = +(puntosUsar / canjeRate).toFixed(2);
+  const totalPagar = +(total - descuentoPuntos).toFixed(2);
+
   useEffect(() => {
     if (metodoPago !== 'PAGO_MOVIL' || datosPM) return;
     api.get('/delivery/pago-movil', { params: { idBranch, idCuenta } })
@@ -76,6 +88,10 @@ export default function CarritoScreen() {
     if (!token) { setDirecciones([]); return; }
     api.get('/delivery/cliente/direcciones')
       .then(r => setDirecciones(r.data || []))
+      .catch(() => {});
+    // Puntos disponibles para canje
+    api.get('/delivery/cliente/puntos')
+      .then(r => setPuntosData(r.data))
       .catch(() => {});
   }, [token]);
 
@@ -154,6 +170,7 @@ export default function CarritoScreen() {
         UbicacionEntregaLon: ubicacion?.Longitud ?? null,
         NotasCliente: notas.trim(),
         MetodoPago: metodoPago,
+        PuntosUsar: puntosUsar,
       };
       const res = await api.post('/delivery/pedido', payload);
       const idPedido = res.data?.idPedido ?? res.data?.pedido?.idPedido;
@@ -339,7 +356,7 @@ export default function CarritoScreen() {
                     <PMRow label="Teléfono" valor={datosPM.Telefono} />
                     <PMRow label="Cédula"   valor={datosPM.Cedula} />
                     {datosPM.Titular ? <PMRow label="Titular" valor={datosPM.Titular} /> : null}
-                    <PMRow label="Monto" valor={`$${total.toFixed(2)}`} destacado />
+                    <PMRow label="Monto" valor={`$${totalPagar.toFixed(2)}`} destacado />
                   </View>
 
                   <Text style={styles.inputLabel}>Nº de referencia *</Text>
@@ -384,15 +401,40 @@ export default function CarritoScreen() {
           />
         </View>
 
+        {/* Canje de puntos */}
+        {token && saldoPuntos > 0 && puntosAplicables > 0 && (
+          <TouchableOpacity style={styles.puntosBox} activeOpacity={0.8}
+            onPress={() => setUsarPuntos(v => !v)}>
+            <View style={styles.puntosIco}>
+              <Ionicons name="star" size={18} color="#F59E0B" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.puntosBoxTitle}>Usar mis puntos</Text>
+              <Text style={styles.puntosBoxSub}>
+                Tienes {saldoPuntos.toLocaleString('es-VE')} pts · aplicas {puntosAplicables.toLocaleString('es-VE')} = −${(puntosAplicables / canjeRate).toFixed(2)}
+              </Text>
+            </View>
+            <View style={[styles.toggle, usarPuntos && styles.toggleOn]}>
+              <View style={[styles.toggleDot, usarPuntos && styles.toggleDotOn]} />
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* Summary */}
         <View style={styles.summary}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal</Text>
             <Text style={styles.summaryValue}>${total.toFixed(2)}</Text>
           </View>
+          {descuentoPuntos > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={[styles.summaryLabel, { color: '#F59E0B' }]}>Descuento puntos ({puntosUsar.toLocaleString('es-VE')} pts)</Text>
+              <Text style={[styles.summaryValue, { color: '#F59E0B' }]}>−${descuentoPuntos.toFixed(2)}</Text>
+            </View>
+          )}
           <View style={[styles.summaryRow, styles.summaryTotal]}>
             <Text style={styles.summaryTotalLabel}>Total</Text>
-            <Text style={styles.summaryTotalValue}>${total.toFixed(2)}</Text>
+            <Text style={styles.summaryTotalValue}>${totalPagar.toFixed(2)}</Text>
           </View>
         </View>
 
@@ -406,7 +448,7 @@ export default function CarritoScreen() {
           ) : (
             <>
               <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-              <Text style={styles.pedidoBtnText}>Hacer pedido — ${total.toFixed(2)}</Text>
+              <Text style={styles.pedidoBtnText}>Hacer pedido — ${totalPagar.toFixed(2)}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -566,6 +608,18 @@ const styles = StyleSheet.create({
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   summaryLabel: { color: '#718096', fontSize: 14 },
   summaryValue: { color: '#1A202C', fontSize: 14, fontWeight: '600' },
+  puntosBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A',
+    borderRadius: 14, padding: 14, marginHorizontal: 16, marginTop: 8,
+  },
+  puntosIco: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center' },
+  puntosBoxTitle: { fontSize: 14, fontWeight: '800', color: '#92400E' },
+  puntosBoxSub: { fontSize: 12, color: '#B45309', marginTop: 2 },
+  toggle: { width: 44, height: 26, borderRadius: 13, backgroundColor: '#E2E8F0', padding: 3, justifyContent: 'center' },
+  toggleOn: { backgroundColor: '#F59E0B' },
+  toggleDot: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff' },
+  toggleDotOn: { alignSelf: 'flex-end' },
   summaryTotal: {
     borderTopWidth: 1,
     borderTopColor: '#EDF2F7',
