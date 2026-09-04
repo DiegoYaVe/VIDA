@@ -1,11 +1,13 @@
 // src/pages/Precios.jsx
 // Precios y Promociones (T-0048 + T-0049).
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Tag, Percent, DollarSign, Layers, RefreshCw, Plus, Pencil, Trash2,
   X, Save, Search, AlertTriangle, CheckCircle, Circle, Package,
+  Image as ImageIcon, Download, Share2,
 } from 'lucide-react';
-import api from '../services/api.js';
+import QRCode from 'qrcode';
+import api, { API_ORIGIN } from '../services/api.js';
 import { useAuthStore } from '../store/authStore.js';
 
 const USD = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -375,9 +377,236 @@ function TabPrecios({ puedeEscribir }) {
 }
 
 // ─── Página principal ──────────────────────────────────────────────────────────
+// ─── TAB: Flyer / Marketing ───────────────────────────────────────────────────
+const STORE_BASE = 'https://app.comercializadoravida.com';
+
+// Carga una imagen (con CORS para poder exportarla en el canvas)
+function cargarImagen(src, crossOrigin = true) {
+  return new Promise((resolve) => {
+    if (!src) return resolve(null);
+    const img = new window.Image();
+    if (crossOrigin) img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+function TabFlyer({ productos }) {
+  const { usuario } = useAuthStore();
+  const canvasRef = useRef(null);
+  const [tiendas, setTiendas] = useState([]);
+  const [idPV, setIdPV] = useState(usuario?.idPuntoVenta ? String(usuario.idPuntoVenta) : '');
+  const [idProducto, setIdProducto] = useState('');
+  const [precioPromo, setPrecioPromo] = useState('');
+  const [mensaje, setMensaje] = useState('¡Aprovecha esta oferta!');
+  const [dibujando, setDibujando] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.get('/sucursales/puntos-venta').then(r => {
+      setTiendas(r.data || []);
+      if (!idPV && r.data?.length) setIdPV(String(r.data[0].idPuntoVenta));
+    }).catch(() => {});
+  }, []); // eslint-disable-line
+
+  const producto = productos.find(p => String(p.idProducto) === String(idProducto));
+  const tienda   = tiendas.find(t => String(t.idPuntoVenta) === String(idPV));
+
+  const dibujar = useCallback(async () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !producto) return;
+    setDibujando(true); setError('');
+    const W = 1080, H = 1350;
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // Fondo
+    ctx.fillStyle = '#F7FAFC'; ctx.fillRect(0, 0, W, H);
+
+    // Header (degradado VIDA)
+    const grad = ctx.createLinearGradient(0, 0, W, 0);
+    grad.addColorStop(0, '#54C4E0'); grad.addColorStop(1, '#0A1E3F');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, 190);
+    ctx.fillStyle = '#fff';
+    ctx.font = '900 64px Arial'; ctx.textBaseline = 'middle';
+    ctx.fillText('VIDA', 60, 80);
+    ctx.font = '600 30px Arial';
+    ctx.fillText((tienda?.NomComercial || tienda?.Nombre || 'Comercializadora VIDA').toUpperCase(), 60, 140);
+
+    // Tarjeta blanca del producto
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(60, 240, W - 120, 720);
+
+    // Imagen del producto (contain)
+    let taint = false;
+    const imgSrc = producto.ImagenProducto
+      ? (String(producto.ImagenProducto).startsWith('http') ? producto.ImagenProducto : API_ORIGIN + producto.ImagenProducto)
+      : null;
+    const img = await cargarImagen(imgSrc);
+    const boxX = 60, boxY = 260, boxW = W - 120, boxH = 540;
+    if (img) {
+      const r = Math.min(boxW / img.width, boxH / img.height);
+      const iw = img.width * r, ih = img.height * r;
+      try { ctx.drawImage(img, boxX + (boxW - iw) / 2, boxY + (boxH - ih) / 2, iw, ih); }
+      catch { taint = true; }
+    } else {
+      ctx.fillStyle = '#EDF2F7'; ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.fillStyle = '#A0AEC0'; ctx.font = '40px Arial'; ctx.textAlign = 'center';
+      ctx.fillText('Sin imagen', W / 2, boxY + boxH / 2); ctx.textAlign = 'left';
+    }
+
+    // Badge PLUS
+    if (producto.EsProductoPlus) {
+      ctx.fillStyle = '#F59E0B'; ctx.fillRect(W - 220, 270, 140, 54);
+      ctx.fillStyle = '#fff'; ctx.font = '900 34px Arial'; ctx.textAlign = 'center';
+      ctx.fillText('PLUS', W - 150, 298); ctx.textAlign = 'left';
+    }
+
+    // Nombre del producto (envuelto)
+    ctx.fillStyle = '#0A1E3F'; ctx.font = '900 52px Arial';
+    const nombre = String(producto.Nombre || '');
+    const palabras = nombre.split(' '); let linea = '', y = 850;
+    for (const w of palabras) {
+      const test = linea ? linea + ' ' + w : w;
+      if (ctx.measureText(test).width > W - 160 && linea) { ctx.fillText(linea, 60, y); y += 60; linea = w; }
+      else linea = test;
+    }
+    ctx.fillText(linea, 60, y); y += 70;
+
+    // Precio
+    const precio = Number(producto.PrecioUSD || 0);
+    const promo = precioPromo !== '' ? Number(precioPromo) : null;
+    if (promo != null && promo > 0 && promo < precio) {
+      ctx.fillStyle = '#A0AEC0'; ctx.font = '600 40px Arial';
+      const orig = `$${precio.toFixed(2)}`;
+      ctx.fillText(orig, 60, y);
+      const ow = ctx.measureText(orig).width;
+      ctx.strokeStyle = '#A0AEC0'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(60, y); ctx.lineTo(60 + ow, y); ctx.stroke();
+      ctx.fillStyle = '#5BBE6A'; ctx.font = '900 84px Arial';
+      ctx.fillText(`$${promo.toFixed(2)}`, 60, y + 60);
+    } else {
+      ctx.fillStyle = '#5BBE6A'; ctx.font = '900 84px Arial';
+      ctx.fillText(`$${precio.toFixed(2)}`, 60, y + 30);
+    }
+
+    // Mensaje
+    if (mensaje.trim()) {
+      ctx.fillStyle = '#4A5568'; ctx.font = '600 36px Arial';
+      ctx.fillText(mensaje.trim().slice(0, 60), 60, 1090);
+    }
+
+    // QR (abajo derecha) — apunta a la tienda
+    const qrData = `${STORE_BASE}/t/${idPV || ''}`;
+    try {
+      const qrUrl = await QRCode.toDataURL(qrData, { margin: 1, width: 240 });
+      const qrImg = await cargarImagen(qrUrl, false);
+      if (qrImg) ctx.drawImage(qrImg, W - 280, H - 300, 220, 220);
+      ctx.fillStyle = '#0A1E3F'; ctx.font = '700 26px Arial'; ctx.textAlign = 'right';
+      ctx.fillText('Escanea y compra', W - 60, H - 70);
+      ctx.font = '400 22px Arial'; ctx.fillStyle = '#718096';
+      ctx.fillText(STORE_BASE.replace('https://', ''), W - 60, H - 40);
+      ctx.textAlign = 'left';
+    } catch { /* qr opcional */ }
+
+    setDibujando(false);
+    if (taint) setError('La imagen del producto no permitió exportar. Intenta de nuevo o usa un producto sin foto.');
+  }, [producto, tienda, precioPromo, mensaje, idPV]);
+
+  useEffect(() => { dibujar(); }, [dibujar]);
+
+  function descargar() {
+    try {
+      const url = canvasRef.current.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = url; a.download = `flyer-${(producto?.Nombre || 'vida').replace(/\s+/g, '-')}.png`;
+      a.click();
+    } catch {
+      setError('No se pudo exportar (permiso de la imagen). La foto del producto puede estar bloqueando el canvas.');
+    }
+  }
+
+  function compartirWhatsApp() {
+    const p = precioPromo !== '' ? Number(precioPromo) : Number(producto?.PrecioUSD || 0);
+    const txt = `${mensaje.trim()}\n${producto?.Nombre} — $${p.toFixed(2)}\n${STORE_BASE}/t/${idPV || ''}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`, '_blank');
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl">
+      {/* Controles */}
+      <div className="space-y-4">
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-3">
+          <h3 className="font-black text-gray-800 flex items-center gap-2"><ImageIcon size={18} className="text-vida-blue" /> Crear promo hoy</h3>
+          <p className="text-xs text-gray-400 -mt-1">Elige un producto y genera un flyer con QR para compartir.</p>
+
+          {tiendas.length > 1 && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Tienda</label>
+              <select value={idPV} onChange={e => setIdPV(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                {tiendas.map(t => <option key={t.idPuntoVenta} value={t.idPuntoVenta}>{t.NomComercial || t.Nombre}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Producto *</label>
+            <select value={idProducto} onChange={e => { setIdProducto(e.target.value); setPrecioPromo(''); }}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+              <option value="">— Elige un producto —</option>
+              {productos.map(p => <option key={p.idProducto} value={p.idProducto}>{p.Nombre} — ${Number(p.PrecioUSD || 0).toFixed(2)}</option>)}
+            </select>
+          </div>
+
+          {producto && (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Precio de promoción (opcional)</label>
+                <input type="number" step="0.01" value={precioPromo} onChange={e => setPrecioPromo(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder={`Precio normal: $${Number(producto.PrecioUSD || 0).toFixed(2)}`} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Mensaje</label>
+                <input value={mensaje} onChange={e => setMensaje(e.target.value)} maxLength={60}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="¡Aprovecha esta oferta!" />
+              </div>
+              {error && <p className="text-amber-600 text-xs bg-amber-50 px-3 py-2 rounded-lg">{error}</p>}
+              <div className="flex gap-2 pt-1">
+                <button onClick={descargar} disabled={dibujando}
+                  className="flex items-center gap-2 bg-vida-blue text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+                  <Download size={15} /> Descargar PNG
+                </button>
+                <button onClick={compartirWhatsApp}
+                  className="flex items-center gap-2 bg-vida-green text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90">
+                  <Share2 size={15} /> WhatsApp
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400">El QR abre la tienda: <code>{STORE_BASE}/t/{idPV || '—'}</code></p>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Vista previa */}
+      <div className="flex items-start justify-center">
+        {producto ? (
+          <canvas ref={canvasRef} className="w-full max-w-sm rounded-2xl shadow-lg border border-gray-100" />
+        ) : (
+          <div className="text-center text-gray-300 py-16">
+            <ImageIcon size={48} className="mx-auto mb-3 opacity-30" />
+            <p className="text-gray-400">Elige un producto para ver el flyer</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const TABS = [
   { id: 'promos',  label: 'Promociones', icon: Tag },
   { id: 'precios', label: 'Precios',     icon: DollarSign },
+  { id: 'flyer',   label: 'Flyer',       icon: ImageIcon },
 ];
 
 export default function Precios() {
@@ -419,6 +648,7 @@ export default function Precios() {
       <div className="p-6">
         {tab === 'promos'  && <TabPromociones puedeEscribir={puedeEscribir} categorias={categorias} productos={productos} />}
         {tab === 'precios' && <TabPrecios puedeEscribir={puedeEscribir} />}
+        {tab === 'flyer'   && <TabFlyer productos={productos} />}
       </div>
     </div>
   );

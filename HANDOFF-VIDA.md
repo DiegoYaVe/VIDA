@@ -77,7 +77,7 @@ pos-venezuela/
 | C) Dashboard de ventas / compras | ✅ |
 | **C) Metas** (diaria/semanal/mensual + barra de progreso + insignia) | ✅ (esta sesión) |
 | D) Inventario tiempo real, pedidos entrantes, cuentas por pagar (Matriz), base de clientes | ✅ |
-| E) Marketing (flyer automático, replicar redes, cupones) | ❌ |
+| **E) Marketing — Flyer + QR** ("Crear promo hoy": elige producto, precio promo, genera flyer PNG con QR de la tienda para WhatsApp/IG) | ✅ parcial (esta sesión). Falta: replicar redes, cupones automáticos |
 | F) Academia Vida (cursos/videos + puntos por ver) | ❌ |
 
 ### Corporativo / Repartidor
@@ -89,6 +89,8 @@ pos-venezuela/
 
 Del más reciente al más antiguo:
 
+- **Marketing — Flyer + QR** (frontend, tab "Flyer" en Precios): "Crear promo hoy" — elige un producto de su inventario, precio de promoción opcional y mensaje; genera un **flyer 1080×1350 en canvas** (header VIDA, foto, nombre, precio normal tachado + promo, badge PLUS, **QR** que apunta a `https://app.comercializadoravida.com/t/{idPuntoVenta}`) y lo **descarga en PNG** o comparte texto por WhatsApp. **Nueva dependencia frontend: `qrcode@1.5.4`** (correr `npm install` en `frontend/` al desplegar). Sin cambios de backend ni migración.
+- `87c50fa9` **DOCS**: este HANDOFF.
 - `e14c4c34` **Metas del empresario** — tab "Metas" en Reportes. Tabla `VIDA_TIENDA_METAS`; endpoints `GET/PUT /metas`, `GET /metas/progreso` (ventas POS entregadas hoy / últimos 7 días / mes actual vs meta, % + insignia). (sql/22)
 - `57022423` **Puntos fase 2 — canje + reembolso** — `crearPedidoApp` acepta `PuntosUsar` (descuento topado a saldo y subtotal, débito atómico, movimiento `CANJEADO`); helper `reembolsarPuntosPedido` idempotente enganchado en las 3 rutas de cancelación (repartidor, cliente, dispatch job). Checkout del cliente con "Usar mis puntos". Config `PuntosPorDolarCanje=100`. (sql/21)
 - `8c0cfed8` **Puntos v1 — ganar + billetera + historial** — tabla `VIDA_CLIENTE_PUNTOS` (ledger) + `PuntosSaldo` en cliente + config `PuntosPorDolar=10`. Acreditación automática e idempotente al ENTREGAR (dentro de la transacción). `GET /delivery/cliente/puntos`. UI: tarjeta "Mis Puntos VIDA" en perfil + pantalla `mis-puntos`. (sql/20)
@@ -131,6 +133,13 @@ Del más reciente al más antiguo:
 - `GET /delivery/cliente/puntos` → `{saldo, puntosPorDolar, puntosPorDolarCanje, movimientos}`. UI: perfil + pantalla `mis-puntos` + sección "Usar mis puntos" en `carrito.jsx`.
 - **Pendiente fase 3:** catálogo de premios (canje por premio específico) y vencimiento de puntos.
 
+### Marketing — Flyer + QR (`frontend/src/pages/Precios.jsx`, tab "Flyer")
+- **Solo frontend**, sin backend ni migración. Componente `TabFlyer`.
+- Dep nueva: **`qrcode@1.5.4`** (frontend). Dibuja el flyer en un `<canvas>` 1080×1350 y exporta PNG (`canvas.toDataURL`); QR generado con `QRCode.toDataURL`.
+- El QR apunta a `STORE_BASE/t/{idPuntoVenta}` con `STORE_BASE = https://app.comercializadoravida.com` (constante en el archivo). **Ese deep-link/página de tienda aún no existe en web** — cuando exista, apuntar ahí (o a un universal link que abra la app). La tienda se toma de `usuario.idPuntoVenta` / `/sucursales/puntos-venta`.
+- Ojo CORS: para exportar la foto del producto en el canvas, la imagen se carga con `crossOrigin='anonymous'`; el backend ya manda CORP cross-origin y CORS a `FRONTEND_URL`. Si la imagen "tainta" el canvas, se captura el error y se avisa (fallback sin foto).
+- **Pendiente:** replicar publicaciones de la matriz en redes de la tienda; cupones automáticos ("cliente no viene hace 15 días").
+
 ---
 
 ## 6. Cosas de entorno / operación (para no tropezar)
@@ -145,9 +154,8 @@ Del más reciente al más antiguo:
 
 ## 7. Próximos candidatos (sugerencia de prioridad)
 
-Ganchos grandes de empresario (Rentabilidad+Plus) y consumidor (Puntos completo) ya están. Siguientes de mayor impacto:
-1. **Marketing del empresario (E)** — botón "Crear promo hoy": flyer automático de un producto con precio + QR de la tienda para WhatsApp/IG. Alto valor, autocontenido.
-2. **Salud – consumo de agua (D)** — engagement diario del consumidor (meta de vasos, push, gráfica, puntos extra por racha).
+Ganchos grandes de empresario (Rentabilidad+Plus+Metas+**Flyer**) y consumidor (Puntos completo) ya están. Siguientes de mayor impacto:
+1. **Salud – consumo de agua (D)** — engagement diario del consumidor (meta de vasos, push, gráfica, puntos extra por racha).
 3. **Membresía Club Vida (E)** — QR de membresía por nivel, eventos, beneficios.
 4. **Academia Vida (F)** — cursos + puntos al empresario.
 5. **Fidelización fase 3** — catálogo de premios + vencimiento de puntos.
