@@ -1,6 +1,8 @@
 # VIDA / VenezPOS — Handoff de contexto para otro Claude
 
 > Documento para que otro asistente retome el proyecto sabiendo **qué ya está construido**, **cómo está armado** y **en qué seguir**. Escrito 2026-09-04.
+>
+> **Actualizado 2026-09-04** tras una sesión de auditoría + correcciones: se arreglaron un exploit de puntos, el API sobre HTTPS (ahora mismo origen) y la página pública de tienda del QR. Ver §4.
 
 ---
 
@@ -33,7 +35,7 @@ pos-venezuela/
 - **Git remote:** `https://github.com/DiegoYaVe/VIDA.git`
 - **Rama de trabajo:** `feature/multipedido-rutas-mapas` (todo el trabajo de esta sesión está aquí y pusheado). Rama principal en GitHub: `sandbox`.
 - **Credencial local de git:** `diegoyanez117` (a veces da 403 intermitente al push; reintentar suele funcionar).
-- **Producción:** SmarterASP.NET / IIS + iisnode. Frontend SPA por `web.config`. API en `israceballos-...mtempurl.com`. Dominio nuevo del sistema: **https://app.comercializadoravida.com**.
+- **Producción:** SmarterASP.NET / IIS + iisnode, todo bajo **https://app.comercializadoravida.com**: el panel (SPA por `web.config`) en la raíz y el **API como aplicación IIS en `/api`** del mismo sitio. El host viejo `israceballos-001-site18.mtempurl.com` **está muerto** — sin binding HTTPS y 404 en todas las rutas. No apuntar ahí. Pasos y verificación en §6.
 - **BD de QA (la que usa el backend local):** SQL Server `sql5065.site4now.net`, base `db_a3fa0b_vidaqa`. ⚠️ **Producción puede usar otra base**: confirmar antes de correr migraciones en prod. **NO es MySQL** (el usuario una vez corrió un script en el phpMyAdmin equivocado de otro proyecto — VIDA es SQL Server).
 
 ---
@@ -41,11 +43,12 @@ pos-venezuela/
 ## 2. Convenciones y arquitectura clave
 
 - **Roles (`TipoUsuario`)** y niveles: `SUPER_ADMIN`(0), `ADMIN_PAIS`(1), `ADMIN_ESTADO`(1), `ADMIN`(2, = admin de **tienda**), `SUPERVISOR`(3), `CAJERO`/`CASHIER`(4).
-- **Roles de RED** (ven toda la red): `SUPER_ADMIN`, `ADMIN_PAIS`, `ADMIN_ESTADO`. Los demás (`ADMIN` de tienda, `SUPERVISOR`, `CAJERO`) están **scopeados a su `idPuntoVenta`**. Este patrón `esRed` está replicado en varios controllers (dashboard, inventario, pedidos, reportes, caja, matriz, finanzas). **Al agregar endpoints que exponen datos por tienda, respetar este scope.**
+- **Roles de RED** (ven toda la red): `SUPER_ADMIN`, `ADMIN_PAIS`, `ADMIN_ESTADO`. Los demás (`ADMIN` de tienda, `SUPERVISOR`, `CAJERO`) están **scopeados a su `idPuntoVenta`**. **Ojo:** no es un solo patrón sino **tres variantes** del mismo control — `esRed` (dashboard, inventario, pedidos, caja, matriz, finanzas), `pvEfectivo`, y listas de roles escritas a mano *inline* (`reportes.controller.js:14`). Van a divergir. **Al agregar endpoints que exponen datos por tienda, respetar este scope**, y si se toca el tema, unificarlas en un helper compartido.
 - **Portales** (`backend/src/config/portales.js`, fuente de verdad): SUPER_ADMIN/ADMIN_PAIS → `CORPORATIVO`; ADMIN/ADMIN_ESTADO/SUPERVISOR/CAJERO → `EMPRESARIO`. También `CLIENTE` y `REPARTIDOR`.
 - **Gestión de roles:** `puedeGestionarRol` es **estricto** (`>`): solo creas/editas usuarios de rol **inferior** al tuyo. Solo **un ADMIN por tienda**.
 - **Config de cuenta:** dos tablas de config → `VIDA_CONFIGURACION` (clave/valor, ej. SMTP_*, `URL_SISTEMA`) y `VIDA_CONFIG_DELIVERY` (clave/valor, ej. `PuntosPorDolar`, `PuntosPorDolarCanje`, `RadioBusquedaKm`). Helpers `getConfig` (usuarios) y `getConfigVal` (delivery).
 - **URLs por ambiente:** los links de correo/API se resuelven por ambiente: `usuarios.controller.resolverUrlSistema()` (frontend) y `delivery.controller.resolverBaseUrl(request)` (API). Prioridad: env var → si no es producción `localhost` → en prod valor de BD / derivado del request. En `.env` de prod conviene fijar `NODE_ENV=production`, `FRONTEND_URL`, `BASE_URL`.
+- **Mismo origen (desde 2026-09-04):** el panel y el API se sirven desde `https://app.comercializadoravida.com`, con el backend montado como **aplicación IIS en `/api`** de ese mismo sitio. Consecuencias: el panel hereda el certificado (no hay mixed content posible), no hay CORS entre panel y API, y **el build de producción del panel no lleva dominio hardcodeado** — `frontend/.env.production` tiene `VITE_API_URL` y `VITE_WS_URL` vacías a propósito y el código usa `/api` y `wss://<host actual>/api/ws` relativos (`services/api.js`, `hooks/useWebSocket.js`). Las apps Expo sí llevan la URL absoluta (`https://.../api`, `wss://.../api/ws`) en sus `eas.json`. El host viejo `israceballos-001-site18.mtempurl.com` **está muerto** (sin HTTPS y 404 en todas las rutas): no volver a apuntar ahí.
 - **Imágenes:** se sirven desde `/uploads/...` (backend). Helmet lleva `crossOriginResourcePolicy: { policy: 'cross-origin' }` para que el front (otro origen) pueda mostrarlas. Producto: `POST /inventario/productos/:id/imagen` (multipart) → `uploads/productos/`.
 - **Body JSON vacío:** `app.js` registra un content-type parser que trata un body JSON vacío como `{}` (acciones POST sin payload, ej. "+1 vaso"). Sin esto Fastify responde 400 `FST_ERR_CTP_EMPTY_JSON_BODY`.
 - **Migraciones:** ejecutar los `.sql` de `sql/` en orden en SQL Server. Contienen `GO` como separador de batch. En esta sesión las corrí contra QA con un runner temporal Node (`mssql`), no hay migrador automático en el repo.
@@ -78,7 +81,7 @@ pos-venezuela/
 | C) Dashboard de ventas / compras | ✅ |
 | **C) Metas** (diaria/semanal/mensual + barra de progreso + insignia) | ✅ (esta sesión) |
 | D) Inventario tiempo real, pedidos entrantes, cuentas por pagar (Matriz), base de clientes | ✅ |
-| **E) Marketing — Flyer + QR** ("Crear promo hoy": elige producto, precio promo, genera flyer PNG con QR de la tienda para WhatsApp/IG) | ✅ parcial (esta sesión). Falta: replicar redes, cupones automáticos |
+| **E) Marketing — Flyer + QR** ("Crear promo hoy": elige producto, precio promo, genera flyer PNG con QR de la tienda para WhatsApp/IG) | ✅ parcial. El QR ya abre una **página pública de tienda** (`/t/:idPuntoVenta`, commit `30b81e1e`). Falta: replicar redes, cupones automáticos |
 | F) Academia Vida (cursos/videos + puntos por ver) | ❌ |
 
 ### Corporativo / Repartidor
@@ -86,7 +89,17 @@ pos-venezuela/
 
 ---
 
-## 4. Lo que se hizo en ESTA sesión (commits en `feature/multipedido-rutas-mapas`)
+## 4. Lo que se hizo (commits en `feature/multipedido-rutas-mapas`)
+
+### 4.a — Sesión de correcciones (2026-09-04)
+
+Salieron de auditar el código contra este mismo documento. Del más reciente al más antiguo:
+
+- `30b81e1e` **Página pública de tienda `/t/:idPuntoVenta`** — el QR de los flyers apuntaba a una página que no existía: todo flyer impreso llevaba a un 404. Nuevo endpoint público `GET /delivery/tienda/:idPuntoVenta?idBranch=&idCuenta=` (datos públicos de una tienda activa) + `frontend/src/pages/Tienda.jsx` en ruta pública, fuera del `Layout` y de `PublicRoute`. El catálogo reusa `/delivery/productos`. **Además el QR estaba mal formado:** `idPuntoVenta` solo no identifica una tienda (la PK es `idBranch+idCuenta+idPuntoVenta`), así que ahora el enlace lleva el tenant: `/t/8?b=1&c=1`. La página asume 1/1 si faltan, para que los flyers ya impresos sigan sirviendo. Sin migración. *Falta verificar cómo se ve renderizada.*
+- `33607199` **El API pasa a HTTPS, sirviéndose desde el mismo origen** — el bundle desplegado tenía compilado `http://israceballos-001-site18.mtempurl.com/api`: el navegador lo bloqueaba por mixed content y además ese host devuelve 404 en todo. Ver el bullet "Mismo origen" en §2 y los pasos de despliegue en §6. Incluye: exclusión de `/api` y `/uploads` en el rewrite del SPA (`frontend/public/web.config`), y `/uploads` + `/health` expuestos **también** bajo `/api` en el backend (montado en `/api`, las rutas sin prefijo no le llegan). Sin migración.
+- `c07aa003` **FIX exploit: el bono de racha de hidratación se cobraba sin límite** (sql/24) — ver §5.
+
+### 4.b — Sesión de features (anterior)
 
 Del más reciente al más antiguo:
 
@@ -106,8 +119,10 @@ Del más reciente al más antiguo:
 - `c08eb72f` + `ea801dcf` **URLs por ambiente** (correos y API base local vs prod).
 - (Lotes reunión 21-ago, en commits previos `6809bb53` y anteriores) Ciudades por estado (`VIDA_CUENTA_CIUDADES`, sql/16, ~256 ciudades reales de Venezuela), razón social + lada de país (sql/17), rename visible "punto de venta"→"Tienda", proveedores activos en dashboard, wizard de alta de tienda con back + país default Venezuela.
 
-### Migraciones nuevas de esta sesión (correr en prod en orden)
-`16_ciudades.sql`, `17_razonsocial_lada.sql`, `18_producto_plus.sql`, `19_tienda_finanzas.sql`, `20_puntos_fidelizacion.sql`, `21_canje_puntos.sql`, `22_tienda_metas.sql`.
+### Migraciones pendientes de correr en prod (en orden)
+`16_ciudades.sql`, `17_razonsocial_lada.sql`, `18_producto_plus.sql`, `19_tienda_finanzas.sql`, `20_puntos_fidelizacion.sql`, `21_canje_puntos.sql`, `22_tienda_metas.sql`, `23_hidratacion.sql`, `24_hidratacion_bonus_idempotente.sql`.
+
+**Estado:** 16→24 aplicadas y verificadas en **QA** (`db_a3fa0b_vidaqa`). En **producción no hay ninguna aplicada que se sepa** — ni siquiera está confirmado a qué base apunta el API de prod. La 24 es obligatoria antes de desplegar el backend: sin sus columnas el módulo de hidratación falla.
 
 ---
 
@@ -138,14 +153,16 @@ Del más reciente al más antiguo:
 ### Marketing — Flyer + QR (`frontend/src/pages/Precios.jsx`, tab "Flyer")
 - **Solo frontend**, sin backend ni migración. Componente `TabFlyer`.
 - Dep nueva: **`qrcode@1.5.4`** (frontend). Dibuja el flyer en un `<canvas>` 1080×1350 y exporta PNG (`canvas.toDataURL`); QR generado con `QRCode.toDataURL`.
-- El QR apunta a `STORE_BASE/t/{idPuntoVenta}` con `STORE_BASE = https://app.comercializadoravida.com` (constante en el archivo). **Ese deep-link/página de tienda aún no existe en web** — cuando exista, apuntar ahí (o a un universal link que abra la app). La tienda se toma de `usuario.idPuntoVenta` / `/sucursales/puntos-venta`.
+- El QR apunta a `STORE_BASE/t/{idPuntoVenta}?b={idBranch}&c={idCuenta}` con `STORE_BASE = https://app.comercializadoravida.com` (constante en el archivo). **Esa página ya existe** (`frontend/src/pages/Tienda.jsx`, commit `30b81e1e`). El tenant va en la query porque `idPuntoVenta` solo no identifica una tienda. La tienda se toma de `usuario.idPuntoVenta` / `/sucursales/puntos-venta`.
 - Ojo CORS: para exportar la foto del producto en el canvas, la imagen se carga con `crossOrigin='anonymous'`; el backend ya manda CORP cross-origin y CORS a `FRONTEND_URL`. Si la imagen "tainta" el canvas, se captura el error y se avisa (fallback sin foto).
 - **Pendiente:** replicar publicaciones de la matriz en redes de la tienda; cupones automáticos ("cliente no viene hace 15 días").
 
 ### Salud — "Mi Consumo Vida" (hidratación) (`delivery.controller.js` + `app-cliente/app/mi-consumo.jsx`)
 - Config en el cliente: `HidratacionActiva/MetaVasos/MlVaso`. Registro diario en `VIDA_CLIENTE_HIDRATACION_DIA` (upsert +1 por tap). Config global `PuntosRachaHidratacion=50`.
 - Endpoints (authenticateCliente): `GET/PUT /delivery/cliente/hidratacion`, `POST /delivery/cliente/hidratacion/vaso` (+1, devuelve vasosHoy/meta/mlHoy/racha/bonus), `POST /delivery/cliente/hidratacion/quitar` (-1).
-- **Racha:** `contarRachaHidratacion` cuenta días consecutivos (UTC) terminando hoy con vasos≥meta. Al alcanzar exactamente la meta hoy y `racha % 7 === 0`, acredita `PuntosRachaHidratacion` (una vez por día, vía `acreditarPuntosCliente`).
+- **Racha:** `contarRachaHidratacion` cuenta días consecutivos terminando hoy con vasos≥meta. **No es UTC** (este documento lo decía mal): el "hoy" sale de `CAST(GETDATE() AS DATE)` del SQL Server, o sea hora local del servidor — que está en SmarterASP, **no en Venezuela**. Un vaso registrado de noche en Caracas puede contar como el día siguiente.
+- **El bono de racha se pagaba infinitas veces** (arreglado en `c07aa003` + sql/24). `acreditarPuntosCliente` no era idempotente y existe `POST /hidratacion/quitar`: alternando quitar/tomar vaso se cobraba en bucle, y esos puntos se canjean por dinero (100 pts = 1 USD). Medido en QA: **50 → 250 puntos en 4 toques**. Ahora hay dos candados: (1) `VIDA_CLIENTE_HIDRATACION_DIA.BonusPuntos`, reclamado con un UPDATE condicional + `@@ROWCOUNT` — un solo pago por día, atómico ante concurrencia; (2) `VIDA_APP_CLIENTES.HidratacionRachaPremiada`, el último múltiplo de 7 pagado, que se reinicia solo si la racha se rompe y arranca más corta (si no, el usuario legítimo que reempieza no cobraría nunca más).
+- **Riesgo residual:** bajar `HidratacionMetaVasos` recalcula la racha hacia atrás, así que se puede forzar un múltiplo de 7. Queda topado en **1 bono/día** por el candado (1). Para cerrarlo del todo habría que congelar la meta vigente en cada fila diaria.
 - **Pendiente fase 2:** push recordatorio cada 2h (notificación local con `expo-notifications`).
 
 ---
@@ -153,7 +170,16 @@ Del más reciente al más antiguo:
 ## 6. Cosas de entorno / operación (para no tropezar)
 
 - **Correr migraciones en prod:** confirmar primero a qué BD apunta el API de prod. Si es la misma `db_a3fa0b_vidaqa`, ya están aplicadas (yo corrí 16–22 en QA). Si es otra, correr 16→22 en orden en el **SQL Server de SmarterASP** (no phpMyAdmin).
-- **Subir a prod por FTP:** frontend = subir `frontend/dist/` (correr `npm run build` antes; **no** los `.jsx`). Backend = subir los archivos fuente cambiados y reiniciar (iisnode: tocar `web.config` o reiniciar App Pool). Apps = rebuild/republish Expo/EAS.
+- **Desplegar a prod — orden obligatorio** (cambió con el paso a mismo origen):
+  1. **Migraciones** en el SQL Server de SmarterASP (no phpMyAdmin), 16→24 en orden. Va primero: el backend nuevo necesita las columnas de la 24.
+  2. **Backend por FTP** a su carpeta, y en el **panel de SmarterASP** convertir esa carpeta en **aplicación IIS montada en `/api`** del sitio de `app.comercializadoravida.com`. Esto **no se hace por FTP**. El repo ya trae `backend/web.config` (handler de iisnode + `<webSocket enabled="false" />`, que es lo que permite que el WS lo maneje Node). Subir también `node_modules` (no hay shell; se venía haciendo con un `.rar` y descomprimiendo desde el file manager).
+  3. **Frontend por FTP**: `npm run build` y subir `frontend/dist/` completo — **incluido su `web.config`**, que es el que excluye `/api` y `/uploads` del rewrite del SPA. Sin ese archivo IIS le devuelve `index.html` a cada llamada del API. No subir los `.jsx`.
+  4. **Apps**: rebuild/republish con EAS para que tomen las URLs `https`/`wss`.
+- **Chequeos de que quedó bien:**
+  - `https://app.comercializadoravida.com/api/health` → `{"status":"ok","db":"ok",...}`. Si devuelve el HTML del panel, el paso 2 o el 3 quedó a medias.
+  - `https://app.comercializadoravida.com/t/1?b=1&c=1` → la página pública de la tienda con su catálogo.
+  - Si `/api/health` da 404 pero `/health` responde, iisnode está recortando el prefijo `/api`: ver la nota al final de `backend/web.config`.
+- **`.env` de producción del backend:** fijar `NODE_ENV=production` (si no, el hardening del JWT no corre), `JWT_SECRET` de 32+ chars distinto al de desarrollo, `AUDIT_SECRET`, y `FRONTEND_URL=https://app.comercializadoravida.com`. `BASE_URL` puede omitirse: `resolverBaseUrl()` lo deriva del request respetando `x-forwarded-proto`.
 - **Apps en Expo Go:** las `.env` (`EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_WS_URL`) apuntan a la **IP LAN** de la PC (cambia con DHCP; si hay "Network Error", correr `ipconfig` y actualizar). No están trackeadas en git. Reiniciar Expo con `npx expo start -c` tras cambiar `.env`. Google Sign-In no funciona en Expo Go (sí en APK/dev client).
 - **Datos demo que dejé en QA:** cuenta maestra `admin` promovida a `SUPER_ADMIN`; tienda 8 = "TIENDA PRUEBA 9" con finanzas y metas de ejemplo; cliente 1 (Diego) con 50 puntos de prueba; producto sin marcar PLUS aún. Son inofensivos, se pueden sobrescribir.
 - **Verificación sin front:** patrón usado = runner Node temporal que forja un JWT (HS256, `JWT_SECRET` del `.env`, payload con rol correcto: usuarios `{idBranch,idCuenta,idUsuario,TipoUsuario,idPuntoVenta}`; cliente `{...,rol:'CLIENTE',idCliente}`; repartidor `rol` + `idRepartidor`) y pega al endpoint. Borrar el runner al terminar.
@@ -162,11 +188,23 @@ Del más reciente al más antiguo:
 
 ## 7. Próximos candidatos (sugerencia de prioridad)
 
-Ganchos grandes de empresario (Rentabilidad+Plus+Metas+**Flyer**) y consumidor (Puntos completo + **Salud/agua**) ya están. Siguientes de mayor impacto:
+**Antes que cualquier feature: desplegar.** Nada de lo hecho en §4.a sirve hasta que el API esté montado en `/api` y las migraciones corridas (§6). Hoy el panel en producción está roto y el API no responde en ningún host.
+
+### Deuda técnica detectada en la auditoría (sin tocar)
+
+1. **`MAX(id)+1` sin lock** para generar IDs, en 7 controllers. Algunos usan `WITH (UPDLOCK, HOLDLOCK)` (`caja:19`, `matriz:27`, `pedidos:24`), pero las variantes sin lock siguen en uso (`inventario.controller.js:14`, `acreditarPuntosCliente`). Dos operaciones simultáneas = PK duplicada. Con una tienda no se nota; con 16.291 sí.
+2. **`delivery.controller.js`: 3.270 líneas / 166 KB** — clientes, repartidores, pedidos, puntos, hidratación y config de admin en un archivo. Cada feature nueva cae ahí. Conviene partirlo por dominio.
+3. **Cero tests.** No hay un solo `.test.js` propio, con dinero y puntos canjeables de por medio.
+4. **Sin migrador.** No hay registro de qué migración se aplicó a qué base — de ahí que no se sepa el estado de prod. Una tabla `schema_migrations` de 10 líneas lo resuelve.
+5. **`audit.service.js:9`** cae a `'audit_dev_secret'` sin fallar en producción (el JWT sí valida, el de auditoría no): firmas de auditoría falsificables.
+6. **`usesCleartextTraffic: true`** sigue en el `app.json` de las apps. Ya no hace falta con https, pero ponerlo en `false` rompe los dev builds que apuntan a la IP LAN por http.
+
+### Features
+
 1. **Push recordatorio de hidratación** — cerrar fase 2 de Salud con `expo-notifications` (notificación local repetida cada 2h).
-3. **Membresía Club Vida (E)** — QR de membresía por nivel, eventos, beneficios.
-4. **Academia Vida (F)** — cursos + puntos al empresario.
-5. **Fidelización fase 3** — catálogo de premios + vencimiento de puntos.
-6. **Servicios integrados (F)** — recargas (Movilnet/Movistar/Digitel/…) y Amazon curado.
+2. **Membresía Club Vida (E)** — QR de membresía por nivel, eventos, beneficios.
+3. **Academia Vida (F)** — cursos + puntos al empresario.
+4. **Fidelización fase 3** — catálogo de premios + vencimiento de puntos.
+5. **Servicios integrados (F)** — recargas (Movilnet/Movistar/Digitel/…) y Amazon curado.
 
 **Cómo continuar técnicamente:** los módulos "de panel" nuevos conviene colgarlos como **tab dentro de un módulo existente** (ej. Reportes) para evitar fricción con el sidebar dinámico por BD (que requiere insertar `pantalla` + accesos). Respetar siempre el **scope por rol** (`esRed`/`pvEfectivo`) y la operación **USD-only**. Al tocar el flujo de pedidos, cuidar idempotencia y transacciones (como en puntos).
