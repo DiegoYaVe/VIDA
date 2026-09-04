@@ -112,6 +112,113 @@ function metricasModo(productos, pctVar) {
   };
 }
 
+// ── METAS DE VENTA ────────────────────────────────────────────────────────
+const DEF_METAS = { MetaDiariaUSD: 0, MetaSemanalUSD: 0, MetaMensualUSD: 0 };
+
+async function leerMetas(pool, idBranch, idCuenta, idPuntoVenta) {
+  const r = await pool.request()
+    .input('idBranch', sql.BigInt, idBranch)
+    .input('idCuenta', sql.BigInt, idCuenta)
+    .input('idPuntoVenta', sql.BigInt, idPuntoVenta)
+    .query(`SELECT MetaDiariaUSD, MetaSemanalUSD, MetaMensualUSD
+            FROM VIDA_TIENDA_METAS
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta`);
+  return r.recordset[0] ? { ...DEF_METAS, ...r.recordset[0] } : { ...DEF_METAS };
+}
+
+// GET /metas?idPuntoVenta=
+export async function obtenerMetas(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const idPuntoVenta = pvEfectivo(request, request.query.idPuntoVenta);
+  if (!idPuntoVenta) return reply.code(400).send({ error: 'Se requiere idPuntoVenta' });
+  try {
+    const pool = await getPool();
+    const metas = await leerMetas(pool, idBranch, idCuenta, idPuntoVenta);
+    return reply.send({ idPuntoVenta: Number(idPuntoVenta), ...metas });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener metas' });
+  }
+}
+
+// PUT /metas  { idPuntoVenta?, MetaDiariaUSD, MetaSemanalUSD, MetaMensualUSD }
+export async function guardarMetas(request, reply) {
+  const { idBranch, idCuenta, idUsuario } = request.user;
+  const b = request.body || {};
+  const idPuntoVenta = pvEfectivo(request, b.idPuntoVenta);
+  if (!idPuntoVenta) return reply.code(400).send({ error: 'Se requiere idPuntoVenta' });
+  const num = (v) => (v === '' || v == null || isNaN(Number(v)) ? 0 : Number(v));
+  try {
+    const pool = await getPool();
+    await pool.request()
+      .input('idBranch',     sql.BigInt,        idBranch)
+      .input('idCuenta',     sql.BigInt,        idCuenta)
+      .input('idPuntoVenta', sql.BigInt,        idPuntoVenta)
+      .input('Dia',          sql.Decimal(18,2), num(b.MetaDiariaUSD))
+      .input('Sem',          sql.Decimal(18,2), num(b.MetaSemanalUSD))
+      .input('Mes',          sql.Decimal(18,2), num(b.MetaMensualUSD))
+      .input('Usu',          sql.VarChar(20),   String(idUsuario))
+      .query(`
+        MERGE VIDA_TIENDA_METAS AS t
+        USING (SELECT @idBranch AS idBranch, @idCuenta AS idCuenta, @idPuntoVenta AS idPuntoVenta) AS s
+          ON (t.idBranch=s.idBranch AND t.idCuenta=s.idCuenta AND t.idPuntoVenta=s.idPuntoVenta)
+        WHEN MATCHED THEN UPDATE SET
+          MetaDiariaUSD=@Dia, MetaSemanalUSD=@Sem, MetaMensualUSD=@Mes, FechaMod=GETDATE(), UsuMod=@Usu
+        WHEN NOT MATCHED THEN INSERT
+          (idBranch,idCuenta,idPuntoVenta,MetaDiariaUSD,MetaSemanalUSD,MetaMensualUSD,UsuAlta)
+          VALUES (@idBranch,@idCuenta,@idPuntoVenta,@Dia,@Sem,@Mes,@Usu);`);
+    return reply.send({ message: 'Metas guardadas' });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al guardar metas' });
+  }
+}
+
+// GET /metas/progreso?idPuntoVenta=
+export async function progresoMetas(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const idPuntoVenta = pvEfectivo(request, request.query.idPuntoVenta);
+  if (!idPuntoVenta) return reply.code(400).send({ error: 'Se requiere idPuntoVenta' });
+  try {
+    const pool = await getPool();
+    const metas = await leerMetas(pool, idBranch, idCuenta, idPuntoVenta);
+
+    // Ventas POS entregadas: hoy, últimos 7 días, mes calendario actual
+    const v = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('idPuntoVenta', sql.BigInt, idPuntoVenta)
+      .query(`
+        SELECT
+          ISNULL(SUM(CASE WHEN CAST(FechaAlta AS DATE)=CAST(GETDATE() AS DATE) THEN TotalUSD ELSE 0 END),0) AS Dia,
+          ISNULL(SUM(CASE WHEN FechaAlta >= DATEADD(DAY,-6, CAST(GETDATE() AS DATE)) THEN TotalUSD ELSE 0 END),0) AS Semana,
+          ISNULL(SUM(CASE WHEN FechaAlta >= DATEFROMPARTS(YEAR(GETDATE()),MONTH(GETDATE()),1) THEN TotalUSD ELSE 0 END),0) AS Mes
+        FROM VIDA_PEDIDOS
+        WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta
+          AND Canal='POS' AND Status='ENTREGADO'`);
+    const ventas = v.recordset[0];
+
+    const arma = (ventasP, metaP) => {
+      const meta = Number(metaP), ven = Number(ventasP);
+      const pct = meta > 0 ? Math.min(100, Math.round((ven / meta) * 100)) : null;
+      return { ventas: ven, meta, pct, cumplida: meta > 0 && ven >= meta, falta: meta > 0 ? Math.max(0, +(meta - ven).toFixed(2)) : null };
+    };
+
+    return reply.send({
+      idPuntoVenta: Number(idPuntoVenta),
+      metas,
+      progreso: {
+        dia:    arma(ventas.Dia,    metas.MetaDiariaUSD),
+        semana: arma(ventas.Semana, metas.MetaSemanalUSD),
+        mes:    arma(ventas.Mes,    metas.MetaMensualUSD),
+      },
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al calcular progreso' });
+  }
+}
+
 // GET /finanzas/rentabilidad?idPuntoVenta=
 export async function calcularRentabilidad(request, reply) {
   const { idBranch, idCuenta } = request.user;

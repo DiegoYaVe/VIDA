@@ -1080,6 +1080,133 @@ function TabRed({ filtros }) {
 
 const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
+// ─── TAB: Metas de venta ──────────────────────────────────────────────────────
+function BarraMeta({ titulo, p }) {
+  const pct = p?.pct ?? 0;
+  const cumplida = !!p?.cumplida;
+  const sinMeta = !p || !p.meta;
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-4">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+          {titulo} {cumplida && <span title="Meta cumplida">🏅</span>}
+        </p>
+        <p className="text-sm font-black text-gray-900">
+          {USD(p?.ventas)} <span className="text-gray-400 font-semibold">/ {sinMeta ? '—' : USD(p?.meta)}</span>
+        </p>
+      </div>
+      {sinMeta ? (
+        <p className="text-xs text-gray-400">Define una meta para ver tu progreso.</p>
+      ) : (
+        <>
+          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-full rounded-full transition-all"
+              style={{ width: `${pct}%`, background: cumplida ? '#5BBE6A' : 'linear-gradient(90deg,#54C4E0,#0A1E3F)' }} />
+          </div>
+          <div className="flex justify-between mt-1">
+            <span className={`text-xs font-bold ${cumplida ? 'text-vida-green' : 'text-vida-blue'}`}>{pct}% de tu meta</span>
+            {cumplida
+              ? <span className="text-xs font-bold text-vida-green">¡Meta alcanzada! 🎉</span>
+              : <span className="text-xs text-gray-400">te faltan {USD(p?.falta)}</span>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TabMetas({ filtros, puedeVerRed }) {
+  const [idPV, setIdPV] = useState('');
+  const [metas, setMetas] = useState({ MetaDiariaUSD: '', MetaSemanalUSD: '', MetaMensualUSD: '' });
+  const [prog, setProg] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
+
+  const params = () => (puedeVerRed && idPV ? { idPuntoVenta: idPV } : {});
+
+  const cargar = useCallback(async () => {
+    if (puedeVerRed && !idPV) { setProg(null); return; }
+    setError('');
+    try {
+      const [m, p] = await Promise.all([
+        api.get('/metas', { params: params() }),
+        api.get('/metas/progreso', { params: params() }),
+      ]);
+      setMetas({
+        MetaDiariaUSD:  m.data.MetaDiariaUSD ?? '',
+        MetaSemanalUSD: m.data.MetaSemanalUSD ?? '',
+        MetaMensualUSD: m.data.MetaMensualUSD ?? '',
+      });
+      setProg(p.data.progreso);
+    } catch (e) { setError(e.response?.data?.error || 'Error al cargar'); }
+  }, [idPV]); // eslint-disable-line
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const set = (k, v) => setMetas(p => ({ ...p, [k]: v }));
+
+  async function guardar() {
+    setGuardando(true); setError('');
+    try {
+      await api.put('/metas', { ...metas, ...params() });
+      const p = await api.get('/metas/progreso', { params: params() });
+      setProg(p.data.progreso);
+    } catch (e) { setError(e.response?.data?.error || 'Error al guardar'); }
+    finally { setGuardando(false); }
+  }
+
+  return (
+    <div className="space-y-5 max-w-4xl">
+      {puedeVerRed && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3">
+          <Store size={16} className="text-vida-blue" />
+          <select value={idPV} onChange={e => setIdPV(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="">— Elige una tienda —</option>
+            {(filtros?.sucursales || []).map(s => (
+              <option key={s.idPuntoVenta} value={s.idPuntoVenta}>{s.NombrePuntoVenta || s.NomComercial}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {error && <p className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+
+      {puedeVerRed && !idPV ? (
+        <div className="text-center py-16 text-gray-400">
+          <Target size={40} className="mx-auto mb-3 opacity-30" />
+          <p>Elige una tienda para ver sus metas</p>
+        </div>
+      ) : (
+        <>
+          {/* Definir metas */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-5">
+            <h3 className="font-black text-gray-800 flex items-center gap-2 mb-1"><Target size={18} className="text-vida-green" /> Mis metas de venta</h3>
+            <p className="text-xs text-gray-400 mb-4">Define tu objetivo de ventas (en USD). El sistema mide tu avance con las ventas entregadas.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <CampoNum label="Meta diaria" value={metas.MetaDiariaUSD} onChange={v => set('MetaDiariaUSD', v)} />
+              <CampoNum label="Meta semanal" value={metas.MetaSemanalUSD} onChange={v => set('MetaSemanalUSD', v)} hint="Últimos 7 días" />
+              <CampoNum label="Meta mensual" value={metas.MetaMensualUSD} onChange={v => set('MetaMensualUSD', v)} hint="Mes actual" />
+            </div>
+            <button onClick={guardar} disabled={guardando}
+              className="mt-4 flex items-center gap-2 bg-vida-blue text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+              <Save size={15} /> {guardando ? 'Guardando…' : 'Guardar metas'}
+            </button>
+          </div>
+
+          {/* Progreso */}
+          {prog && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <BarraMeta titulo="Hoy" p={prog.dia} />
+              <BarraMeta titulo="Esta semana" p={prog.semana} />
+              <BarraMeta titulo="Este mes" p={prog.mes} />
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── TAB: Calculadora de Rentabilidad ─────────────────────────────────────────
 const PCT = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
 
@@ -1284,6 +1411,7 @@ const TABS = [
   { id: 'productos',    label: 'Productos',     icon: TrendingUp   },
   { id: 'inventario',   label: 'Inventario',    icon: Package      },
   { id: 'movimientos',  label: 'Movimientos',   icon: ArrowUpDown  },
+  { id: 'metas',        label: 'Metas',         icon: Target       },
   { id: 'rentabilidad', label: 'Rentabilidad',  icon: Calculator   },
 ];
 
@@ -1342,6 +1470,7 @@ export default function Reportes() {
         {tab === 'productos'   && <TabProductos   filtros={filtros} />}
         {tab === 'inventario'  && <TabInventario  filtros={filtros} />}
         {tab === 'movimientos' && <TabMovimientos filtros={filtros} />}
+        {tab === 'metas' && <TabMetas filtros={filtros} puedeVerRed={puedeVerRed} />}
         {tab === 'rentabilidad' && <TabRentabilidad filtros={filtros} puedeVerRed={puedeVerRed} />}
       </div>
     </div>
