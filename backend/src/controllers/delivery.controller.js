@@ -974,7 +974,7 @@ export async function crearPedidoApp(request, reply) {
           .input('idCliente',   sql.BigInt,      idCliente)
           .input('Puntos',      sql.Int,         -puntosUsados)
           .input('idPedido',    sql.BigInt,      idPedido)
-          .input('Descripcion', sql.VarChar(200), `Canje en pedido #${idPedido} (−$${descuentoPuntos.toFixed(2)})`)
+          .input('Descripcion', sql.NVarChar(200), `Canje en pedido #${idPedido} (−$${descuentoPuntos.toFixed(2)})`)
           .query(`INSERT INTO VIDA_CLIENTE_PUNTOS
                     (idBranch,idCuenta,idMovimiento,idCliente,Tipo,Puntos,idPedido,Descripcion)
                   VALUES (@idBranch,@idCuenta,@idMovimiento,@idCliente,'CANJEADO',@Puntos,@idPedido,@Descripcion)`);
@@ -1232,7 +1232,7 @@ export async function reembolsarPuntosPedido(makeReq, idBranch, idCuenta, idPedi
     .input('idCliente', sql.BigInt, row.idCliente)
     .input('Puntos', sql.Int, row.PuntosUsados)
     .input('idPedido', sql.BigInt, idPedido)
-    .input('Descripcion', sql.VarChar(200), `Reembolso por cancelación del pedido #${idPedido}`)
+    .input('Descripcion', sql.NVarChar(200), `Reembolso por cancelación del pedido #${idPedido}`)
     .query(`INSERT INTO VIDA_CLIENTE_PUNTOS (idBranch,idCuenta,idMovimiento,idCliente,Tipo,Puntos,idPedido,Descripcion)
             VALUES (@idBranch,@idCuenta,@idMovimiento,@idCliente,'REEMBOLSO',@Puntos,@idPedido,@Descripcion)`);
   await makeReq()
@@ -1294,7 +1294,7 @@ async function acreditarPuntosCliente(pool, idBranch, idCuenta, idCliente, punto
   await pool.request()
     .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
     .input('idMovimiento', sql.BigInt, movId).input('idCliente', sql.BigInt, idCliente)
-    .input('Puntos', sql.Int, puntos).input('Descripcion', sql.VarChar(200), descripcion)
+    .input('Puntos', sql.Int, puntos).input('Descripcion', sql.NVarChar(200), descripcion)
     .query(`INSERT INTO VIDA_CLIENTE_PUNTOS (idBranch,idCuenta,idMovimiento,idCliente,Tipo,Puntos,idPedido,Descripcion)
             VALUES (@idBranch,@idCuenta,@idMovimiento,@idCliente,'GANADO',@Puntos,NULL,@Descripcion)`);
   await pool.request()
@@ -1317,10 +1317,11 @@ function contarRachaHidratacion(mapaFechaVasos, hoyStr, meta) {
 async function leerCfgHidratacion(pool, idBranch, idCuenta, idCliente) {
   const r = await pool.request()
     .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
-    .query(`SELECT ISNULL(HidratacionActiva,0) AS Activa, ISNULL(HidratacionMetaVasos,8) AS Meta, ISNULL(HidratacionMlVaso,250) AS MlVaso
+    .query(`SELECT ISNULL(HidratacionActiva,0) AS Activa, ISNULL(HidratacionMetaVasos,8) AS Meta, ISNULL(HidratacionMlVaso,250) AS MlVaso,
+                   ISNULL(HidratacionRachaPremiada,0) AS RachaPremiada
             FROM VIDA_APP_CLIENTES WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
   const c = r.recordset[0] || {};
-  return { activa: !!c.Activa, meta: c.Meta ?? 8, mlVaso: c.MlVaso ?? 250 };
+  return { activa: !!c.Activa, meta: c.Meta ?? 8, mlVaso: c.MlVaso ?? 250, rachaPremiada: c.RachaPremiada ?? 0 };
 }
 
 // GET /delivery/cliente/hidratacion
@@ -1407,12 +1408,48 @@ export async function registrarVaso(request, reply) {
     const vasosHoy = mapa.get(hoyStr) || 0;
     const racha = contarRachaHidratacion(mapa, hoyStr, cfg.meta);
 
-    // Gamificación: al alcanzar exactamente la meta hoy y completar múltiplo de 7 días
+    // ── Gamificación: bono al completar un múltiplo de 7 días de racha ──────
+    // Dos candados para que el bono NO se pueda farmear alternando
+    // "quitar vaso" / "tomar vaso" (que vuelve a poner vasosHoy en la meta):
+    //   1) Por día: se reclama con un UPDATE condicional sobre BonusPuntos, que
+    //      es atómico — solo la primera llamada del día ve @@ROWCOUNT=1, aunque
+    //      lleguen varias en paralelo.
+    //   2) Por hito: HidratacionRachaPremiada guarda el último múltiplo de 7 ya
+    //      pagado, así el mismo hito no se cobra dos veces. Si la racha se rompe
+    //      y vuelve a arrancar más corta, el contador se reinicia solo.
     let bonus = 0;
-    if (vasosHoy === cfg.meta && racha > 0 && racha % 7 === 0) {
-      const pts = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'PuntosRachaHidratacion', '50')) || 50;
-      await acreditarPuntosCliente(pool, idBranch, idCuenta, idCliente, pts, `Racha de ${racha} días de hidratación 💧`);
-      bonus = pts;
+    if (vasosHoy >= cfg.meta && racha > 0 && racha % 7 === 0) {
+      let premiada = cfg.rachaPremiada;
+      if (racha < premiada) {
+        // La racha se rompió y empezó de nuevo: el historial de hitos ya no aplica
+        await pool.request()
+          .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
+          .query(`UPDATE VIDA_APP_CLIENTES SET HidratacionRachaPremiada=0
+                  WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+        premiada = 0;
+      }
+      if (racha > premiada) {
+        const pts = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'PuntosRachaHidratacion', '50')) || 50;
+        // Reclamo del día: si otra llamada ya lo tomó, Filas=0 y no se paga.
+        // Se marca ANTES de acreditar a propósito: ante un fallo posterior se
+        // pierde un bono, que es preferible a pagarlo dos veces.
+        const claim = await pool.request()
+          .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+          .input('idCliente', sql.BigInt, idCliente).input('Pts', sql.Int, pts)
+          .query(`UPDATE VIDA_CLIENTE_HIDRATACION_DIA SET BonusPuntos=@Pts
+                  WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente
+                    AND Fecha=CAST(GETDATE() AS DATE) AND ISNULL(BonusPuntos,0)=0;
+                  SELECT @@ROWCOUNT AS Filas;`);
+        if ((claim.recordset[0]?.Filas ?? 0) === 1) {
+          await acreditarPuntosCliente(pool, idBranch, idCuenta, idCliente, pts, `Racha de ${racha} días de hidratación 💧`);
+          await pool.request()
+            .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+            .input('idCliente', sql.BigInt, idCliente).input('Racha', sql.Int, racha)
+            .query(`UPDATE VIDA_APP_CLIENTES SET HidratacionRachaPremiada=@Racha
+                    WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+          bonus = pts;
+        }
+      }
     }
     return reply.send({ vasosHoy, meta: cfg.meta, mlHoy: vasosHoy * cfg.mlVaso, racha, bonus });
   } catch (err) {
@@ -1992,7 +2029,7 @@ export async function actualizarStatusPedido(request, reply) {
               .input('idCliente',    sql.BigInt,      pedido.idCliente)
               .input('Puntos',       sql.Int,         puntos)
               .input('idPedido',     sql.BigInt,      idPedido)
-              .input('Descripcion',  sql.VarChar(200), `Compra pedido #${idPedido}`)
+              .input('Descripcion',  sql.NVarChar(200), `Compra pedido #${idPedido}`)
               .query(`INSERT INTO VIDA_CLIENTE_PUNTOS
                         (idBranch, idCuenta, idMovimiento, idCliente, Tipo, Puntos, idPedido, Descripcion)
                       VALUES (@idBranch, @idCuenta, @idMovimiento, @idCliente, 'GANADO', @Puntos, @idPedido, @Descripcion)`);
