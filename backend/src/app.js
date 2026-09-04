@@ -112,7 +112,29 @@ await fastify.register(staticFiles, {
   prefix: '/uploads/',
 });
 
-// Health check
+// Las mismas imagenes bajo /api/uploads/. En produccion el API corre como
+// aplicacion IIS en /api del mismo sitio que el panel: ahi una peticion a
+// /uploads/... no llega al backend (la atiende el sitio del panel, que no
+// tiene esos archivos). Con este segundo prefijo las imagenes funcionan tanto
+// si el backend esta montado en la raiz como si cuelga de /api.
+await fastify.register(staticFiles, {
+  root: path.join(__dirname, '..', 'uploads'),
+  prefix: '/api/uploads/',
+  decorateReply: false, // solo un registro puede decorar reply.sendFile
+});
+
+// Health check — se expone en las dos rutas por el mismo motivo que /uploads:
+// montado bajo /api, el backend recibe la ruta con ese prefijo.
+fastify.get('/api/health', async () => {
+  try {
+    const pool = await getPool();
+    await pool.request().query('SELECT 1');
+    return { status: 'ok', db: 'ok', timestamp: new Date().toISOString() };
+  } catch (err) {
+    return { status: 'error', db: 'error', error: err.message };
+  }
+});
+
 fastify.get('/health', async () => {
   try {
     const pool = await getPool();

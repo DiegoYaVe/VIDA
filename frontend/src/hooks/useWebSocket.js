@@ -2,7 +2,12 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore.js';
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3001/api/ws';
+// Mismo criterio que services/api.js: en produccion el WS va al mismo origen,
+// con wss:// si la pagina se sirve por https (si no, el navegador lo bloquea).
+const WS_URL = import.meta.env.VITE_WS_URL
+  || (import.meta.env.PROD
+        ? `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/ws`
+        : 'ws://localhost:3001/api/ws');
 const PING_INTERVAL  = 25_000; // cada 25s para mantener viva la conexión
 const RECONNECT_BASE = 2_000;  // backoff base: 2s
 const RECONNECT_MAX  = 30_000; // máximo 30s entre reintentos
