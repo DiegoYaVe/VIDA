@@ -3,6 +3,8 @@
 > Documento para que otro asistente retome el proyecto sabiendo **qué ya está construido**, **cómo está armado** y **en qué seguir**. Escrito 2026-09-04.
 >
 > **Actualizado 2026-09-04** tras una sesión de auditoría + correcciones: se arreglaron un exploit de puntos, el API sobre HTTPS (ahora mismo origen) y la página pública de tienda del QR. Ver §4.
+>
+> Documentos hermanos: [CHANGELOG.md](CHANGELOG.md) (qué cambió en cada sesión, con su verificación) e [INSTALACION.md](INSTALACION.md) (cómo levantarlo en local).
 
 ---
 
@@ -98,6 +100,19 @@ Salieron de auditar el código contra este mismo documento. Del más reciente al
 - `30b81e1e` **Página pública de tienda `/t/:idPuntoVenta`** — el QR de los flyers apuntaba a una página que no existía: todo flyer impreso llevaba a un 404. Nuevo endpoint público `GET /delivery/tienda/:idPuntoVenta?idBranch=&idCuenta=` (datos públicos de una tienda activa) + `frontend/src/pages/Tienda.jsx` en ruta pública, fuera del `Layout` y de `PublicRoute`. El catálogo reusa `/delivery/productos`. **Además el QR estaba mal formado:** `idPuntoVenta` solo no identifica una tienda (la PK es `idBranch+idCuenta+idPuntoVenta`), así que ahora el enlace lleva el tenant: `/t/8?b=1&c=1`. La página asume 1/1 si faltan, para que los flyers ya impresos sigan sirviendo. Sin migración. *Falta verificar cómo se ve renderizada.*
 - `33607199` **El API pasa a HTTPS, sirviéndose desde el mismo origen** — el bundle desplegado tenía compilado `http://israceballos-001-site18.mtempurl.com/api`: el navegador lo bloqueaba por mixed content y además ese host devuelve 404 en todo. Ver el bullet "Mismo origen" en §2 y los pasos de despliegue en §6. Incluye: exclusión de `/api` y `/uploads` en el rewrite del SPA (`frontend/public/web.config`), y `/uploads` + `/health` expuestos **también** bajo `/api` en el backend (montado en `/api`, las rutas sin prefijo no le llegan). Sin migración.
 - `c07aa003` **FIX exploit: el bono de racha de hidratación se cobraba sin límite** (sql/24) — ver §5.
+
+**Qué quedó verificado y qué no** (importante antes de confiar en esto):
+
+| Cambio | Verificación |
+|---|---|
+| Bono de racha (`c07aa003`) | **End-to-end contra QA** ejecutando los controllers reales, 7 asserts. El mismo test contra el código anterior falla en 4 de 6, o sea que el exploit está reproducido y cerrado. |
+| HTTPS / mismo origen (`33607199`) | Build limpio (cero rastros del host viejo) y las 4 rutas (`/health`, `/api/health`, `/uploads`, `/api/uploads`) responden 200 vía `fastify.inject()`. **No probado contra un IIS real.** |
+| Página `/t/:id` (`30b81e1e`) | Endpoint contra QA: 200 con datos, 404 inexistente, 404 desde otro tenant, 400 sin tenant. **Falta verla renderizada** — no se pudo levantar el panel en esa sesión. |
+| `backend/web.config` (`18864321`) | **Sin verificar.** Escrito de memoria del contrato de iisnode. La contingencia por si recorta el prefijo `/api` está al final del propio archivo. |
+
+**Cambios en la base de QA:** migración 24 aplicada en `db_a3fa0b_vidaqa` (dos
+columnas nuevas + `VIDA_CLIENTE_PUNTOS.Descripcion` ahora `NVARCHAR(200)`). Los
+datos de prueba del cliente 4 quedaron restaurados; el cliente 1 no se tocó.
 
 ### 4.b — Sesión de features (anterior)
 
