@@ -736,6 +736,43 @@ export async function listarSucursales(request, reply) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// TIENDA PUBLICA (sin auth) — destino del QR de los flyers del empresario
+// GET /delivery/tienda/:idPuntoVenta?idBranch=1&idCuenta=1
+// Devuelve SOLO los datos publicos de una tienda. idPuntoVenta no es unico por
+// si solo (la PK es idBranch+idCuenta+idPuntoVenta), por eso el tenant viaja
+// en la query y es obligatorio.
+// ══════════════════════════════════════════════════════════════════════════
+export async function tiendaPublica(request, reply) {
+  const { idPuntoVenta } = request.params;
+  const { idBranch, idCuenta } = request.query;
+  if (!idBranch || !idCuenta) {
+    return reply.code(400).send({ error: 'idBranch e idCuenta son requeridos' });
+  }
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('idPuntoVenta', sql.BigInt, idPuntoVenta)
+      .query(`SELECT idPuntoVenta, NomComercial,
+                     CONCAT(ISNULL(Calle,''), ' ', ISNULL(NumExt,''), ' ',
+                            ISNULL(Colonia,''), ' ', ISNULL(Ciudad,'')) AS Direccion,
+                     Ciudad, Latitud, Longitud, Telefono
+              FROM VIDA_CUENTA_PUNTOS_VENTA
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                AND idPuntoVenta=@idPuntoVenta
+                AND Status='ACTIVO' AND StatusPuntoVenta='ACTIVO'`);
+    if (!r.recordset.length) {
+      return reply.code(404).send({ error: 'Tienda no encontrada' });
+    }
+    return reply.send(r.recordset[0]);
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener la tienda' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // PRODUCTOS PARA APP (sin auth / token cliente opcional)
 // GET /delivery/productos?idBranch=1&idCuenta=1&idPuntoVenta=3&search=&idCategoria=
 // ══════════════════════════════════════════════════════════════════════════

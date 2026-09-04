@@ -397,6 +397,9 @@ function TabFlyer({ productos }) {
   const canvasRef = useRef(null);
   const [tiendas, setTiendas] = useState([]);
   const [idPV, setIdPV] = useState(usuario?.idPuntoVenta ? String(usuario.idPuntoVenta) : '');
+  // El enlace del QR lleva el tenant: idPuntoVenta solo no identifica una
+  // tienda (la PK es idBranch+idCuenta+idPuntoVenta).
+  const urlTienda = `${STORE_BASE}/t/${idPV || ''}?b=${usuario?.idBranch ?? 1}&c=${usuario?.idCuenta ?? 1}`;
   const [idProducto, setIdProducto] = useState('');
   const [precioPromo, setPrecioPromo] = useState('');
   const [mensaje, setMensaje] = useState('¡Aprovecha esta oferta!');
@@ -498,7 +501,7 @@ function TabFlyer({ productos }) {
     }
 
     // QR (abajo derecha) — apunta a la tienda
-    const qrData = `${STORE_BASE}/t/${idPV || ''}`;
+    const qrData = urlTienda;
     try {
       const qrUrl = await QRCode.toDataURL(qrData, { margin: 1, width: 240 });
       const qrImg = await cargarImagen(qrUrl, false);
@@ -529,7 +532,7 @@ function TabFlyer({ productos }) {
 
   function compartirWhatsApp() {
     const p = precioPromo !== '' ? Number(precioPromo) : Number(producto?.PrecioUSD || 0);
-    const txt = `${mensaje.trim()}\n${producto?.Nombre} — $${p.toFixed(2)}\n${STORE_BASE}/t/${idPV || ''}`;
+    const txt = `${mensaje.trim()}\n${producto?.Nombre} — $${p.toFixed(2)}\n${urlTienda}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`, '_blank');
   }
 
@@ -582,7 +585,7 @@ function TabFlyer({ productos }) {
                   <Share2 size={15} /> WhatsApp
                 </button>
               </div>
-              <p className="text-[11px] text-gray-400">El QR abre la tienda: <code>{STORE_BASE}/t/{idPV || '—'}</code></p>
+              <p className="text-[11px] text-gray-400">El QR abre la tienda: <code>{idPV ? urlTienda : '—'}</code></p>
             </>
           )}
         </div>

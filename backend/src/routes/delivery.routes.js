@@ -18,6 +18,7 @@ import {
   datosPagoMovil,
   subirComprobanteCliente,
   listarSucursales,
+  tiendaPublica,
   listarProductosApp,
   crearPedidoApp,
   estadoPedidoCliente,
@@ -65,6 +66,8 @@ export async function deliveryRoutes(fastify) {
   // ── Sin auth (app pública) ────────────────────────────────────────────
   fastify.get('/delivery/sucursales',   listarSucursales);
   fastify.get('/delivery/productos',    listarProductosApp);
+  // Destino del QR de los flyers: la pagina publica de una tienda
+  fastify.get('/delivery/tienda/:idPuntoVenta', tiendaPublica);
   fastify.get('/delivery/pago-movil',   datosPagoMovil);
 
   // ── Registro / login de cliente ───────────────────────────────────────

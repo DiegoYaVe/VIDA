@@ -23,6 +23,7 @@ import Precios       from './pages/Precios.jsx';
 import Matriz        from './pages/Matriz.jsx';
 import Corporativo   from './pages/Corporativo.jsx';
 import Catalogos     from './pages/Catalogos.jsx';
+import Tienda        from './pages/Tienda.jsx';
 import { ToastContainer } from './components/Toast.jsx';
 
 function ProtectedRoute({ children, skipCambiarPass = false, modulo = null }) {
@@ -96,6 +97,11 @@ export default function App() {
       <Routes>
         <Route path="/login"   element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/activar" element={<Activar />} />
+
+        {/* Publica y sin sesion: la abre quien escanea el QR de un flyer.
+            No va dentro de PublicRoute porque un empresario logueado tambien
+            tiene que poder abrir el enlace para revisar como se ve. */}
+        <Route path="/t/:idPuntoVenta" element={<Tienda />} />
 
         <Route path="/dashboard" element={
           <ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>
