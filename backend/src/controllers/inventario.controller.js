@@ -173,7 +173,7 @@ export async function listarProductos(request, reply) {
         SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
                p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.StockMinimo,
-               p.ImagenProducto, p.Notas, p.Status, p.FechaAlta,
+               p.ImagenProducto, p.Notas, p.EsProductoPlus, p.Status, p.FechaAlta,
                ISNULL(s.Cantidad, 0) AS StockDisponible
         FROM VIDA_INVENTARIO_PRODUCTOS p
         LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
@@ -200,7 +200,7 @@ export async function listarProductos(request, reply) {
         SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
                p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.StockMinimo,
-               p.ImagenProducto, p.Notas, p.Status, p.FechaAlta,
+               p.ImagenProducto, p.Notas, p.EsProductoPlus, p.Status, p.FechaAlta,
                ISNULL((SELECT SUM(s2.Cantidad) FROM VIDA_INVENTARIO_STOCK s2
                        WHERE s2.idBranch=p.idBranch AND s2.idCuenta=p.idCuenta
                          AND s2.idProducto=p.idProducto${filtroStockPv}), 0) AS StockDisponible
@@ -274,7 +274,7 @@ export async function obtenerProducto(request, reply) {
         SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
                p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.StockMinimo,
-               p.ImagenProducto, p.Notas, p.Status, p.FechaAlta
+               p.ImagenProducto, p.Notas, p.EsProductoPlus, p.Status, p.FechaAlta
         FROM VIDA_INVENTARIO_PRODUCTOS p
         LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
           ON c.idBranch = p.idBranch AND c.idCuenta = p.idCuenta AND c.idCategoria = p.idCategoria
@@ -293,7 +293,7 @@ export async function obtenerProducto(request, reply) {
 export async function crearProducto(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const { idCategoria, Nombre, Descripcion, SKU, CodigoBarras, UnidadMedida,
-          PrecioUSD, CostoUSD, StockMinimo, Notas } = request.body;
+          PrecioUSD, CostoUSD, StockMinimo, Notas, EsProductoPlus } = request.body;
 
   if (!Nombre || !UnidadMedida || !idCategoria)
     return reply.code(400).send({ error: 'Nombre, UnidadMedida e idCategoria son requeridos' });
@@ -329,13 +329,14 @@ export async function crearProducto(request, reply) {
       .input('CostoUSD',     sql.Decimal(18,4), CostoUSD || null)
       .input('StockMinimo',  sql.Decimal(18,4), StockMinimo ?? 0)
       .input('Notas',        sql.VarChar(500), Notas || null)
+      .input('EsProductoPlus', sql.Bit,        EsProductoPlus ? 1 : 0)
       .input('UsuAlta',      sql.VarChar(20),  String(idUsuario))
       .query(`INSERT INTO VIDA_INVENTARIO_PRODUCTOS
                 (idBranch, idCuenta, idProducto, idCategoria, Nombre, Descripcion,
-                 SKU, CodigoBarras, UnidadMedida, PrecioUSD, CostoUSD, StockMinimo, Notas, UsuAlta)
+                 SKU, CodigoBarras, UnidadMedida, PrecioUSD, CostoUSD, StockMinimo, Notas, EsProductoPlus, UsuAlta)
               VALUES
                 (@idBranch, @idCuenta, @idProducto, @idCategoria, @Nombre, @Descripcion,
-                 @SKU, @CodigoBarras, @UnidadMedida, @PrecioUSD, @CostoUSD, @StockMinimo, @Notas, @UsuAlta)`);
+                 @SKU, @CodigoBarras, @UnidadMedida, @PrecioUSD, @CostoUSD, @StockMinimo, @Notas, @EsProductoPlus, @UsuAlta)`);
 
     return reply.code(201).send({ message: 'Producto creado', idProducto: nuevoId });
   } catch (err) {
@@ -349,7 +350,7 @@ export async function editarProducto(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const { idProducto } = request.params;
   const { idCategoria, Nombre, Descripcion, SKU, CodigoBarras, UnidadMedida,
-          PrecioUSD, CostoUSD, StockMinimo, Notas } = request.body;
+          PrecioUSD, CostoUSD, StockMinimo, Notas, EsProductoPlus } = request.body;
 
   if (!Nombre || !UnidadMedida || !idCategoria)
     return reply.code(400).send({ error: 'Nombre, UnidadMedida e idCategoria son requeridos' });
@@ -385,12 +386,13 @@ export async function editarProducto(request, reply) {
       .input('CostoUSD',     sql.Decimal(18,4), CostoUSD || null)
       .input('StockMinimo',  sql.Decimal(18,4), StockMinimo ?? 0)
       .input('Notas',        sql.VarChar(500),  Notas || null)
+      .input('EsProductoPlus', sql.Bit,         EsProductoPlus ? 1 : 0)
       .input('UsuMod',       sql.VarChar(20),   String(idUsuario))
       .query(`UPDATE VIDA_INVENTARIO_PRODUCTOS SET
                 idCategoria = @idCategoria, Nombre = @Nombre, Descripcion = @Descripcion,
                 SKU = @SKU, CodigoBarras = @CodigoBarras, UnidadMedida = @UnidadMedida,
                 PrecioUSD = @PrecioUSD, CostoUSD = @CostoUSD, StockMinimo = @StockMinimo,
-                Notas = @Notas, FechaMod = GETDATE(), UsuMod = @UsuMod
+                Notas = @Notas, EsProductoPlus = @EsProductoPlus, FechaMod = GETDATE(), UsuMod = @UsuMod
               WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idProducto = @idProducto`);
 
     return reply.send({ message: 'Producto actualizado' });
@@ -739,7 +741,7 @@ export async function catalogoCentral(request, reply) {
 
     const r = await req.query(`
       SELECT p.idProducto, p.Nombre, p.SKU, p.UnidadMedida, p.ImagenProducto, p.Descripcion,
-             p.CostoUSD, p.PrecioUSD, p.idCategoria, cat.Nombre AS NombreCategoria,
+             p.CostoUSD, p.PrecioUSD, p.EsProductoPlus, p.idCategoria, cat.Nombre AS NombreCategoria,
              ISNULL(SUM(inv.Cantidad), 0) AS StockTotal,
              COUNT(DISTINCT CASE WHEN inv.Cantidad > 0 THEN inv.idPuntoVenta END) AS TiendasConStock
       FROM VIDA_INVENTARIO_PRODUCTOS p
@@ -750,7 +752,7 @@ export async function catalogoCentral(request, reply) {
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.Status='ACTIVO'
         ${filtro}
       GROUP BY p.idProducto, p.Nombre, p.SKU, p.UnidadMedida, p.ImagenProducto, p.Descripcion,
-               p.CostoUSD, p.PrecioUSD, p.idCategoria, cat.Nombre
+               p.CostoUSD, p.PrecioUSD, p.EsProductoPlus, p.idCategoria, cat.Nombre
       ORDER BY p.Nombre`);
 
     // Categorías para el filtro + resumen

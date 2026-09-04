@@ -112,6 +112,9 @@ export default function Catalogos() {
                   {p.PromoBadge && (
                     <span className="absolute top-2 left-2 bg-vida-blue text-white text-xs font-black px-2 py-0.5 rounded-lg">{p.PromoBadge}</span>
                   )}
+                  {p.EsProductoPlus ? (
+                    <span className="absolute top-2 right-2 bg-amber-400 text-white text-xs font-black px-2 py-0.5 rounded-lg shadow">PLUS</span>
+                  ) : null}
                 </div>
                 <div className="p-3">
                   <p className="font-bold text-gray-800 text-sm truncate">{p.Nombre}</p>

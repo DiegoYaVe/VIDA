@@ -167,6 +167,7 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
     CostoUSD:        data?.CostoUSD        ?? '',
     StockMinimo:     data?.StockMinimo     ?? 0,
     Notas:           data?.Notas           || '',
+    EsProductoPlus:  !!data?.EsProductoPlus,
   });
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
@@ -314,6 +315,29 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
             value={form.CostoUSD} onChange={e => f('CostoUSD', e.target.value)}
             placeholder="0.00 (opcional)" />
         </div>
+
+        {/* Producto PLUS — alta rentabilidad */}
+        <button type="button" onClick={() => f('EsProductoPlus', !form.EsProductoPlus)}
+          className={`w-full flex items-center justify-between rounded-xl px-4 py-3 border transition text-left
+            ${form.EsProductoPlus ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}>
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${form.EsProductoPlus ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-500'}`}>PLUS</span>
+            <div>
+              <p className="text-sm font-bold text-gray-800">Producto Plus</p>
+              <p className="text-xs text-gray-400">Alta rentabilidad — badge dorado en la app y el panel</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {form.PrecioUSD !== '' && form.CostoUSD !== '' && Number(form.PrecioUSD) > 0 && (
+              <span className="text-xs font-bold text-amber-600">
+                Margen {(((Number(form.PrecioUSD) - Number(form.CostoUSD)) / Number(form.PrecioUSD)) * 100).toFixed(0)}%
+              </span>
+            )}
+            <span className={`w-10 h-6 rounded-full flex items-center px-0.5 transition ${form.EsProductoPlus ? 'bg-amber-400 justify-end' : 'bg-gray-300 justify-start'}`}>
+              <span className="w-5 h-5 bg-white rounded-full shadow" />
+            </span>
+          </div>
+        </button>
 
         <InputField label="Descripción" value={form.Descripcion}
           onChange={e => f('Descripcion', e.target.value)} />
@@ -729,7 +753,10 @@ function TabProductos({ puedeEscribir }) {
                         <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-300 shrink-0 text-lg">📷</div>
                       )}
                       <div>
-                        <p className="font-bold text-gray-800">{p.Nombre}</p>
+                        <p className="font-bold text-gray-800 flex items-center gap-1.5">
+                          {p.Nombre}
+                          {p.EsProductoPlus ? <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-amber-400 text-white">PLUS</span> : null}
+                        </p>
                         {p.Descripcion && <p className="text-xs text-gray-400 truncate max-w-48">{p.Descripcion}</p>}
                       </div>
                     </div>

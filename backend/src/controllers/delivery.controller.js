@@ -761,7 +761,7 @@ export async function listarProductosApp(request, reply) {
 
     const r = await req.query(`
       SELECT p.idProducto, p.Nombre, p.Descripcion, p.PrecioUSD, p.ImagenProducto,
-             p.idCategoria, c.Nombre AS NombreCategoria,
+             p.EsProductoPlus, p.idCategoria, c.Nombre AS NombreCategoria,
              inv.Cantidad AS StockDisponible,
              inv.idPuntoVenta,
              pv.NomComercial AS NombreSucursal, pv.Ciudad

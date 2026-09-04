@@ -143,6 +143,7 @@ export default function CatalogoScreen() {
     const precio = parseFloat(item.PrecioUSD ?? item.precio ?? 0);
     const nombre = item.Nombre ?? item.nombre ?? '';
     const imagen = item.ImagenProducto ?? item.imagen ?? '';
+    const esPlus = !!(item.EsProductoPlus ?? item.esProductoPlus);
 
     return (
       <View style={styles.prodCard}>
@@ -151,6 +152,11 @@ export default function CatalogoScreen() {
           style={styles.prodImg}
           defaultSource={{ uri: PLACEHOLDER }}
         />
+        {esPlus && (
+          <View style={styles.plusBadge}>
+            <Text style={styles.plusBadgeText}>PLUS</Text>
+          </View>
+        )}
         <Text style={styles.prodNombre} numberOfLines={2}>{nombre}</Text>
         <Text style={styles.prodPrecio}>${precio.toFixed(2)}</Text>
 
@@ -324,6 +330,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   prodImg: { width: '100%', height: 110, borderRadius: 10, resizeMode: 'cover', marginBottom: 8 },
+  plusBadge: { position: 'absolute', top: 6, right: 6, backgroundColor: '#F59E0B', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  plusBadgeText: { color: '#fff', fontSize: 10, fontWeight: '900' },
   prodNombre: { fontSize: 13, fontWeight: '600', color: '#1A202C', textAlign: 'center', marginBottom: 4 },
   prodPrecio: { fontSize: 15, fontWeight: '800', color: '#1A6A9A', marginBottom: 10 },
   addBtn: {
