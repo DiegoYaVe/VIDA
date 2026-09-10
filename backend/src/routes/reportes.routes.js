@@ -24,6 +24,6 @@ export async function reportesRoutes(fastify) {
   fastify.get('/reportes/delivery',     pre, reporteDelivery);
 
   // Reporte ejecutivo de red: visión corporativa, solo roles administrativos
-  const preRed = { preHandler: [authenticate, requireRole('SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN')] };
+  const preRed = { preHandler: [authenticate, requireRole('SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO')] };
   fastify.get('/reportes/red',          preRed, reporteRed);
 }
