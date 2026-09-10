@@ -24,13 +24,13 @@ No hace falta SQL Server local si vas a trabajar contra la base de QA (ver paso 
 
 ## 2. Base de datos
 
-**Las migraciones se corren en orden, del 01 al 24.** No hay migrador automático ni tabla de control: es responsabilidad de quien despliega saber cuáles se aplicaron.
+**Las migraciones se corren en orden, del 01 al 29.** No hay migrador automático ni tabla de control: es responsabilidad de quien despliega saber cuáles se aplicaron.
 
 ```
 sql/01_schema.sql
 sql/02_paises_estados.sql
 ...
-sql/24_hidratacion_bonus_idempotente.sql
+sql/29_panel_operaciones.sql
 ```
 
 Los archivos usan `GO` como separador de batch, así que hay que ejecutarlos desde **SSMS** (o `sqlcmd`), no desde un cliente que mande todo el archivo como una sola sentencia.
@@ -159,7 +159,7 @@ pos-venezuela/
 ├── app-cliente/      Expo — app del consumidor
 ├── app-repartidor/   Expo — app del repartidor
 ├── landing/          landing pública
-└── sql/              migraciones 01..24 (correr en orden)
+└── sql/              migraciones 01..29 (correr en orden)
 ```
 
 ### API
