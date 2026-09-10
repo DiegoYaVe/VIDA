@@ -7,14 +7,23 @@ import { promocionesVigentes, mejorPromoUnitaria } from './promociones.controlle
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-async function nextId(pool, tabla, campo, idBranch, idCuenta) {
-  const r = await pool.request()
-    .input('idBranch', sql.BigInt, idBranch)
-    .input('idCuenta', sql.BigInt, idCuenta)
-    .query(`SELECT ISNULL(MAX(${campo}), 0) + 1 AS nextId
-            FROM ${tabla}
-            WHERE idBranch = @idBranch AND idCuenta = @idCuenta`);
-  return r.recordset[0].nextId;
+// Inserta una fila con id secuencial por (idBranch, idCuenta) de forma ATÓMICA:
+// calcula MAX+1 e inserta en UNA sola sentencia con UPDLOCK+HOLDLOCK, de modo
+// que dos inserts concurrentes se serializan y no se duplica la PK. Antes se
+// hacía SELECT MAX+1 y luego un INSERT aparte (sin lock efectivo): dos requests
+// simultáneas leían el mismo MAX → PK duplicada (deuda técnica #1 de la auditoría).
+// `req` debe traer ya enlazados @idBranch, @idCuenta y los @params de `valores`.
+// `columnas`/`valores` son las columnas EXTRA (sin idBranch, idCuenta ni el id).
+async function insertarConId(req, { tabla, idCol, columnas, valores }) {
+  const colList = ['idBranch', 'idCuenta', idCol, ...columnas].join(', ');
+  const valExpr = ['@idBranch', '@idCuenta', `ISNULL(MAX(${idCol}), 0) + 1`, ...valores].join(', ');
+  const r = await req.query(`
+    INSERT INTO ${tabla} (${colList})
+    OUTPUT inserted.${idCol} AS nuevoId
+    SELECT ${valExpr}
+    FROM ${tabla} WITH (UPDLOCK, HOLDLOCK)
+    WHERE idBranch = @idBranch AND idCuenta = @idCuenta`);
+  return r.recordset[0].nuevoId;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -49,21 +58,19 @@ export async function crearCategoria(request, reply) {
 
   try {
     const pool = await getPool();
-    const nuevoId = await nextId(pool, 'VIDA_INVENTARIO_CATEGORIAS', 'idCategoria', idBranch, idCuenta);
-
-    await pool.request()
+    const req = pool.request()
       .input('idBranch',       sql.BigInt,      idBranch)
       .input('idCuenta',       sql.BigInt,      idCuenta)
-      .input('idCategoria',    sql.BigInt,      nuevoId)
       .input('Nombre',         sql.VarChar(100), Nombre)
       .input('Descripcion',    sql.VarChar(300), Descripcion || null)
       .input('Icono',          sql.VarChar(100), Icono || null)
       .input('OrdenCategoria', sql.Int,          OrdenCategoria ?? 0)
-      .input('UsuAlta',        sql.VarChar(20),  String(idUsuario))
-      .query(`INSERT INTO VIDA_INVENTARIO_CATEGORIAS
-                (idBranch, idCuenta, idCategoria, Nombre, Descripcion, Icono, OrdenCategoria, UsuAlta)
-              VALUES
-                (@idBranch, @idCuenta, @idCategoria, @Nombre, @Descripcion, @Icono, @OrdenCategoria, @UsuAlta)`);
+      .input('UsuAlta',        sql.VarChar(20),  String(idUsuario));
+    const nuevoId = await insertarConId(req, {
+      tabla: 'VIDA_INVENTARIO_CATEGORIAS', idCol: 'idCategoria',
+      columnas: ['Nombre', 'Descripcion', 'Icono', 'OrdenCategoria', 'UsuAlta'],
+      valores:  ['@Nombre', '@Descripcion', '@Icono', '@OrdenCategoria', '@UsuAlta'],
+    });
 
     return reply.code(201).send({ message: 'Categoría creada', idCategoria: nuevoId });
   } catch (err) {
@@ -313,12 +320,9 @@ export async function crearProducto(request, reply) {
         return reply.code(409).send({ error: 'El SKU ya está en uso' });
     }
 
-    const nuevoId = await nextId(pool, 'VIDA_INVENTARIO_PRODUCTOS', 'idProducto', idBranch, idCuenta);
-
-    await pool.request()
+    const req = pool.request()
       .input('idBranch',     sql.BigInt,       idBranch)
       .input('idCuenta',     sql.BigInt,       idCuenta)
-      .input('idProducto',   sql.BigInt,       nuevoId)
       .input('idCategoria',  sql.BigInt,       idCategoria)
       .input('Nombre',       sql.VarChar(200), Nombre)
       .input('Descripcion',  sql.VarChar(500), Descripcion || null)
@@ -330,13 +334,14 @@ export async function crearProducto(request, reply) {
       .input('StockMinimo',  sql.Decimal(18,4), StockMinimo ?? 0)
       .input('Notas',        sql.VarChar(500), Notas || null)
       .input('EsProductoPlus', sql.Bit,        EsProductoPlus ? 1 : 0)
-      .input('UsuAlta',      sql.VarChar(20),  String(idUsuario))
-      .query(`INSERT INTO VIDA_INVENTARIO_PRODUCTOS
-                (idBranch, idCuenta, idProducto, idCategoria, Nombre, Descripcion,
-                 SKU, CodigoBarras, UnidadMedida, PrecioUSD, CostoUSD, StockMinimo, Notas, EsProductoPlus, UsuAlta)
-              VALUES
-                (@idBranch, @idCuenta, @idProducto, @idCategoria, @Nombre, @Descripcion,
-                 @SKU, @CodigoBarras, @UnidadMedida, @PrecioUSD, @CostoUSD, @StockMinimo, @Notas, @EsProductoPlus, @UsuAlta)`);
+      .input('UsuAlta',      sql.VarChar(20),  String(idUsuario));
+    const nuevoId = await insertarConId(req, {
+      tabla: 'VIDA_INVENTARIO_PRODUCTOS', idCol: 'idProducto',
+      columnas: ['idCategoria', 'Nombre', 'Descripcion', 'SKU', 'CodigoBarras', 'UnidadMedida',
+                 'PrecioUSD', 'CostoUSD', 'StockMinimo', 'Notas', 'EsProductoPlus', 'UsuAlta'],
+      valores:  ['@idCategoria', '@Nombre', '@Descripcion', '@SKU', '@CodigoBarras', '@UnidadMedida',
+                 '@PrecioUSD', '@CostoUSD', '@StockMinimo', '@Notas', '@EsProductoPlus', '@UsuAlta'],
+    });
 
     return reply.code(201).send({ message: 'Producto creado', idProducto: nuevoId });
   } catch (err) {
@@ -578,12 +583,9 @@ export async function registrarMovimiento(request, reply) {
                 VALUES (@idBranch, @idCuenta, @idPuntoVenta, @idProducto, @Cantidad);`);
 
     // Registrar movimiento
-    const nuevoId = await nextId(pool, 'VIDA_INVENTARIO_MOVIMIENTOS', 'idMovimiento', idBranch, idCuenta);
-
-    await pool.request()
+    const reqMov = pool.request()
       .input('idBranch',         sql.BigInt,       idBranch)
       .input('idCuenta',         sql.BigInt,       idCuenta)
-      .input('idMovimiento',     sql.BigInt,       nuevoId)
       .input('idPuntoVenta',     sql.BigInt,       idPuntoVenta)
       .input('idProducto',       sql.BigInt,       idProducto)
       .input('TipoMovimiento',   sql.VarChar(20),  TipoMovimiento)
@@ -592,15 +594,14 @@ export async function registrarMovimiento(request, reply) {
       .input('CantidadDespues',  sql.Decimal(18,4), cantidadDespues)
       .input('Motivo',           sql.VarChar(300), Motivo || null)
       .input('Referencia',       sql.VarChar(100), Referencia || null)
-      .input('UsuAlta',          sql.VarChar(20),  String(idUsuario))
-      .query(`INSERT INTO VIDA_INVENTARIO_MOVIMIENTOS
-                (idBranch, idCuenta, idMovimiento, idPuntoVenta, idProducto,
-                 TipoMovimiento, Cantidad, CantidadAntes, CantidadDespues,
-                 Motivo, Referencia, UsuAlta)
-              VALUES
-                (@idBranch, @idCuenta, @idMovimiento, @idPuntoVenta, @idProducto,
-                 @TipoMovimiento, @Cantidad, @CantidadAntes, @CantidadDespues,
-                 @Motivo, @Referencia, @UsuAlta)`);
+      .input('UsuAlta',          sql.VarChar(20),  String(idUsuario));
+    const nuevoId = await insertarConId(reqMov, {
+      tabla: 'VIDA_INVENTARIO_MOVIMIENTOS', idCol: 'idMovimiento',
+      columnas: ['idPuntoVenta', 'idProducto', 'TipoMovimiento', 'Cantidad', 'CantidadAntes',
+                 'CantidadDespues', 'Motivo', 'Referencia', 'UsuAlta'],
+      valores:  ['@idPuntoVenta', '@idProducto', '@TipoMovimiento', '@Cantidad', '@CantidadAntes',
+                 '@CantidadDespues', '@Motivo', '@Referencia', '@UsuAlta'],
+    });
 
     await registrarAuditoria(pool, {
       idBranch, idCuenta,
