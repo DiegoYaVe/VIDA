@@ -22,12 +22,17 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
 
 ## 1. Base de datos (SQL Server de producción)
 
-- [ ] Confirmar a qué servidor/BD apunta producción (puede **diferir** de QA `db_a3fa0b_vidaqa` en `sql5065.site4now.net`).
-- [ ] Abrir **SSMS** conectado a la BD de producción (no QA).
-- [ ] Correr en orden las migraciones pendientes de `sql/`, **una por una**, del número más bajo al más alto. Usan `GO` como separador → ejecutar desde SSMS o `sqlcmd`, nunca como una sola sentencia.
-  - Migraciones actuales del repo: `01_schema` … `29_panel_operaciones` (revisa el directorio `sql/` por si hay nuevas desde el último deploy).
-  - Las migraciones 25–29 **insertan pantallas del sidebar** (`VIDA_CUENTA_PANTALLAS`) y conceden acceso; revisa que el sidebar del panel las muestre tras desplegar.
-- [ ] Verificar que cada script terminó sin error antes de pasar al siguiente.
+- [ ] Confirmar a qué servidor/BD apunta producción (puede **diferir** de QA `db_a3fa0b_vidaqa` en `sql5065.site4now.net`). El migrador usa el `backend/.env`, así que confirma que ese `.env` apunte a **producción** antes de correrlo.
+
+**Opción A — migrador (recomendado).** Lleva la tabla de control `VIDA_SCHEMA_MIGRATIONS` y aplica solo lo pendiente, en orden, respetando los `GO`. Desde `backend/`:
+- [ ] `npm run migrate:status` — ver qué está aplicado y qué falta (crea la tabla de control la primera vez).
+- [ ] **Solo la PRIMERA vez en una BD que ya traía migraciones** (QA/prod existentes): `node scripts/migrate.mjs baseline` marca las actuales como ya aplicadas **sin ejecutarlas**. Verifica antes que de verdad estén (objetos/columnas), porque baseline las da por hechas. En una **BD nueva desde cero NO se hace baseline** — se corre `up` directo.
+- [ ] `npm run migrate` — aplica las pendientes. Se detiene en la primera que falle (esa no queda registrada; se corrige y se re-corre).
+- [ ] `npm run migrate:status` de nuevo → **0 pendientes**.
+
+**Opción B — manual (fallback).** Abrir **SSMS** conectado a la BD de producción (no QA) y correr en orden las migraciones pendientes de `sql/`, una por una, del número más bajo al más alto (usan `GO`, no mandar el archivo como una sola sentencia).
+
+- [ ] Las migraciones que **insertan pantallas del sidebar** (`VIDA_CUENTA_PANTALLAS`: 25–29, 32 cupones) conceden acceso a roles; revisa que el sidebar del panel las muestre tras desplegar.
 - [ ] Si es una BD nueva desde cero: insertar el primer usuario a mano en `VIDA_CUENTA_USUARIOS` (bcrypt 12 rounds) — ningún `.sql` crea usuarios.
 - [ ] Sanity check: `SELECT COUNT(*) FROM VIDA_CUENTA_PANTALLAS;` y confirmar tiendas/productos esperados.
 

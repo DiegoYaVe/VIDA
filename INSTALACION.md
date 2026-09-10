@@ -24,16 +24,18 @@ No hace falta SQL Server local si vas a trabajar contra la base de QA (ver paso 
 
 ## 2. Base de datos
 
-**Las migraciones se corren en orden, del 01 al 29.** No hay migrador automático ni tabla de control: es responsabilidad de quien despliega saber cuáles se aplicaron.
+**Las migraciones se corren en orden, del 01 en adelante.** Hay dos formas:
 
-```
-sql/01_schema.sql
-sql/02_paises_estados.sql
-...
-sql/29_panel_operaciones.sql
+**Migrador (recomendado).** Desde `backend/` (usa el `backend/.env`):
+
+```bash
+npm run migrate:status   # qué está aplicado / qué falta (crea la tabla de control)
+npm run migrate          # aplica las pendientes, en orden, respetando los GO
 ```
 
-Los archivos usan `GO` como separador de batch, así que hay que ejecutarlos desde **SSMS** (o `sqlcmd`), no desde un cliente que mande todo el archivo como una sola sentencia.
+Lleva la tabla `VIDA_SCHEMA_MIGRATIONS` y aplica solo lo que falta. En una BD que **ya** traía migraciones aplicadas (p. ej. QA), la primera vez se adopta con `node scripts/migrate.mjs baseline` (las marca como aplicadas sin ejecutarlas). En una BD **nueva desde cero** se corre `npm run migrate` directo, sin baseline.
+
+**Manual (fallback).** Los archivos usan `GO` como separador de batch, así que se pueden ejecutar desde **SSMS** (o `sqlcmd`) en orden, no desde un cliente que mande todo el archivo como una sola sentencia.
 
 > ⚠️ Es **SQL Server**, no MySQL. Ya pasó una vez que se corrió un script en el phpMyAdmin de otro proyecto.
 
