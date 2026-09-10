@@ -23,6 +23,7 @@ import Precios       from './pages/Precios.jsx';
 import Matriz        from './pages/Matriz.jsx';
 import Corporativo   from './pages/Corporativo.jsx';
 import Catalogos     from './pages/Catalogos.jsx';
+import Academia      from './pages/Academia.jsx';
 import Tienda        from './pages/Tienda.jsx';
 import { ToastContainer } from './components/Toast.jsx';
 
@@ -173,6 +174,10 @@ export default function App() {
 
         <Route path="/catalogos" element={
           <ProtectedRoute modulo="/catalogos"><Layout><Catalogos /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/academia" element={
+          <ProtectedRoute modulo="/academia"><Layout><Academia /></Layout></ProtectedRoute>
         } />
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

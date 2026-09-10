@@ -30,7 +30,7 @@ pos-venezuela/
   frontend/          # Panel React+Vite (src/pages, src/services, src/store, src/utils)
   app-cliente/       # Expo (app/(tabs), app/(auth), app/*)
   app-repartidor/    # Expo (app/(main), app/*)
-  sql/               # Migraciones numeradas 01..26 (correr en orden en SQL Server)
+  sql/               # Migraciones numeradas 01..27 (correr en orden en SQL Server)
 ```
 
 ### Repo / rama / deploy
@@ -84,7 +84,7 @@ pos-venezuela/
 | **C) Metas** (diaria/semanal/mensual + barra de progreso + insignia) | ✅ (esta sesión) |
 | D) Inventario tiempo real, pedidos entrantes, cuentas por pagar (Matriz), base de clientes | ✅ |
 | **E) Marketing — Flyer + QR** ("Crear promo hoy": elige producto, precio promo, genera flyer PNG con QR de la tienda para WhatsApp/IG) | ✅ parcial. El QR ya abre una **página pública de tienda** (`/t/:idPuntoVenta`, commit `30b81e1e`). Falta: replicar redes, cupones automáticos |
-| F) Academia Vida (cursos/videos + puntos por ver) | ❌ |
+| **F) Academia Vida** (cursos/videos en el panel + puntos de academia al completar) | ✅ v1 (esta sesión). Falta: CRUD de cursos desde corporativo, VideoUrl real, eventos exclusivos |
 
 ### Corporativo / Repartidor
 - Portal Corporativo (onboarding de tiendas con wizard país→estado→ciudad, razón social, lada; meta 2035), Matriz/reabasto, reportes de red, gestión de repartidores (incl. **cambiar contraseña** desde el panel): ✅.
@@ -118,6 +118,7 @@ datos de prueba del cliente 4 quedaron restaurados; el cliente 1 no se tocó.
 
 Del más reciente al más antiguo:
 
+- **Academia VIDA v1** (panel empresario) — archivos NUEVOS `academia.controller.js` + `academia.routes.js` (en `app.js`) + página `frontend/src/pages/Academia.jsx` + ruta `/academia` en `App.jsx`. Migración `sql/27`: `VIDA_ACADEMIA_CURSOS` (seed 5 cursos), `VIDA_ACADEMIA_PROGRESO`, **inserta la pantalla `/academia` en `VIDA_CUENTA_PANTALLAS`** (idPantalla dinámico = MAX+1; ícono Lucide `GraduationCap`) **y da acceso** a usuarios activos SUPER_ADMIN/ADMIN_PAIS/ADMIN_ESTADO/ADMIN. Endpoints `GET /academia/cursos` (cursos + resumen: completados/total/puntos) y `POST /academia/cursos/:idCurso/completar` (idempotente; suma "puntos de academia"). **Los puntos de academia son un total COMPUTADO** (SUM de Puntos de cursos completados), **separados** de los puntos del cliente (los empresarios son `VIDA_CUENTA_USUARIOS`, no `VIDA_APP_CLIENTES`). Pendiente: CRUD de cursos + VideoUrl reales + eventos exclusivos para dueños. **Patrón útil:** así se agrega un módulo nuevo al sidebar dinámico (pantalla + accesos por migración).
 - **Servicios / Recargas v1** — archivos NUEVOS `backend/src/controllers/servicios.controller.js` + `routes/servicios.routes.js` (registrados en `app.js`). Migración `sql/26` (`VIDA_SERVICIOS_OPERADORAS` seed 6 operadoras VE + `VIDA_SERVICIOS_ORDENES`). Cliente: `GET /delivery/cliente/servicios/operadoras`, `POST /delivery/cliente/servicios` (crea orden `PROCESANDO`, genera `Referencia SVC-...`, acredita puntos = round(monto×PuntosPorDolar)), `GET /delivery/cliente/servicios` (mis órdenes). Ops: `PATCH /delivery/admin/servicios/:idOrden/estado` (COMPLETADO/RECHAZADO; al RECHAZAR revierte los puntos con AJUSTE, idempotente por status). App: pantalla `app-cliente/app/servicios.jsx` (grid de operadoras → número/monto/método → confirma; lista "Mis servicios") + tarjeta en perfil. **Sin integración real de telco** (la orden la completa ops); pendiente: comprobante pago móvil + sub-módulo Amazon.
 - **Membresía Club Vida v1** — archivos NUEVOS `backend/src/controllers/club.controller.js` + `routes/club.routes.js` (registrados en `app.js`), para no chocar con la sesión paralela que toca `delivery.controller`. Migración `sql/25` (tabla `VIDA_CLUB_NIVELES` + seed de 5 niveles). Endpoint `GET /delivery/cliente/membresia`: nivel = mayor nivel cuyo `MinPuntos` ≤ **puntos GANADOS de por vida** (SUM ledger Tipo='GANADO', = compras + racha de agua), beneficios, siguiente nivel + faltan, `codigoMembresia = VIDA-{id6}`, y **QR** (data URL, dep nueva backend **`qrcode@1.5.4`**). App: pantalla `app-cliente/app/mi-club.jsx` (tarjeta digital con degradado por nivel + QR + progreso + escalera de niveles) + tarjeta en perfil. Pendiente fase 2: **Eventos Club + RSVP** y **canje de productos exclusivos**.
 - **Salud — "Mi Consumo Vida"** (hidratación) — columnas `Hidratacion*` en cliente + tabla `VIDA_CLIENTE_HIDRATACION_DIA` + config `PuntosRachaHidratacion=50` (sql/23). Endpoints cliente `GET/PUT /delivery/cliente/hidratacion`, `POST .../vaso`, `POST .../quitar`. Gamificación: al cumplir la meta y completar múltiplo de 7 días de racha → acredita puntos (helper `acreditarPuntosCliente`). Pantalla `app-cliente/app/mi-consumo.jsx` (activar, botón "Tomé 1 vaso", progreso, racha, gráfica 14 días, meta ajustable) + tarjeta en perfil. **Fix backend general:** `app.js` ahora acepta **body JSON vacío** en POST/PUT (content-type parser) — antes Fastify respondía 400 `FST_ERR_CTP_EMPTY_JSON_BODY` (rompía acciones sin payload como "+1 vaso"). Pendiente: **push recordatorio cada 2h** (usar `expo-notifications` con notificación local repetida; Expo Go tiene límites, va mejor en dev build/APK).
@@ -196,6 +197,13 @@ Del más reciente al más antiguo:
 - **No hay integración real de telco**: la recarga la ejecuta ops manualmente; el estatus es "separado" (como el sub-módulo Amazon del spec). El panel admin para gestionar estas órdenes es **fase 2** (hoy solo existe el endpoint). También pendiente: subir comprobante de pago móvil y el sub-módulo **Amazon** curado.
 - ⚠️ Los puntos se acreditan **al crear** (no al completar); por eso el reverso en RECHAZADO. Si se prefiere acreditar al COMPLETAR, mover el `movPuntos` a `cambiarEstadoServicio`.
 
+### Academia VIDA (`academia.controller.js` + `frontend/src/pages/Academia.jsx`)
+- Panel del empresario. Migración `sql/27`: `VIDA_ACADEMIA_CURSOS` (5 cursos seed) + `VIDA_ACADEMIA_PROGRESO` (por usuario). **También inserta la pantalla `/academia`** en `VIDA_CUENTA_PANTALLAS` (idPantalla = MAX+1, ícono `GraduationCap`) y da acceso a usuarios admin — así aparece en el sidebar dinámico sin tocar código del menú (el `Sidebar.jsx` resuelve el ícono con `import * as Icons from 'lucide-react'`).
+- Endpoints (roles admin): `GET /academia/cursos` → `{cursos:[...con Completado], resumen:{total,completados,puntos}}`; `POST /academia/cursos/:idCurso/completar` (MERGE idempotente).
+- **Puntos de academia = COMPUTADOS** (SUM de `Puntos` de cursos completados por el usuario). No hay ledger para usuarios del panel (los puntos con ledger son solo de clientes). Al "completar" con VideoUrl, el front abre el video y marca completado.
+- Ruta en `App.jsx`: `/academia` con `modulo="/academia"` (ProtectedRoute valida que el usuario tenga la pantalla).
+- **Pendiente:** CRUD de cursos + carga de VideoUrl desde corporativo; eventos exclusivos para dueños.
+
 ---
 
 ## 6. Cosas de entorno / operación (para no tropezar)
@@ -234,7 +242,7 @@ Del más reciente al más antiguo:
 
 1. **Push recordatorio de hidratación** — cerrar fase 2 de Salud con `expo-notifications` (notificación local repetida cada 2h).
 2. **Club Vida fase 2** — Eventos Club + RSVP y canje de productos exclusivos por nivel (la v1 tarjeta+niveles+QR ya está).
-3. **Academia Vida (F)** — cursos + puntos al empresario.
+3. **Academia fase 2** — CRUD de cursos desde corporativo (hoy son seed) + VideoUrl reales + eventos exclusivos para dueños (la v1 de cursos+progreso+puntos ya está).
 4. **Fidelización fase 3** — catálogo de premios + vencimiento de puntos.
 5. **Servicios fase 2** — panel admin para gestionar/completar recargas + comprobante pago móvil + sub-módulo Amazon curado (la v1 de recargas ya está).
 
