@@ -176,6 +176,67 @@ export async function cambiarEstadoCanje(request, reply) {
   } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al cambiar el estado del canje' }); }
 }
 
+// ── CRUD de catálogo de premios (corporativo) ─────────────────────────────
+// GET /delivery/admin/premios/catalogo
+export async function listarPremiosCatalogo(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  try {
+    const pool = await getPool();
+    const r = await pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .query(`SELECT idPremio, Nombre, Descripcion, CostoPuntos, Stock, ImagenUrl, Orden, Status
+              FROM VIDA_PREMIOS WHERE idBranch=@idBranch AND idCuenta=@idCuenta ORDER BY Orden, idPremio`);
+    return reply.send(r.recordset);
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al listar premios' }); }
+}
+// POST /delivery/admin/premios
+export async function crearPremio(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const b = request.body || {};
+  if (!b.Nombre?.trim()) return reply.code(400).send({ error: 'El nombre es obligatorio' });
+  try {
+    const pool = await getPool();
+    const id = await nextId(pool, 'VIDA_PREMIOS', 'idPremio', idBranch, idCuenta);
+    await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idPremio', sql.BigInt, id)
+      .input('Nombre', sql.VarChar(150), b.Nombre.trim()).input('Descripcion', sql.VarChar(500), b.Descripcion || null)
+      .input('CostoPuntos', sql.Int, parseInt(b.CostoPuntos) || 0).input('Stock', sql.Int, b.Stock === '' || b.Stock == null ? -1 : parseInt(b.Stock))
+      .input('ImagenUrl', sql.VarChar(400), b.ImagenUrl || null).input('Orden', sql.Int, parseInt(b.Orden) || 0)
+      .query(`INSERT INTO VIDA_PREMIOS (idBranch,idCuenta,idPremio,Nombre,Descripcion,CostoPuntos,Stock,ImagenUrl,Orden,Status)
+              VALUES (@idBranch,@idCuenta,@idPremio,@Nombre,@Descripcion,@CostoPuntos,@Stock,@ImagenUrl,@Orden,'ACTIVO')`);
+    return reply.code(201).send({ idPremio: id });
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al crear premio' }); }
+}
+// PUT /delivery/admin/premios/:idPremio
+export async function editarPremio(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { idPremio } = request.params;
+  const b = request.body || {};
+  try {
+    const pool = await getPool();
+    await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idPremio', sql.BigInt, idPremio)
+      .input('Nombre', sql.VarChar(150), b.Nombre?.trim() || null).input('Descripcion', sql.VarChar(500), b.Descripcion || null)
+      .input('CostoPuntos', sql.Int, parseInt(b.CostoPuntos) || 0).input('Stock', sql.Int, b.Stock === '' || b.Stock == null ? -1 : parseInt(b.Stock))
+      .input('ImagenUrl', sql.VarChar(400), b.ImagenUrl || null).input('Orden', sql.Int, parseInt(b.Orden) || 0)
+      .input('Status', sql.VarChar(20), b.Status || 'ACTIVO')
+      .query(`UPDATE VIDA_PREMIOS SET Nombre=@Nombre, Descripcion=@Descripcion, CostoPuntos=@CostoPuntos,
+                Stock=@Stock, ImagenUrl=@ImagenUrl, Orden=@Orden, Status=@Status
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPremio=@idPremio`);
+    return reply.send({ ok: true });
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al editar premio' }); }
+}
+// DELETE /delivery/admin/premios/:idPremio  (soft delete)
+export async function eliminarPremio(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { idPremio } = request.params;
+  try {
+    const pool = await getPool();
+    await pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idPremio', sql.BigInt, idPremio)
+      .query(`UPDATE VIDA_PREMIOS SET Status='INACTIVO' WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPremio=@idPremio`);
+    return reply.send({ ok: true });
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al eliminar premio' }); }
+}
+
 // POST /delivery/admin/puntos/expirar-inactivos   (llamable por cron)
 export async function expirarPuntosInactivos(request, reply) {
   const { idBranch, idCuenta } = request.user;

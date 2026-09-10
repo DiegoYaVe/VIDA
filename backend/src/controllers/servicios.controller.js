@@ -103,6 +103,61 @@ export async function misServicios(request, reply) {
   } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al obtener servicios' }); }
 }
 
+// ── CRUD de operadoras (corporativo) ──────────────────────────────────────
+export async function listarOperadorasAdmin(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  try {
+    const pool = await getPool();
+    const r = await pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .query(`SELECT idOperadora, Nombre, Tipo, Categoria, Color, Orden, Activo FROM VIDA_SERVICIOS_OPERADORAS
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta ORDER BY Orden, idOperadora`);
+    return reply.send(r.recordset);
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al listar operadoras' }); }
+}
+export async function crearOperadora(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const b = request.body || {};
+  if (!b.Nombre?.trim() || !b.Tipo?.trim()) return reply.code(400).send({ error: 'Nombre y tipo son obligatorios' });
+  try {
+    const pool = await getPool();
+    const id = await nextId(pool, 'VIDA_SERVICIOS_OPERADORAS', 'idOperadora', idBranch, idCuenta);
+    await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idOperadora', sql.BigInt, id)
+      .input('Nombre', sql.VarChar(80), b.Nombre.trim()).input('Tipo', sql.VarChar(30), b.Tipo.trim())
+      .input('Categoria', sql.VarChar(40), b.Categoria || null).input('Color', sql.VarChar(20), b.Color || null)
+      .input('Orden', sql.Int, parseInt(b.Orden) || 0)
+      .query(`INSERT INTO VIDA_SERVICIOS_OPERADORAS (idBranch,idCuenta,idOperadora,Nombre,Tipo,Categoria,Color,Activo,Orden)
+              VALUES (@idBranch,@idCuenta,@idOperadora,@Nombre,@Tipo,@Categoria,@Color,1,@Orden)`);
+    return reply.code(201).send({ idOperadora: id });
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al crear operadora' }); }
+}
+export async function editarOperadora(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { idOperadora } = request.params;
+  const b = request.body || {};
+  try {
+    const pool = await getPool();
+    await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idOperadora', sql.BigInt, idOperadora)
+      .input('Nombre', sql.VarChar(80), b.Nombre?.trim() || null).input('Tipo', sql.VarChar(30), b.Tipo?.trim() || null)
+      .input('Categoria', sql.VarChar(40), b.Categoria || null).input('Color', sql.VarChar(20), b.Color || null)
+      .input('Orden', sql.Int, parseInt(b.Orden) || 0).input('Activo', sql.Bit, (b.Activo === false || b.Activo === 0 || b.Activo === '0') ? 0 : 1)
+      .query(`UPDATE VIDA_SERVICIOS_OPERADORAS SET Nombre=@Nombre, Tipo=@Tipo, Categoria=@Categoria, Color=@Color, Orden=@Orden, Activo=@Activo
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idOperadora=@idOperadora`);
+    return reply.send({ ok: true });
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al editar operadora' }); }
+}
+export async function eliminarOperadora(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { idOperadora } = request.params;
+  try {
+    const pool = await getPool();
+    await pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idOperadora', sql.BigInt, idOperadora)
+      .query(`UPDATE VIDA_SERVICIOS_OPERADORAS SET Activo=0 WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idOperadora=@idOperadora`);
+    return reply.send({ ok: true });
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al eliminar operadora' }); }
+}
+
 // GET /delivery/admin/servicios?status=PROCESANDO  (ops)
 export async function listarOrdenesAdmin(request, reply) {
   const { idBranch, idCuenta } = request.user;

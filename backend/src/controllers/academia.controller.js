@@ -3,6 +3,14 @@
 // Al completar un curso suma "puntos de academia" (separados del cliente).
 import { getPool, sql } from '../db/sqlserver.js';
 
+async function nextId(pool, tabla, campo, idBranch, idCuenta) {
+  const r = await pool.request()
+    .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+    .query(`SELECT ISNULL(MAX(${campo}),0)+1 AS next FROM ${tabla} WITH (UPDLOCK, HOLDLOCK)
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+  return r.recordset[0].next;
+}
+
 async function resumen(pool, idBranch, idCuenta, idUsuario) {
   const r = await pool.request()
     .input('idBranch', sql.BigInt, idBranch)
@@ -72,4 +80,66 @@ export async function completarCurso(request, reply) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al completar el curso' });
   }
+}
+
+// ── CRUD de cursos (corporativo) ──────────────────────────────────────────
+// GET /academia/admin/cursos
+export async function listarCursosAdmin(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  try {
+    const pool = await getPool();
+    const r = await pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .query(`SELECT idCurso, Titulo, Descripcion, Categoria, VideoUrl, DuracionMin, Puntos, Orden, Status
+              FROM VIDA_ACADEMIA_CURSOS WHERE idBranch=@idBranch AND idCuenta=@idCuenta ORDER BY Orden, idCurso`);
+    return reply.send(r.recordset);
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al listar cursos' }); }
+}
+// POST /academia/admin/cursos
+export async function crearCurso(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const b = request.body || {};
+  if (!b.Titulo?.trim()) return reply.code(400).send({ error: 'El título es obligatorio' });
+  try {
+    const pool = await getPool();
+    const id = await nextId(pool, 'VIDA_ACADEMIA_CURSOS', 'idCurso', idBranch, idCuenta);
+    await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCurso', sql.BigInt, id)
+      .input('Titulo', sql.VarChar(150), b.Titulo.trim()).input('Descripcion', sql.VarChar(600), b.Descripcion || null)
+      .input('Categoria', sql.VarChar(60), b.Categoria || null).input('VideoUrl', sql.VarChar(400), b.VideoUrl || null)
+      .input('DuracionMin', sql.Int, parseInt(b.DuracionMin) || 0).input('Puntos', sql.Int, parseInt(b.Puntos) || 0)
+      .input('Orden', sql.Int, parseInt(b.Orden) || 0)
+      .query(`INSERT INTO VIDA_ACADEMIA_CURSOS (idBranch,idCuenta,idCurso,Titulo,Descripcion,Categoria,VideoUrl,DuracionMin,Puntos,Orden,Status)
+              VALUES (@idBranch,@idCuenta,@idCurso,@Titulo,@Descripcion,@Categoria,@VideoUrl,@DuracionMin,@Puntos,@Orden,'ACTIVO')`);
+    return reply.code(201).send({ idCurso: id });
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al crear curso' }); }
+}
+// PUT /academia/admin/cursos/:idCurso
+export async function editarCurso(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { idCurso } = request.params;
+  const b = request.body || {};
+  try {
+    const pool = await getPool();
+    await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCurso', sql.BigInt, idCurso)
+      .input('Titulo', sql.VarChar(150), b.Titulo?.trim() || null).input('Descripcion', sql.VarChar(600), b.Descripcion || null)
+      .input('Categoria', sql.VarChar(60), b.Categoria || null).input('VideoUrl', sql.VarChar(400), b.VideoUrl || null)
+      .input('DuracionMin', sql.Int, parseInt(b.DuracionMin) || 0).input('Puntos', sql.Int, parseInt(b.Puntos) || 0)
+      .input('Orden', sql.Int, parseInt(b.Orden) || 0).input('Status', sql.VarChar(20), b.Status || 'ACTIVO')
+      .query(`UPDATE VIDA_ACADEMIA_CURSOS SET Titulo=@Titulo, Descripcion=@Descripcion, Categoria=@Categoria, VideoUrl=@VideoUrl,
+                DuracionMin=@DuracionMin, Puntos=@Puntos, Orden=@Orden, Status=@Status
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCurso=@idCurso`);
+    return reply.send({ ok: true });
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al editar curso' }); }
+}
+// DELETE /academia/admin/cursos/:idCurso  (soft)
+export async function eliminarCurso(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { idCurso } = request.params;
+  try {
+    const pool = await getPool();
+    await pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCurso', sql.BigInt, idCurso)
+      .query(`UPDATE VIDA_ACADEMIA_CURSOS SET Status='INACTIVO' WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCurso=@idCurso`);
+    return reply.send({ ok: true });
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al eliminar curso' }); }
 }

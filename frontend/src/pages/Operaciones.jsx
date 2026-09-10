@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   ClipboardList, Phone, Gift, Star, RefreshCw, Check, X, Clock, Hourglass,
+  GraduationCap, Plus, Pencil, Trash2, Save,
 } from 'lucide-react';
 import api from '../services/api.js';
 import { useToast } from '../components/Toast.jsx';
@@ -15,7 +16,173 @@ const TABS = [
   { id: 'recargas', label: 'Recargas', icon: Phone },
   { id: 'premios',  label: 'Canjes de premios', icon: Gift },
   { id: 'puntos',   label: 'Vencimiento de puntos', icon: Hourglass },
+  { id: 'cat-premios',    label: 'Catálogo premios',   icon: Gift },
+  { id: 'cat-cursos',     label: 'Cursos (Academia)',  icon: GraduationCap },
+  { id: 'cat-operadoras', label: 'Operadoras',         icon: Phone },
 ];
+
+// ── CRUD genérico de catálogo ────────────────────────────────────────────
+function CrudCatalogo({ baseUrl, idKey, fields, columns, titulo }) {
+  const toast = useToast();
+  const [items, setItems] = useState([]);
+  const [cargando, setCarg] = useState(true);
+  const [edit, setEdit] = useState(null); // null | {} nuevo | item
+  const [form, setForm] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  const cargar = useCallback(async () => {
+    setCarg(true);
+    try { setItems((await api.get(baseUrl)).data || []); } catch { setItems([]); } finally { setCarg(false); }
+  }, [baseUrl]);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const abrir = (item) => { setEdit(item || {}); setForm(item ? { ...item } : Object.fromEntries(fields.map(f => [f.key, f.def ?? '']))); };
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  async function guardar() {
+    for (const f of fields) if (f.required && !String(form[f.key] ?? '').trim()) { toast.error('Falta ' + f.label); return; }
+    setSaving(true);
+    try {
+      if (edit && edit[idKey]) await api.put(`${baseUrl}/${edit[idKey]}`, form);
+      else await api.post(baseUrl, form);
+      toast.success('Guardado');
+      setEdit(null); cargar();
+    } catch (e) { toast.error('Error', e.response?.data?.error || ''); } finally { setSaving(false); }
+  }
+  async function eliminar(item) {
+    if (!window.confirm(`¿Desactivar "${item[columns[0].key]}"?`)) return;
+    try { await api.delete(`${baseUrl}/${item[idKey]}`); toast.success('Desactivado'); cargar(); }
+    catch (e) { toast.error('Error', e.response?.data?.error || ''); }
+  }
+
+  if (cargando) return <p className="text-center text-gray-400 py-10 text-sm">Cargando…</p>;
+
+  return (
+    <div>
+      <div className="flex justify-end mb-3">
+        <button onClick={() => abrir(null)} className="flex items-center gap-2 bg-vida-blue text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90">
+          <Plus size={15} /> Nuevo
+        </button>
+      </div>
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+            <tr>{columns.map(c => <th key={c.key} className="text-left px-4 py-2.5 font-bold">{c.label}</th>)}<th /></tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {items.map(it => (
+              <tr key={it[idKey]} className={it.Status === 'INACTIVO' || it.Activo === false ? 'opacity-50' : ''}>
+                {columns.map(c => <td key={c.key} className="px-4 py-3 text-gray-700">{c.render ? c.render(it) : String(it[c.key] ?? '—')}</td>)}
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <button onClick={() => abrir(it)} className="text-gray-400 hover:text-vida-blue p-1"><Pencil size={15} /></button>
+                  <button onClick={() => eliminar(it)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={15} /></button>
+                </td>
+              </tr>
+            ))}
+            {items.length === 0 && <tr><td colSpan={columns.length + 1} className="text-center text-gray-400 py-8">Sin registros.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {edit && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b">
+              <h3 className="font-bold text-gray-800">{edit[idKey] ? 'Editar' : 'Nuevo'} — {titulo}</h3>
+              <button onClick={() => setEdit(null)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              {fields.map(f => (
+                <div key={f.key}>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">{f.label}{f.required ? ' *' : ''}</label>
+                  {f.type === 'textarea' ? (
+                    <textarea value={form[f.key] ?? ''} onChange={e => set(f.key, e.target.value)} rows={2}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                  ) : f.type === 'select' ? (
+                    <select value={form[f.key] ?? ''} onChange={e => set(f.key, e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                      {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  ) : (
+                    <input type={f.type || 'text'} value={form[f.key] ?? ''} onChange={e => set(f.key, e.target.value)}
+                      placeholder={f.hint || ''} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                  )}
+                  {f.hint && f.type !== 'text' ? <p className="text-[11px] text-gray-400 mt-0.5">{f.hint}</p> : null}
+                </div>
+              ))}
+            </div>
+            <div className="p-5 border-t flex justify-end gap-2">
+              <button onClick={() => setEdit(null)} className="border border-gray-200 text-gray-600 rounded-xl px-4 py-2 text-sm hover:bg-gray-50">Cancelar</button>
+              <button onClick={guardar} disabled={saving} className="flex items-center gap-2 bg-vida-blue text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+                <Save size={15} /> {saving ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ESTADO_SELECT = [{ value: 'ACTIVO', label: 'Activo' }, { value: 'INACTIVO', label: 'Inactivo' }];
+
+const CAT_PREMIOS = {
+  baseUrl: '/delivery/admin/premios', idKey: 'idPremio', titulo: 'Premio',
+  fields: [
+    { key: 'Nombre', label: 'Nombre', required: true },
+    { key: 'Descripcion', label: 'Descripción', type: 'textarea' },
+    { key: 'CostoPuntos', label: 'Costo (puntos)', type: 'number' },
+    { key: 'Stock', label: 'Stock (-1 = ilimitado)', type: 'number', hint: 'Usa -1 para stock ilimitado' },
+    { key: 'ImagenUrl', label: 'URL de imagen' },
+    { key: 'Orden', label: 'Orden', type: 'number' },
+    { key: 'Status', label: 'Estado', type: 'select', options: ESTADO_SELECT, def: 'ACTIVO' },
+  ],
+  columns: [
+    { key: 'Nombre', label: 'Nombre' },
+    { key: 'CostoPuntos', label: 'Puntos' },
+    { key: 'Stock', label: 'Stock', render: it => it.Stock === -1 ? '∞' : it.Stock },
+    { key: 'Status', label: 'Estado' },
+  ],
+};
+const CAT_CURSOS = {
+  baseUrl: '/academia/admin/cursos', idKey: 'idCurso', titulo: 'Curso',
+  fields: [
+    { key: 'Titulo', label: 'Título', required: true },
+    { key: 'Descripcion', label: 'Descripción', type: 'textarea' },
+    { key: 'Categoria', label: 'Categoría', hint: 'Ventas / Servicio / Marketing / Finanzas' },
+    { key: 'VideoUrl', label: 'URL del video (YouTube/Vimeo)' },
+    { key: 'DuracionMin', label: 'Duración (min)', type: 'number' },
+    { key: 'Puntos', label: 'Puntos al completar', type: 'number' },
+    { key: 'Orden', label: 'Orden', type: 'number' },
+    { key: 'Status', label: 'Estado', type: 'select', options: ESTADO_SELECT, def: 'ACTIVO' },
+  ],
+  columns: [
+    { key: 'Titulo', label: 'Título' },
+    { key: 'Categoria', label: 'Categoría' },
+    { key: 'Puntos', label: 'Puntos' },
+    { key: 'Status', label: 'Estado' },
+  ],
+};
+const CAT_OPERADORAS = {
+  baseUrl: '/delivery/admin/operadoras', idKey: 'idOperadora', titulo: 'Operadora',
+  fields: [
+    { key: 'Nombre', label: 'Nombre', required: true },
+    { key: 'Tipo', label: 'Tipo', type: 'select', required: true, def: 'RECARGA_MOVIL', options: [
+      { value: 'RECARGA_MOVIL', label: 'Recarga móvil' }, { value: 'TV', label: 'TV' },
+      { value: 'INTERNET', label: 'Internet' }, { value: 'TELEFONIA', label: 'Telefonía' }, { value: 'OTRO', label: 'Otro' },
+    ] },
+    { key: 'Categoria', label: 'Categoría (agrupa en la app)' },
+    { key: 'Color', label: 'Color (hex)', hint: '#00A9E0' },
+    { key: 'Orden', label: 'Orden', type: 'number' },
+    { key: 'Activo', label: 'Activa', type: 'select', def: '1', options: [{ value: '1', label: 'Sí' }, { value: '0', label: 'No' }] },
+  ],
+  columns: [
+    { key: 'Nombre', label: 'Nombre' },
+    { key: 'Tipo', label: 'Tipo' },
+    { key: 'Categoria', label: 'Categoría' },
+    { key: 'Activo', label: 'Activa', render: it => (it.Activo ? 'Sí' : 'No') },
+  ],
+};
 
 function TabRecargas() {
   const toast = useToast();
@@ -173,6 +340,9 @@ export default function Operaciones() {
         {tab === 'recargas' && <TabRecargas />}
         {tab === 'premios'  && <TabPremios />}
         {tab === 'puntos'   && <TabPuntos />}
+        {tab === 'cat-premios'    && <CrudCatalogo {...CAT_PREMIOS} />}
+        {tab === 'cat-cursos'     && <CrudCatalogo {...CAT_CURSOS} />}
+        {tab === 'cat-operadoras' && <CrudCatalogo {...CAT_OPERADORAS} />}
       </div>
     </div>
   );
