@@ -3,10 +3,21 @@
 // (AUDIT_SECRET): alguien con acceso solo a la BD no puede alterar una fila
 // y recalcular una firma válida. La tabla además rechaza UPDATE/DELETE por
 // trigger (sql/07_audit_log.sql).
+//
+// En PRODUCCIÓN el secreto efectivo (AUDIT_SECRET o, en su defecto, JWT_SECRET)
+// debe ser fuerte: app.js aborta el arranque si es débil o es el valor de
+// desarrollo (hardening junto al de JWT_SECRET). El fallback de abajo solo
+// aplica en desarrollo.
 import crypto from 'crypto';
 import { sql } from '../db/sqlserver.js';
 
-const SECRET = process.env.AUDIT_SECRET || process.env.JWT_SECRET || 'audit_dev_secret';
+const AUDIT_SECRET_DEV = 'audit_dev_secret';
+const SECRET = process.env.AUDIT_SECRET || process.env.JWT_SECRET || AUDIT_SECRET_DEV;
+
+if (SECRET === AUDIT_SECRET_DEV) {
+  // No debería ocurrir en producción (app.js lo impide); si ocurre en dev, avisar.
+  console.warn('[audit] usando secreto de auditoría de DESARROLLO — no apto para producción. Define AUDIT_SECRET.');
+}
 
 function firmar(campos) {
   return crypto.createHmac('sha256', SECRET)

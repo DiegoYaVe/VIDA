@@ -55,6 +55,18 @@ if (ES_PRODUCCION && (!JWT_SECRET || JWT_SECRET.length < 32 || JWT_SECRET === SE
   process.exit(1);
 }
 
+// ── Hardening: el secreto de auditoría (HMAC de VIDA_AUDIT_LOG) también debe ser
+// fuerte en producción. Debe coincidir con lo que resuelve audit.service.js:
+// AUDIT_SECRET, o JWT_SECRET como respaldo. Si es débil o es un valor de
+// desarrollo conocido del repo, las firmas de auditoría serían falsificables.
+const AUDIT_SECRET_DEV = 'audit_dev_secret';
+const AUDIT_SECRET_EFECTIVO = process.env.AUDIT_SECRET || process.env.JWT_SECRET;
+if (ES_PRODUCCION && (!AUDIT_SECRET_EFECTIVO || AUDIT_SECRET_EFECTIVO.length < 32
+    || AUDIT_SECRET_EFECTIVO === AUDIT_SECRET_DEV || AUDIT_SECRET_EFECTIVO === SECRET_DEV)) {
+  console.error('FATAL: en producción AUDIT_SECRET (o JWT_SECRET como respaldo) debe tener 32+ caracteres y NO ser un valor de desarrollo.');
+  process.exit(1);
+}
+
 const fastify = Fastify({
   // En producción se sube el nivel de log y se redactan cabeceras sensibles
   logger: ES_PRODUCCION
