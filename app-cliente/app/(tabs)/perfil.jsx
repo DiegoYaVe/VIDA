@@ -211,6 +211,22 @@ export default function PerfilScreen() {
           <Ionicons name="chevron-forward" size={20} color="#fff" />
         </TouchableOpacity>
 
+        {/* Servicios y Recargas */}
+        <TouchableOpacity
+          style={[styles.aguaCard, { backgroundColor: '#7B3FBE' }]}
+          onPress={() => router.push('/servicios')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.aguaIcon}>
+            <Ionicons name="phone-portrait" size={22} color="#fff" />
+          </View>
+          <View style={styles.pedidosInfo}>
+            <Text style={styles.aguaTitle}>Servicios y Recargas</Text>
+            <Text style={styles.aguaSub}>Movistar, Movilnet, Digitel, CANTV…</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#fff" />
+        </TouchableOpacity>
+
         {/* Mi Consumo Vida — hidratación */}
         <TouchableOpacity
           style={styles.aguaCard}

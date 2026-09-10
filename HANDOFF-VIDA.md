@@ -30,7 +30,7 @@ pos-venezuela/
   frontend/          # Panel React+Vite (src/pages, src/services, src/store, src/utils)
   app-cliente/       # Expo (app/(tabs), app/(auth), app/*)
   app-repartidor/    # Expo (app/(main), app/*)
-  sql/               # Migraciones numeradas 01..25 (correr en orden en SQL Server)
+  sql/               # Migraciones numeradas 01..26 (correr en orden en SQL Server)
 ```
 
 ### Repo / rama / deploy
@@ -71,7 +71,7 @@ pos-venezuela/
 | Login OTP / Apple | ❌ (hay teléfono+password y Google) |
 | **D) Salud – consumo de agua** ("Mi Consumo Vida": activar, meta diaria, registrar vasos, gráfica 14 días, racha 7 días → puntos extra) | ✅ v1 (esta sesión). Falta: **push recordatorio cada 2h** (notificación local del dispositivo) |
 | **E) Membresía Club Vida** (tarjeta digital + QR, nivel por puntos ganados de por vida, beneficios y escalera de niveles) | ✅ v1 (esta sesión). Falta: Eventos Club + RSVP, canje de productos exclusivos |
-| F) Servicios integrados (Amazon, recargas) | ❌ |
+| **F) Servicios / Recargas** (Movistar/Movilnet/Digitel/Inter/SimpleTV/CANTV: elige operadora, número, monto, método → orden PROCESANDO + gana puntos) | ✅ v1 (esta sesión). Falta: integración real de telco, comprobante pago móvil, sub-módulo Amazon |
 | Landing "¿Cómo quieres unirte?" (redes + roles + form→WhatsApp) | ✅ (la hizo **otro dev**, ya existe) |
 
 ### Panel Empresario
@@ -118,6 +118,7 @@ datos de prueba del cliente 4 quedaron restaurados; el cliente 1 no se tocó.
 
 Del más reciente al más antiguo:
 
+- **Servicios / Recargas v1** — archivos NUEVOS `backend/src/controllers/servicios.controller.js` + `routes/servicios.routes.js` (registrados en `app.js`). Migración `sql/26` (`VIDA_SERVICIOS_OPERADORAS` seed 6 operadoras VE + `VIDA_SERVICIOS_ORDENES`). Cliente: `GET /delivery/cliente/servicios/operadoras`, `POST /delivery/cliente/servicios` (crea orden `PROCESANDO`, genera `Referencia SVC-...`, acredita puntos = round(monto×PuntosPorDolar)), `GET /delivery/cliente/servicios` (mis órdenes). Ops: `PATCH /delivery/admin/servicios/:idOrden/estado` (COMPLETADO/RECHAZADO; al RECHAZAR revierte los puntos con AJUSTE, idempotente por status). App: pantalla `app-cliente/app/servicios.jsx` (grid de operadoras → número/monto/método → confirma; lista "Mis servicios") + tarjeta en perfil. **Sin integración real de telco** (la orden la completa ops); pendiente: comprobante pago móvil + sub-módulo Amazon.
 - **Membresía Club Vida v1** — archivos NUEVOS `backend/src/controllers/club.controller.js` + `routes/club.routes.js` (registrados en `app.js`), para no chocar con la sesión paralela que toca `delivery.controller`. Migración `sql/25` (tabla `VIDA_CLUB_NIVELES` + seed de 5 niveles). Endpoint `GET /delivery/cliente/membresia`: nivel = mayor nivel cuyo `MinPuntos` ≤ **puntos GANADOS de por vida** (SUM ledger Tipo='GANADO', = compras + racha de agua), beneficios, siguiente nivel + faltan, `codigoMembresia = VIDA-{id6}`, y **QR** (data URL, dep nueva backend **`qrcode@1.5.4`**). App: pantalla `app-cliente/app/mi-club.jsx` (tarjeta digital con degradado por nivel + QR + progreso + escalera de niveles) + tarjeta en perfil. Pendiente fase 2: **Eventos Club + RSVP** y **canje de productos exclusivos**.
 - **Salud — "Mi Consumo Vida"** (hidratación) — columnas `Hidratacion*` en cliente + tabla `VIDA_CLIENTE_HIDRATACION_DIA` + config `PuntosRachaHidratacion=50` (sql/23). Endpoints cliente `GET/PUT /delivery/cliente/hidratacion`, `POST .../vaso`, `POST .../quitar`. Gamificación: al cumplir la meta y completar múltiplo de 7 días de racha → acredita puntos (helper `acreditarPuntosCliente`). Pantalla `app-cliente/app/mi-consumo.jsx` (activar, botón "Tomé 1 vaso", progreso, racha, gráfica 14 días, meta ajustable) + tarjeta en perfil. **Fix backend general:** `app.js` ahora acepta **body JSON vacío** en POST/PUT (content-type parser) — antes Fastify respondía 400 `FST_ERR_CTP_EMPTY_JSON_BODY` (rompía acciones sin payload como "+1 vaso"). Pendiente: **push recordatorio cada 2h** (usar `expo-notifications` con notificación local repetida; Expo Go tiene límites, va mejor en dev build/APK).
 - **Marketing — Flyer + QR** (frontend, tab "Flyer" en Precios): "Crear promo hoy" — elige un producto de su inventario, precio de promoción opcional y mensaje; genera un **flyer 1080×1350 en canvas** (header VIDA, foto, nombre, precio normal tachado + promo, badge PLUS, **QR** que apunta a `https://app.comercializadoravida.com/t/{idPuntoVenta}`) y lo **descarga en PNG** o comparte texto por WhatsApp. **Nueva dependencia frontend: `qrcode@1.5.4`** (correr `npm install` en `frontend/` al desplegar). Sin cambios de backend ni migración.
@@ -188,6 +189,13 @@ Del más reciente al más antiguo:
 - App: `mi-club.jsx` (tarjeta digital con degradado por color de nivel, QR, progreso al siguiente, beneficios, escalera) + tarjeta en el perfil.
 - **Pendiente fase 2:** Eventos Club + RSVP (tabla de eventos + inscripciones) y canje de productos exclusivos por nivel. El QR hoy codifica el `codigoMembresia` (string); si se quiere que una tienda lo escanee para identificar al cliente, falta el lector/endpoint de resolución.
 
+### Servicios / Recargas (`servicios.controller.js` + `app-cliente/app/servicios.jsx`)
+- Archivos **nuevos** (decoupled de `delivery.controller`). Migración `sql/26`: `VIDA_SERVICIOS_OPERADORAS` (seed Movistar/Movilnet/Digitel/Inter/SimpleTV/CANTV) + `VIDA_SERVICIOS_ORDENES`.
+- Flujo cliente: elige operadora → número/monto/método → `POST /delivery/cliente/servicios` crea orden `PROCESANDO`, `Referencia = SVC-{idOrden}-{base36}`, acredita puntos (GANADO = round(monto × `PuntosPorDolar`)). `GET .../operadoras` y `GET .../servicios` (mis órdenes).
+- Ops: `PATCH /delivery/admin/servicios/:idOrden/estado` (COMPLETADO / RECHAZADO). En RECHAZADO se revierten los puntos (movimiento `AJUSTE` negativo). Idempotente: solo actúa si la orden está en `PROCESANDO`.
+- **No hay integración real de telco**: la recarga la ejecuta ops manualmente; el estatus es "separado" (como el sub-módulo Amazon del spec). El panel admin para gestionar estas órdenes es **fase 2** (hoy solo existe el endpoint). También pendiente: subir comprobante de pago móvil y el sub-módulo **Amazon** curado.
+- ⚠️ Los puntos se acreditan **al crear** (no al completar); por eso el reverso en RECHAZADO. Si se prefiere acreditar al COMPLETAR, mover el `movPuntos` a `cambiarEstadoServicio`.
+
 ---
 
 ## 6. Cosas de entorno / operación (para no tropezar)
@@ -228,6 +236,6 @@ Del más reciente al más antiguo:
 2. **Club Vida fase 2** — Eventos Club + RSVP y canje de productos exclusivos por nivel (la v1 tarjeta+niveles+QR ya está).
 3. **Academia Vida (F)** — cursos + puntos al empresario.
 4. **Fidelización fase 3** — catálogo de premios + vencimiento de puntos.
-5. **Servicios integrados (F)** — recargas (Movilnet/Movistar/Digitel/…) y Amazon curado.
+5. **Servicios fase 2** — panel admin para gestionar/completar recargas + comprobante pago móvil + sub-módulo Amazon curado (la v1 de recargas ya está).
 
 **Cómo continuar técnicamente:** los módulos "de panel" nuevos conviene colgarlos como **tab dentro de un módulo existente** (ej. Reportes) para evitar fricción con el sidebar dinámico por BD (que requiere insertar `pantalla` + accesos). Respetar siempre el **scope por rol** (`esRed`/`pvEfectivo`) y la operación **USD-only**. Al tocar el flujo de pedidos, cuidar idempotencia y transacciones (como en puntos).
