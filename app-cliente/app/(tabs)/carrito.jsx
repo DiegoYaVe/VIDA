@@ -68,6 +68,49 @@ export default function CarritoScreen() {
   const descuentoPuntos = +(puntosUsar / canjeRate).toFixed(2);
   const totalPagar = +(total - descuentoPuntos).toFixed(2);
 
+  // Cupón (aplica sobre el total ya con puntos, igual que el backend)
+  const [cuponInput, setCuponInput] = useState('');
+  const [cuponCodigo, setCuponCodigo] = useState(null);   // código validado y aplicado
+  const [descuentoCupon, setDescuentoCupon] = useState(0);
+  const [cuponMsg, setCuponMsg] = useState('');           // estado/error mostrado
+  const [cuponOk, setCuponOk] = useState(false);
+  const [validandoCupon, setValidandoCupon] = useState(false);
+
+  const totalFinal = +Math.max(0, totalPagar - descuentoCupon).toFixed(2);
+
+  // Valida un código contra el total vigente. base = total sobre el que aplica.
+  const validarCupon = async (codigo, base) => {
+    const cod = String(codigo || '').trim().toUpperCase();
+    if (!cod) return;
+    setValidandoCupon(true);
+    try {
+      const r = await api.post('/delivery/cliente/cupones/validar', { codigo: cod, subtotal: base });
+      if (r.data?.valido) {
+        setCuponCodigo(cod);
+        setDescuentoCupon(r.data.descuento || 0);
+        setCuponOk(true);
+        setCuponMsg(`Cupón ${cod} aplicado`);
+      } else {
+        setCuponCodigo(null); setDescuentoCupon(0); setCuponOk(false);
+        setCuponMsg(r.data?.motivo || 'Cupón no válido');
+      }
+    } catch {
+      setCuponCodigo(null); setDescuentoCupon(0); setCuponOk(false);
+      setCuponMsg('No se pudo validar el cupón');
+    } finally { setValidandoCupon(false); }
+  };
+
+  const quitarCupon = () => {
+    setCuponCodigo(null); setDescuentoCupon(0); setCuponOk(false); setCuponMsg(''); setCuponInput('');
+  };
+
+  // Si cambia el total (p. ej. toggle de puntos) y hay un cupón aplicado, se
+  // recalcula para que el descuento siga siendo correcto.
+  useEffect(() => {
+    if (cuponCodigo) validarCupon(cuponCodigo, totalPagar);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalPagar]);
+
   useEffect(() => {
     if (metodoPago !== 'PAGO_MOVIL' || datosPM) return;
     api.get('/delivery/pago-movil', { params: { idBranch, idCuenta } })
@@ -175,6 +218,15 @@ export default function CarritoScreen() {
       const res = await api.post('/delivery/pedido', payload);
       const idPedido = res.data?.idPedido ?? res.data?.pedido?.idPedido;
 
+      // Cupón: se aplica al pedido recién creado (ajusta su total y registra el uso)
+      if (cuponCodigo && idPedido) {
+        try {
+          await api.post('/delivery/cliente/cupones/aplicar', { codigo: cuponCodigo, idPedido });
+        } catch {
+          Alert.alert('Cupón no aplicado', 'Tu pedido se creó, pero el cupón no pudo aplicarse. Verás el total sin el descuento.');
+        }
+      }
+
       // Pago Móvil: subir el comprobante — el admin lo revisa y aprueba
       if (metodoPago === 'PAGO_MOVIL' && comprobante && idPedido) {
         try {
@@ -197,6 +249,7 @@ export default function CarritoScreen() {
       }
 
       limpiarCarrito();
+      quitarCupon();
       setUbicacion(null);
       setComprobante(null);
       setReferencia('');
@@ -420,6 +473,42 @@ export default function CarritoScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Cupón de descuento */}
+        {token && (
+          <View style={styles.cuponBox}>
+            <View style={styles.cuponRow}>
+              <View style={styles.cuponIco}>
+                <Ionicons name="pricetag" size={16} color="#7B3FBE" />
+              </View>
+              <TextInput
+                style={styles.cuponInput}
+                placeholder="¿Tienes un cupón?"
+                placeholderTextColor="#A0AEC0"
+                autoCapitalize="characters"
+                value={cuponInput}
+                editable={!cuponOk}
+                onChangeText={setCuponInput}
+              />
+              {cuponOk ? (
+                <TouchableOpacity style={styles.cuponBtnQuitar} onPress={quitarCupon}>
+                  <Text style={styles.cuponBtnQuitarText}>Quitar</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.cuponBtn}
+                  disabled={validandoCupon || !cuponInput.trim()}
+                  onPress={() => validarCupon(cuponInput, totalPagar)}
+                >
+                  {validandoCupon ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.cuponBtnText}>Aplicar</Text>}
+                </TouchableOpacity>
+              )}
+            </View>
+            {cuponMsg ? (
+              <Text style={[styles.cuponMsg, { color: cuponOk ? '#27AE60' : '#E53E3E' }]}>{cuponMsg}</Text>
+            ) : null}
+          </View>
+        )}
+
         {/* Summary */}
         <View style={styles.summary}>
           <View style={styles.summaryRow}>
@@ -432,9 +521,15 @@ export default function CarritoScreen() {
               <Text style={[styles.summaryValue, { color: '#F59E0B' }]}>−${descuentoPuntos.toFixed(2)}</Text>
             </View>
           )}
+          {descuentoCupon > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={[styles.summaryLabel, { color: '#7B3FBE' }]}>Cupón {cuponCodigo}</Text>
+              <Text style={[styles.summaryValue, { color: '#7B3FBE' }]}>−${descuentoCupon.toFixed(2)}</Text>
+            </View>
+          )}
           <View style={[styles.summaryRow, styles.summaryTotal]}>
             <Text style={styles.summaryTotalLabel}>Total</Text>
-            <Text style={styles.summaryTotalValue}>${totalPagar.toFixed(2)}</Text>
+            <Text style={styles.summaryTotalValue}>${totalFinal.toFixed(2)}</Text>
           </View>
         </View>
 
@@ -448,7 +543,7 @@ export default function CarritoScreen() {
           ) : (
             <>
               <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-              <Text style={styles.pedidoBtnText}>Hacer pedido — ${totalPagar.toFixed(2)}</Text>
+              <Text style={styles.pedidoBtnText}>Hacer pedido — ${totalFinal.toFixed(2)}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -620,6 +715,18 @@ const styles = StyleSheet.create({
   toggleOn: { backgroundColor: '#F59E0B' },
   toggleDot: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff' },
   toggleDotOn: { alignSelf: 'flex-end' },
+  cuponBox: {
+    backgroundColor: '#FAF5FF', borderWidth: 1, borderColor: '#E9D8FD',
+    borderRadius: 14, padding: 12, marginHorizontal: 16, marginTop: 8,
+  },
+  cuponRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cuponIco: { width: 32, height: 32, borderRadius: 9, backgroundColor: '#EDE9FE', alignItems: 'center', justifyContent: 'center' },
+  cuponInput: { flex: 1, fontSize: 14, fontWeight: '700', color: '#1A202C', paddingVertical: 6, letterSpacing: 1 },
+  cuponBtn: { backgroundColor: '#7B3FBE', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 9 },
+  cuponBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  cuponBtnQuitar: { borderWidth: 1, borderColor: '#E9D8FD', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
+  cuponBtnQuitarText: { color: '#7B3FBE', fontWeight: '800', fontSize: 13 },
+  cuponMsg: { fontSize: 12, fontWeight: '600', marginTop: 8, marginLeft: 4 },
   summaryTotal: {
     borderTopWidth: 1,
     borderTopColor: '#EDF2F7',

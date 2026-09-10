@@ -396,7 +396,12 @@ async function procesarVentaOffline(pool, { venta, idBranch, idCuenta, idUsuario
   await transaction.begin();
   try {
     const idPedido = await nextIdTx(transaction, 'VIDA_PEDIDOS', 'idPedido', idBranch, idCuenta);
-    const totalUSD = venta.items.reduce((s, i) => s + (parseFloat(i.Cantidad) * parseFloat(i.PrecioUnitario)), 0);
+    const itemsSum = venta.items.reduce((s, i) => s + (parseFloat(i.Cantidad) * parseFloat(i.PrecioUnitario)), 0);
+    // Cupón aplicado en el POS: el descuento ya viene calculado por el cliente;
+    // aquí se refleja en el total registrado (lo que realmente se cobró).
+    const cuponCodigo = venta.CuponCodigo ? String(venta.CuponCodigo).trim().toUpperCase().slice(0, 40) : null;
+    const descuentoCupon = Math.max(0, Math.min(parseFloat(venta.CuponDescuentoUSD) || 0, itemsSum));
+    const totalUSD = +Math.max(0, itemsSum - descuentoCupon).toFixed(4);
     const fechaVenta = fechaVentaValida(venta.FechaVenta);
 
     await new sql.Request(transaction)
@@ -412,15 +417,17 @@ async function procesarVentaOffline(pool, { venta, idBranch, idCuenta, idUsuario
       .input('MontoCambio',   sql.Decimal(18,4), venta.MontoCambio   ?? null)
       .input('Notas',         sql.VarChar(500), venta.Notas || null)
       .input('FechaVenta',    sql.DateTime,     fechaVenta)
+      .input('CuponCodigo',   sql.VarChar(40),  cuponCodigo)
+      .input('CuponDescuentoUSD', sql.Decimal(18,4), cuponCodigo ? descuentoCupon : null)
       .input('UsuAlta',       sql.VarChar(20),  String(idUsuario))
       .query(`INSERT INTO VIDA_PEDIDOS
                 (idBranch, idCuenta, idPedido, idPuntoVenta, Canal, Status,
                  MetodoPago, StatusPago, TotalUSD, MontoEfectivo, MontoTarjeta, MontoCambio,
-                 Notas, ClienteUUID, EsOffline, FechaAlta, UsuAlta)
+                 Notas, ClienteUUID, EsOffline, CuponCodigo, CuponDescuentoUSD, FechaAlta, UsuAlta)
               VALUES
                 (@idBranch, @idCuenta, @idPedido, @idPuntoVenta, 'POS', 'ENTREGADO',
                  @MetodoPago, 'PAGADO', @TotalUSD, @MontoEfectivo, @MontoTarjeta, @MontoCambio,
-                 @Notas, @ClienteUUID, 1, ISNULL(@FechaVenta, GETDATE()), @UsuAlta)`);
+                 @Notas, @ClienteUUID, 1, @CuponCodigo, @CuponDescuentoUSD, ISNULL(@FechaVenta, GETDATE()), @UsuAlta)`);
 
     let requiereRevision = false;
 
@@ -504,6 +511,40 @@ async function procesarVentaOffline(pool, { venta, idBranch, idCuenta, idUsuario
       .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL
                 (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, Notas, UsuAlta)
               VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, 'NUEVO', 'ENTREGADO', @Notas, @UsuAlta)`);
+
+    // Registro del uso del cupón (best-effort: la venta física ya ocurrió, así
+    // que se registra el uso e incrementa el contador sin bloquear la venta).
+    if (cuponCodigo && descuentoCupon > 0) {
+      const cupR = await new sql.Request(transaction)
+        .input('idBranch', sql.BigInt, idBranch)
+        .input('idCuenta', sql.BigInt, idCuenta)
+        .input('Codigo',   sql.VarChar(40), cuponCodigo)
+        .query(`SELECT TOP 1 idCupon FROM VIDA_CUPONES WITH (UPDLOCK, HOLDLOCK)
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Codigo=@Codigo`);
+      const cup = cupR.recordset[0];
+      if (cup) {
+        await new sql.Request(transaction)
+          .input('idBranch', sql.BigInt, idBranch)
+          .input('idCuenta', sql.BigInt, idCuenta)
+          .input('idCupon',  sql.BigInt, cup.idCupon)
+          .query(`UPDATE VIDA_CUPONES SET UsosActuales = UsosActuales + 1
+                  WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCupon=@idCupon`);
+        const idUso = await nextIdTx(transaction, 'VIDA_CUPONES_USOS', 'idUso', idBranch, idCuenta);
+        await new sql.Request(transaction)
+          .input('idBranch',  sql.BigInt,       idBranch)
+          .input('idCuenta',  sql.BigInt,       idCuenta)
+          .input('idUso',     sql.BigInt,       idUso)
+          .input('idCupon',   sql.BigInt,       cup.idCupon)
+          .input('Codigo',    sql.VarChar(40),  cuponCodigo)
+          .input('idPedido',  sql.BigInt,       idPedido)
+          .input('Descuento', sql.Decimal(18,4),descuentoCupon)
+          .input('UsuAlta',   sql.VarChar(30),  String(idUsuario))
+          .query(`INSERT INTO VIDA_CUPONES_USOS
+                    (idBranch,idCuenta,idUso,idCupon,Codigo,idCliente,idPedido,Canal,DescuentoUSD,UsuAlta)
+                  VALUES
+                    (@idBranch,@idCuenta,@idUso,@idCupon,@Codigo,NULL,@idPedido,'POS',@Descuento,@UsuAlta)`);
+      }
+    }
 
     await registrarAuditoria(transaction, {
       idBranch, idCuenta,

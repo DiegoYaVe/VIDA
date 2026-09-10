@@ -9,7 +9,7 @@ import SyncStatusBar from '../components/SyncStatusBar.jsx';
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, CreditCard,
   DollarSign, Layers, Check, X,
-  Barcode, ChevronDown, Printer, RotateCcw,
+  Barcode, ChevronDown, Printer, RotateCcw, Tag,
 } from 'lucide-react';
 
 // ── Métodos de pago (solo USD) ───────────────────────────────────────────────
@@ -505,6 +505,43 @@ export default function POS() {
 
   const total = carrito.reduce((s, i) => s + i.Cantidad * i.PrecioUnitario, 0);
 
+  // ── Cupón ────────────────────────────────────────────────────────────────
+  const [cuponInput, setCuponInput]   = useState('');
+  const [cuponCodigo, setCuponCodigo] = useState(null);
+  const [descuentoCupon, setDescuentoCupon] = useState(0);
+  const [cuponMsg, setCuponMsg]       = useState('');
+  const [cuponOk, setCuponOk]         = useState(false);
+  const [validandoCupon, setValidandoCupon] = useState(false);
+
+  const totalFinal = +Math.max(0, total - descuentoCupon).toFixed(2);
+
+  async function validarCupon(codigo, base) {
+    const cod = String(codigo || '').trim().toUpperCase();
+    if (!cod) return;
+    setValidandoCupon(true);
+    try {
+      const r = await api.post('/cupones/validar', { codigo: cod, subtotal: base });
+      if (r.data?.valido) {
+        setCuponCodigo(cod); setDescuentoCupon(r.data.descuento || 0);
+        setCuponOk(true); setCuponMsg(`Cupón ${cod} aplicado`);
+      } else {
+        setCuponCodigo(null); setDescuentoCupon(0); setCuponOk(false);
+        setCuponMsg(r.data?.motivo || 'Cupón no válido');
+      }
+    } catch {
+      setCuponCodigo(null); setDescuentoCupon(0); setCuponOk(false);
+      setCuponMsg('No se pudo validar el cupón');
+    } finally { setValidandoCupon(false); }
+  }
+  function quitarCupon() {
+    setCuponCodigo(null); setDescuentoCupon(0); setCuponOk(false); setCuponMsg(''); setCuponInput('');
+  }
+  // Si cambia el carrito y hay cupón, se recalcula el descuento.
+  useEffect(() => {
+    if (cuponCodigo) validarCupon(cuponCodigo, total);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total]);
+
   // ── Confirmar venta ──────────────────────────────────────────────────────
   // pagoInfo: { metodo, efectivo, tarjeta, cambio }
   // Patrón offline-first: la venta SIEMPRE se guarda primero en IndexedDB con
@@ -525,6 +562,8 @@ export default function POS() {
       MontoTarjeta:  pagoInfo.tarjeta  || null,
       MontoCambio:   pagoInfo.cambio   || null,
       FechaVenta:    new Date().toISOString(),
+      CuponCodigo:       cuponCodigo || null,
+      CuponDescuentoUSD: cuponCodigo ? descuentoCupon : null,
       items: carrito.map(i => ({
         idProducto:     i.idProducto,
         Cantidad:       i.Cantidad,
@@ -551,11 +590,13 @@ export default function POS() {
         offline:    !sincronizada,
         refOffline: clienteUUID.slice(-8).toUpperCase(),
         items:      carrito,
-        total,
+        total:      totalFinal,
+        cupon:      cuponCodigo ? { codigo: cuponCodigo, descuento: descuentoCupon } : null,
         pago:       pagoInfo,
       });
       setModalPago(false);
       setCarrito([]);
+      quitarCupon();
     } catch (err) {
       setError('Error al guardar la venta: ' + (err.message || 'desconocido'));
       setModalPago(false);
@@ -741,15 +782,49 @@ export default function POS() {
 
         {/* Footer: total y cobrar */}
         <div className="border-t bg-white">
+          {/* Cupón */}
+          <div className="px-4 pt-3">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex items-center gap-2 border border-purple-200 bg-purple-50/50 rounded-xl px-3 py-2">
+                <Tag size={15} className="text-purple-500 shrink-0" />
+                <input
+                  value={cuponInput}
+                  onChange={(e) => setCuponInput(e.target.value.toUpperCase())}
+                  disabled={cuponOk || carrito.length === 0}
+                  placeholder="Cupón"
+                  className="flex-1 bg-transparent outline-none text-sm font-bold tracking-wide text-gray-800 uppercase placeholder:font-normal placeholder:tracking-normal disabled:opacity-50"
+                  onKeyDown={(e) => { if (e.key === 'Enter' && cuponInput.trim()) validarCupon(cuponInput, total); }}
+                />
+              </div>
+              {cuponOk ? (
+                <button onClick={quitarCupon} className="px-3 py-2 rounded-xl border border-purple-200 text-purple-600 text-sm font-bold hover:bg-purple-50">Quitar</button>
+              ) : (
+                <button
+                  onClick={() => validarCupon(cuponInput, total)}
+                  disabled={validandoCupon || !cuponInput.trim() || carrito.length === 0}
+                  className="px-4 py-2 rounded-xl bg-purple-600 text-white text-sm font-bold hover:opacity-90 disabled:opacity-30">
+                  {validandoCupon ? '…' : 'Aplicar'}
+                </button>
+              )}
+            </div>
+            {cuponMsg ? <p className={`text-xs font-semibold mt-1.5 ml-1 ${cuponOk ? 'text-green-600' : 'text-red-500'}`}>{cuponMsg}</p> : null}
+          </div>
+
           {/* Desglose */}
-          <div className="px-5 pt-4 pb-2 space-y-1.5">
+          <div className="px-5 pt-3 pb-2 space-y-1.5">
             <div className="flex justify-between text-sm text-gray-500">
               <span>{carrito.reduce((s, i) => s + i.Cantidad, 0)} producto(s)</span>
               <span>${total.toFixed(2)}</span>
             </div>
+            {descuentoCupon > 0 && (
+              <div className="flex justify-between text-sm font-semibold text-purple-600">
+                <span>Cupón {cuponCodigo}</span>
+                <span>−${descuentoCupon.toFixed(2)}</span>
+              </div>
+            )}
             <div className="flex justify-between font-black text-xl text-gray-900">
               <span>Total</span>
-              <span className="text-vida-blue">${total.toFixed(2)}</span>
+              <span className="text-vida-blue">${totalFinal.toFixed(2)}</span>
             </div>
           </div>
 
@@ -762,8 +837,8 @@ export default function POS() {
                   disabled={carrito.length === 0 || procesando}
                   onClick={() => confirmarVenta({
                     metodo:   m.key,
-                    efectivo: m.key === 'EFECTIVO' ? total : 0,
-                    tarjeta:  m.key === 'TARJETA'  ? total : 0,
+                    efectivo: m.key === 'EFECTIVO' ? totalFinal : 0,
+                    tarjeta:  m.key === 'TARJETA'  ? totalFinal : 0,
                     cambio:   0,
                   })}
                   className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-white text-xs font-semibold disabled:opacity-30 hover:opacity-90 transition-opacity ${m.color}`}>
@@ -781,7 +856,7 @@ export default function POS() {
               onClick={() => { setError(''); setModalPago(true); }}
               className="w-full bg-vida-green text-white rounded-2xl py-4 font-black text-lg hover:opacity-90 disabled:opacity-30 transition-opacity flex items-center justify-center gap-2">
               <CreditCard size={22}/>
-              Cobrar ${total.toFixed(2)}
+              Cobrar ${totalFinal.toFixed(2)}
             </button>
           </div>
         </div>
@@ -790,7 +865,7 @@ export default function POS() {
       {/* Modal de pago */}
       {modalPago && (
         <ModalPago
-          total={total}
+          total={totalFinal}
           procesando={procesando}
           onConfirmar={confirmarVenta}
           onCerrar={() => setModalPago(false)}
