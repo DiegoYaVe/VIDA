@@ -30,7 +30,7 @@ pos-venezuela/
   frontend/          # Panel React+Vite (src/pages, src/services, src/store, src/utils)
   app-cliente/       # Expo (app/(tabs), app/(auth), app/*)
   app-repartidor/    # Expo (app/(main), app/*)
-  sql/               # Migraciones numeradas 01..22 (correr en orden en SQL Server)
+  sql/               # Migraciones numeradas 01..25 (correr en orden en SQL Server)
 ```
 
 ### Repo / rama / deploy
@@ -70,7 +70,7 @@ pos-venezuela/
 | H) Perfil (compras, direcciones, tarjetas, contraseña) | ✅ |
 | Login OTP / Apple | ❌ (hay teléfono+password y Google) |
 | **D) Salud – consumo de agua** ("Mi Consumo Vida": activar, meta diaria, registrar vasos, gráfica 14 días, racha 7 días → puntos extra) | ✅ v1 (esta sesión). Falta: **push recordatorio cada 2h** (notificación local del dispositivo) |
-| E) Membresía Club Vida | ❌ |
+| **E) Membresía Club Vida** (tarjeta digital + QR, nivel por puntos ganados de por vida, beneficios y escalera de niveles) | ✅ v1 (esta sesión). Falta: Eventos Club + RSVP, canje de productos exclusivos |
 | F) Servicios integrados (Amazon, recargas) | ❌ |
 | Landing "¿Cómo quieres unirte?" (redes + roles + form→WhatsApp) | ✅ (la hizo **otro dev**, ya existe) |
 
@@ -118,6 +118,7 @@ datos de prueba del cliente 4 quedaron restaurados; el cliente 1 no se tocó.
 
 Del más reciente al más antiguo:
 
+- **Membresía Club Vida v1** — archivos NUEVOS `backend/src/controllers/club.controller.js` + `routes/club.routes.js` (registrados en `app.js`), para no chocar con la sesión paralela que toca `delivery.controller`. Migración `sql/25` (tabla `VIDA_CLUB_NIVELES` + seed de 5 niveles). Endpoint `GET /delivery/cliente/membresia`: nivel = mayor nivel cuyo `MinPuntos` ≤ **puntos GANADOS de por vida** (SUM ledger Tipo='GANADO', = compras + racha de agua), beneficios, siguiente nivel + faltan, `codigoMembresia = VIDA-{id6}`, y **QR** (data URL, dep nueva backend **`qrcode@1.5.4`**). App: pantalla `app-cliente/app/mi-club.jsx` (tarjeta digital con degradado por nivel + QR + progreso + escalera de niveles) + tarjeta en perfil. Pendiente fase 2: **Eventos Club + RSVP** y **canje de productos exclusivos**.
 - **Salud — "Mi Consumo Vida"** (hidratación) — columnas `Hidratacion*` en cliente + tabla `VIDA_CLIENTE_HIDRATACION_DIA` + config `PuntosRachaHidratacion=50` (sql/23). Endpoints cliente `GET/PUT /delivery/cliente/hidratacion`, `POST .../vaso`, `POST .../quitar`. Gamificación: al cumplir la meta y completar múltiplo de 7 días de racha → acredita puntos (helper `acreditarPuntosCliente`). Pantalla `app-cliente/app/mi-consumo.jsx` (activar, botón "Tomé 1 vaso", progreso, racha, gráfica 14 días, meta ajustable) + tarjeta en perfil. **Fix backend general:** `app.js` ahora acepta **body JSON vacío** en POST/PUT (content-type parser) — antes Fastify respondía 400 `FST_ERR_CTP_EMPTY_JSON_BODY` (rompía acciones sin payload como "+1 vaso"). Pendiente: **push recordatorio cada 2h** (usar `expo-notifications` con notificación local repetida; Expo Go tiene límites, va mejor en dev build/APK).
 - **Marketing — Flyer + QR** (frontend, tab "Flyer" en Precios): "Crear promo hoy" — elige un producto de su inventario, precio de promoción opcional y mensaje; genera un **flyer 1080×1350 en canvas** (header VIDA, foto, nombre, precio normal tachado + promo, badge PLUS, **QR** que apunta a `https://app.comercializadoravida.com/t/{idPuntoVenta}`) y lo **descarga en PNG** o comparte texto por WhatsApp. **Nueva dependencia frontend: `qrcode@1.5.4`** (correr `npm install` en `frontend/` al desplegar). Sin cambios de backend ni migración.
 - `87c50fa9` **DOCS**: este HANDOFF.
@@ -180,6 +181,13 @@ Del más reciente al más antiguo:
 - **Riesgo residual:** bajar `HidratacionMetaVasos` recalcula la racha hacia atrás, así que se puede forzar un múltiplo de 7. Queda topado en **1 bono/día** por el candado (1). Para cerrarlo del todo habría que congelar la meta vigente en cada fila diaria.
 - **Pendiente fase 2:** push recordatorio cada 2h (notificación local con `expo-notifications`).
 
+### Membresía — Club Digital VIDA (`backend/src/controllers/club.controller.js` + `app-cliente/app/mi-club.jsx`)
+- Archivos **nuevos** (no toca `delivery.controller` a propósito, para no chocar con la sesión paralela). Ruta `club.routes.js` registrada en `app.js`. Migración `sql/25` = `VIDA_CLUB_NIVELES` (5 niveles seed, editables por corporativo).
+- **Nivel** = el mayor cuyo `MinPuntos` ≤ **puntos GANADOS de por vida** (`SUM VIDA_CLIENTE_PUNTOS.Puntos WHERE Tipo='GANADO'`). Sube con compras (puntos de pedido) y salud (bono de racha). Nivel 1 automático (todos parten de 0). Solo LEE puntos, no acredita.
+- `GET /delivery/cliente/membresia` → nivel, nombreNivel, color, beneficios, puntosGanados, siguiente {nivel,faltan}, `codigoMembresia = VIDA-{id6}`, `qrDataUrl` (PNG base64 con dep backend **`qrcode@1.5.4`**), y la escalera `niveles[]`.
+- App: `mi-club.jsx` (tarjeta digital con degradado por color de nivel, QR, progreso al siguiente, beneficios, escalera) + tarjeta en el perfil.
+- **Pendiente fase 2:** Eventos Club + RSVP (tabla de eventos + inscripciones) y canje de productos exclusivos por nivel. El QR hoy codifica el `codigoMembresia` (string); si se quiere que una tienda lo escanee para identificar al cliente, falta el lector/endpoint de resolución.
+
 ---
 
 ## 6. Cosas de entorno / operación (para no tropezar)
@@ -217,7 +225,7 @@ Del más reciente al más antiguo:
 ### Features
 
 1. **Push recordatorio de hidratación** — cerrar fase 2 de Salud con `expo-notifications` (notificación local repetida cada 2h).
-2. **Membresía Club Vida (E)** — QR de membresía por nivel, eventos, beneficios.
+2. **Club Vida fase 2** — Eventos Club + RSVP y canje de productos exclusivos por nivel (la v1 tarjeta+niveles+QR ya está).
 3. **Academia Vida (F)** — cursos + puntos al empresario.
 4. **Fidelización fase 3** — catálogo de premios + vencimiento de puntos.
 5. **Servicios integrados (F)** — recargas (Movilnet/Movistar/Digitel/…) y Amazon curado.

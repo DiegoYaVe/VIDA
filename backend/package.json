@@ -19,6 +19,7 @@
     "fastify": "^4.26.0",
     "mssql": "^10.0.4",
     "nodemailer": "^8.0.10",
+    "qrcode": "^1.5.4",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

@@ -39,6 +39,7 @@ export default function PerfilScreen() {
   const [pedidosCount, setPedidosCount] = useState(null);
   const [puntos, setPuntos] = useState(null);
   const [agua, setAgua] = useState(null);
+  const [club, setClub] = useState(null);
 
   useEffect(() => {
     if (!token) return;
@@ -50,6 +51,9 @@ export default function PerfilScreen() {
       .catch(() => {});
     api.get('/delivery/cliente/hidratacion')
       .then(r => setAgua(r.data))
+      .catch(() => {});
+    api.get('/delivery/cliente/membresia')
+      .then(r => setClub(r.data))
       .catch(() => {});
   }, [token]);
 
@@ -184,6 +188,24 @@ export default function PerfilScreen() {
             <Text style={styles.puntosTitle}>Mis Puntos VIDA</Text>
             <Text style={styles.puntosSub}>
               {puntos !== null ? `${puntos.toLocaleString('es-VE')} puntos disponibles` : 'Cargando…'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#fff" />
+        </TouchableOpacity>
+
+        {/* Club Vida — membresía */}
+        <TouchableOpacity
+          style={[styles.aguaCard, { backgroundColor: club?.color || '#0A1E3F' }]}
+          onPress={() => router.push('/mi-club')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.aguaIcon}>
+            <Ionicons name="card" size={22} color="#fff" />
+          </View>
+          <View style={styles.pedidosInfo}>
+            <Text style={styles.aguaTitle}>Club Vida</Text>
+            <Text style={styles.aguaSub}>
+              {club ? `Nivel ${club.nivel} · ${club.nombreNivel}` : 'Tu membresía digital'}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#fff" />
