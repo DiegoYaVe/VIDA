@@ -2,7 +2,7 @@
 import { authenticate, requireRole } from '../middlewares/auth.js';
 import { authenticateCliente } from '../middlewares/authDelivery.js';
 import {
-  listarOperadoras, crearOrdenServicio, misServicios, cambiarEstadoServicio,
+  listarOperadoras, crearOrdenServicio, misServicios, cambiarEstadoServicio, listarOrdenesAdmin,
 } from '../controllers/servicios.controller.js';
 
 const ADMIN = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN'];
@@ -17,6 +17,8 @@ export async function serviciosRoutes(fastify) {
     { preHandler: [authenticateCliente] }, crearOrdenServicio);
 
   // Ops / admin
+  fastify.get('/delivery/admin/servicios',
+    { preHandler: [authenticate, requireRole(...ADMIN)] }, listarOrdenesAdmin);
   fastify.patch('/delivery/admin/servicios/:idOrden/estado',
     { preHandler: [authenticate, requireRole(...ADMIN)] }, cambiarEstadoServicio);
 }

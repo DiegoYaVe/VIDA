@@ -2,7 +2,7 @@
 import { authenticate, requireRole } from '../middlewares/auth.js';
 import { authenticateCliente } from '../middlewares/authDelivery.js';
 import {
-  listarPremios, canjearPremio, misCanjes, cambiarEstadoCanje, expirarPuntosInactivos,
+  listarPremios, canjearPremio, misCanjes, cambiarEstadoCanje, expirarPuntosInactivos, listarCanjesAdmin,
 } from '../controllers/premios.controller.js';
 
 const ADMIN = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN'];
@@ -17,6 +17,8 @@ export async function premiosRoutes(fastify) {
     { preHandler: [authenticateCliente] }, canjearPremio);
 
   // Ops / admin
+  fastify.get('/delivery/admin/premios/canjes',
+    { preHandler: [authenticate, requireRole(...ADMIN)] }, listarCanjesAdmin);
   fastify.patch('/delivery/admin/premios/canjes/:idCanje/estado',
     { preHandler: [authenticate, requireRole(...ADMIN)] }, cambiarEstadoCanje);
   fastify.post('/delivery/admin/puntos/expirar-inactivos',

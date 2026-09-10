@@ -103,6 +103,27 @@ export async function misServicios(request, reply) {
   } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al obtener servicios' }); }
 }
 
+// GET /delivery/admin/servicios?status=PROCESANDO  (ops)
+export async function listarOrdenesAdmin(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { status } = request.query;
+  try {
+    const pool = await getPool();
+    const req = pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta);
+    let filtro = '';
+    if (status) { req.input('st', sql.VarChar(20), status); filtro = ' AND o.Status = @st'; }
+    const r = await req.query(`
+      SELECT TOP 100 o.idOrden, o.NombreOperadora, o.Tipo, o.NumeroDestino, o.MontoUSD, o.MetodoPago,
+             o.Referencia, o.Status, o.PuntosGanados, o.FechaAlta,
+             c.Nombre AS Cliente, c.Telefono AS TelefonoCliente
+      FROM VIDA_SERVICIOS_ORDENES o
+      LEFT JOIN VIDA_APP_CLIENTES c ON c.idBranch=o.idBranch AND c.idCuenta=o.idCuenta AND c.idCliente=o.idCliente
+      WHERE o.idBranch=@idBranch AND o.idCuenta=@idCuenta ${filtro}
+      ORDER BY o.FechaAlta DESC`);
+    return reply.send(r.recordset);
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al listar órdenes' }); }
+}
+
 // PATCH /delivery/admin/servicios/:idOrden/estado  { Status }  (ops)
 export async function cambiarEstadoServicio(request, reply) {
   const { idBranch, idCuenta } = request.user;

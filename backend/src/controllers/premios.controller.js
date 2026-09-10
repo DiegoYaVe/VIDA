@@ -124,6 +124,26 @@ export async function misCanjes(request, reply) {
   } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al obtener canjes' }); }
 }
 
+// GET /delivery/admin/premios/canjes?status=PENDIENTE  (ops)
+export async function listarCanjesAdmin(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { status } = request.query;
+  try {
+    const pool = await getPool();
+    const req = pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta);
+    let filtro = '';
+    if (status) { req.input('st', sql.VarChar(20), status); filtro = ' AND j.Status = @st'; }
+    const r = await req.query(`
+      SELECT TOP 100 j.idCanje, j.NombrePremio, j.CostoPuntos, j.Codigo, j.Status, j.FechaAlta,
+             c.Nombre AS Cliente, c.Telefono AS TelefonoCliente
+      FROM VIDA_PREMIOS_CANJES j
+      LEFT JOIN VIDA_APP_CLIENTES c ON c.idBranch=j.idBranch AND c.idCuenta=j.idCuenta AND c.idCliente=j.idCliente
+      WHERE j.idBranch=@idBranch AND j.idCuenta=@idCuenta ${filtro}
+      ORDER BY j.FechaAlta DESC`);
+    return reply.send(r.recordset);
+  } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al listar canjes' }); }
+}
+
 // PATCH /delivery/admin/premios/canjes/:idCanje/estado  { Status }  (ops)
 export async function cambiarEstadoCanje(request, reply) {
   const { idBranch, idCuenta } = request.user;
