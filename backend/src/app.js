@@ -29,6 +29,7 @@ import { finanzasRoutes }   from './routes/finanzas.routes.js';
 import { clubRoutes }       from './routes/club.routes.js';
 import { serviciosRoutes }  from './routes/servicios.routes.js';
 import { academiaRoutes }   from './routes/academia.routes.js';
+import { premiosRoutes }    from './routes/premios.routes.js';
 import { auditRoutes }      from './routes/audit.routes.js';
 import { marcarInactivos }  from './controllers/heartbeat.controller.js';
 import { expirarPedidosVencidos } from './controllers/pedidos.controller.js';
@@ -172,6 +173,7 @@ fastify.register(finanzasRoutes,   { prefix: '/api' });
 fastify.register(clubRoutes,       { prefix: '/api' });
 fastify.register(serviciosRoutes,  { prefix: '/api' });
 fastify.register(academiaRoutes,   { prefix: '/api' });
+fastify.register(premiosRoutes,    { prefix: '/api' });
 fastify.register(auditRoutes,      { prefix: '/api' });
 fastify.register(wsRoutes,         { prefix: '/api' });
 

@@ -30,7 +30,7 @@ pos-venezuela/
   frontend/          # Panel React+Vite (src/pages, src/services, src/store, src/utils)
   app-cliente/       # Expo (app/(tabs), app/(auth), app/*)
   app-repartidor/    # Expo (app/(main), app/*)
-  sql/               # Migraciones numeradas 01..27 (correr en orden en SQL Server)
+  sql/               # Migraciones numeradas 01..28 (correr en orden en SQL Server)
 ```
 
 ### Repo / rama / deploy
@@ -65,7 +65,7 @@ pos-venezuela/
 |---|---|
 | A) Tiendas + catálogo por tienda (GPS/lista, catálogo en tiempo real) | ✅ (GPS "más cercana" parcial) |
 | B) Carrito + checkout (1 tienda/pedido, retiro/delivery, métodos de pago) | ✅ |
-| **C) Puntos / Fidelización** (ganar, billetera, historial, **canje**, reembolso) | ✅ (esta sesión) |
+| **C) Puntos / Fidelización** (ganar, billetera, historial, **canje**, reembolso, **catálogo de premios + canje**, **vencimiento por inactividad**) | ✅ (esta sesión, incl. fase 3) |
 | G) Tracking de pedidos (estados + mapa en vivo) | ✅ |
 | H) Perfil (compras, direcciones, tarjetas, contraseña) | ✅ |
 | Login OTP / Apple | ❌ (hay teléfono+password y Google) |
@@ -118,6 +118,7 @@ datos de prueba del cliente 4 quedaron restaurados; el cliente 1 no se tocó.
 
 Del más reciente al más antiguo:
 
+- **Fidelización fase 3 — Premios + Vencimiento** — archivos NUEVOS `premios.controller.js` + `premios.routes.js` (en `app.js`). Migración `sql/28`: `VIDA_PREMIOS` (seed 4) + `VIDA_PREMIOS_CANJES` + config `MesesInactividadVence=12`. Cliente: `GET /delivery/cliente/premios` (saldo + catálogo + mesesVence), `POST /delivery/cliente/premios/:id/canjear` (transacción: baja stock y puntos atómicos, ledger `CANJEADO`, genera `Codigo PRM-…`), `GET /delivery/cliente/premios/canjes`. Ops: `PATCH /delivery/admin/premios/canjes/:id/estado` (ENTREGADO/CANCELADO; al CANCELAR reembolsa puntos + repone stock), `POST /delivery/admin/puntos/expirar-inactivos` (**vencimiento**: a clientes sin movimientos en N meses con saldo>0 les registra `VENCIDO` -saldo; llamable por cron). App: pantalla `app-cliente/app/premios.jsx` (catálogo + canjear + mis canjes) + botón "Canjear por premios" en `mis-puntos.jsx`. **Nota:** el vencimiento es **por inactividad** (no FIFO por lote); no hay scheduler, se dispara con el endpoint.
 - **Academia VIDA v1** (panel empresario) — archivos NUEVOS `academia.controller.js` + `academia.routes.js` (en `app.js`) + página `frontend/src/pages/Academia.jsx` + ruta `/academia` en `App.jsx`. Migración `sql/27`: `VIDA_ACADEMIA_CURSOS` (seed 5 cursos), `VIDA_ACADEMIA_PROGRESO`, **inserta la pantalla `/academia` en `VIDA_CUENTA_PANTALLAS`** (idPantalla dinámico = MAX+1; ícono Lucide `GraduationCap`) **y da acceso** a usuarios activos SUPER_ADMIN/ADMIN_PAIS/ADMIN_ESTADO/ADMIN. Endpoints `GET /academia/cursos` (cursos + resumen: completados/total/puntos) y `POST /academia/cursos/:idCurso/completar` (idempotente; suma "puntos de academia"). **Los puntos de academia son un total COMPUTADO** (SUM de Puntos de cursos completados), **separados** de los puntos del cliente (los empresarios son `VIDA_CUENTA_USUARIOS`, no `VIDA_APP_CLIENTES`). Pendiente: CRUD de cursos + VideoUrl reales + eventos exclusivos para dueños. **Patrón útil:** así se agrega un módulo nuevo al sidebar dinámico (pantalla + accesos por migración).
 - **Servicios / Recargas v1** — archivos NUEVOS `backend/src/controllers/servicios.controller.js` + `routes/servicios.routes.js` (registrados en `app.js`). Migración `sql/26` (`VIDA_SERVICIOS_OPERADORAS` seed 6 operadoras VE + `VIDA_SERVICIOS_ORDENES`). Cliente: `GET /delivery/cliente/servicios/operadoras`, `POST /delivery/cliente/servicios` (crea orden `PROCESANDO`, genera `Referencia SVC-...`, acredita puntos = round(monto×PuntosPorDolar)), `GET /delivery/cliente/servicios` (mis órdenes). Ops: `PATCH /delivery/admin/servicios/:idOrden/estado` (COMPLETADO/RECHAZADO; al RECHAZAR revierte los puntos con AJUSTE, idempotente por status). App: pantalla `app-cliente/app/servicios.jsx` (grid de operadoras → número/monto/método → confirma; lista "Mis servicios") + tarjeta en perfil. **Sin integración real de telco** (la orden la completa ops); pendiente: comprobante pago móvil + sub-módulo Amazon.
 - **Membresía Club Vida v1** — archivos NUEVOS `backend/src/controllers/club.controller.js` + `routes/club.routes.js` (registrados en `app.js`), para no chocar con la sesión paralela que toca `delivery.controller`. Migración `sql/25` (tabla `VIDA_CLUB_NIVELES` + seed de 5 niveles). Endpoint `GET /delivery/cliente/membresia`: nivel = mayor nivel cuyo `MinPuntos` ≤ **puntos GANADOS de por vida** (SUM ledger Tipo='GANADO', = compras + racha de agua), beneficios, siguiente nivel + faltan, `codigoMembresia = VIDA-{id6}`, y **QR** (data URL, dep nueva backend **`qrcode@1.5.4`**). App: pantalla `app-cliente/app/mi-club.jsx` (tarjeta digital con degradado por nivel + QR + progreso + escalera de niveles) + tarjeta en perfil. Pendiente fase 2: **Eventos Club + RSVP** y **canje de productos exclusivos**.
@@ -204,6 +205,13 @@ Del más reciente al más antiguo:
 - Ruta en `App.jsx`: `/academia` con `modulo="/academia"` (ProtectedRoute valida que el usuario tenga la pantalla).
 - **Pendiente:** CRUD de cursos + carga de VideoUrl desde corporativo; eventos exclusivos para dueños.
 
+### Fidelización fase 3 — Premios + Vencimiento (`premios.controller.js` + `app-cliente/app/premios.jsx`)
+- Archivos **nuevos** (decoupled de `delivery.controller`). Migración `sql/28`: `VIDA_PREMIOS` (seed 4; `Stock=-1` = ilimitado) + `VIDA_PREMIOS_CANJES` + config `MesesInactividadVence=12`.
+- **Canje** (`POST .../premios/:id/canjear`) es **transaccional**: baja stock (`Stock=-1` no decrementa) y puntos con UPDATE condicional + `@@ROWCOUNT` (409 si agotado / saldo insuficiente), inserta ledger `CANJEADO` y el canje con `Codigo PRM-…` (se muestra en tienda). `GET .../premios` (saldo+catálogo+mesesVence) y `GET .../premios/canjes`.
+- Ops: `PATCH /delivery/admin/premios/canjes/:id/estado` (ENTREGADO/CANCELADO; CANCELADO → `REEMBOLSO` de puntos + repone stock; idempotente por estado).
+- **Vencimiento** (`POST /delivery/admin/puntos/expirar-inactivos`): a clientes con saldo>0 y sin ningún movimiento de puntos en `MesesInactividadVence` meses les registra `VENCIDO` = −saldo. Es **por inactividad**, no FIFO por lote. **No hay scheduler**: hay que llamarlo por cron (o desde un panel admin, pendiente). `Valor=0` desactiva el vencimiento.
+- App: `premios.jsx` (catálogo, canjear con confirmación → muestra código, mis canjes con estado) + CTA "Canjear por premios" en `mis-puntos.jsx`.
+
 ---
 
 ## 6. Cosas de entorno / operación (para no tropezar)
@@ -243,7 +251,7 @@ Del más reciente al más antiguo:
 1. **Push recordatorio de hidratación** — cerrar fase 2 de Salud con `expo-notifications` (notificación local repetida cada 2h).
 2. **Club Vida fase 2** — Eventos Club + RSVP y canje de productos exclusivos por nivel (la v1 tarjeta+niveles+QR ya está).
 3. **Academia fase 2** — CRUD de cursos desde corporativo (hoy son seed) + VideoUrl reales + eventos exclusivos para dueños (la v1 de cursos+progreso+puntos ya está).
-4. **Fidelización fase 3** — catálogo de premios + vencimiento de puntos.
+4. **Vencimiento de puntos: automatizar** — hoy `POST /delivery/admin/puntos/expirar-inactivos` es manual; falta un cron/scheduler que lo dispare periódicamente (y opcional: vencimiento FIFO por lote en vez de por inactividad).
 5. **Servicios fase 2** — panel admin para gestionar/completar recargas + comprobante pago móvil + sub-módulo Amazon curado (la v1 de recargas ya está).
 
 **Cómo continuar técnicamente:** los módulos "de panel" nuevos conviene colgarlos como **tab dentro de un módulo existente** (ej. Reportes) para evitar fricción con el sidebar dinámico por BD (que requiere insertar `pantalla` + accesos). Respetar siempre el **scope por rol** (`esRed`/`pvEfectivo`) y la operación **USD-only**. Al tocar el flujo de pedidos, cuidar idempotencia y transacciones (como en puntos).

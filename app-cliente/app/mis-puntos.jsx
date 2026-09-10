@@ -68,6 +68,12 @@ export default function MisPuntosScreen() {
         ) : null}
       </View>
 
+      <TouchableOpacity style={styles.canjearBtn} onPress={() => router.push('/premios')} activeOpacity={0.85}>
+        <Ionicons name="gift" size={18} color="#fff" />
+        <Text style={styles.canjearText}>Canjear por premios</Text>
+        <Ionicons name="chevron-forward" size={18} color="#fff" />
+      </TouchableOpacity>
+
       <Text style={styles.histTitle}>Historial</Text>
       {cargando ? (
         <ActivityIndicator style={{ marginTop: 30 }} color="#F59E0B" />
@@ -103,6 +109,8 @@ const styles = StyleSheet.create({
   walletSaldo: { color: '#fff', fontSize: 40, fontWeight: '900', marginTop: 4 },
   walletLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600' },
   walletHint: { color: 'rgba(255,255,255,0.85)', fontSize: 11, marginTop: 8 },
+  canjearBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F59E0B', marginHorizontal: 16, marginTop: 16, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16 },
+  canjearText: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '800' },
   histTitle: { fontSize: 13, fontWeight: '800', color: '#4A5568', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
   movRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
