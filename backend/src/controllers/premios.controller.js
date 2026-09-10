@@ -237,28 +237,61 @@ export async function eliminarPremio(request, reply) {
   } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al eliminar premio' }); }
 }
 
-// POST /delivery/admin/puntos/expirar-inactivos   (llamable por cron)
+// Núcleo del vencimiento para UN tenant. Reutilizado por el endpoint HTTP y
+// por el job programado. Devuelve { meses, expirados }.
+export async function expirarPuntosInactivosCore(pool, idBranch, idCuenta) {
+  const meses = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'MesesInactividadVence', '12')) || 0;
+  if (meses <= 0) return { meses, expirados: 0, desactivado: true };
+
+  // Clientes con saldo > 0 y sin movimientos en los últimos N meses
+  const cR = await pool.request()
+    .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('meses', sql.Int, meses)
+    .query(`SELECT c.idCliente, ISNULL(c.PuntosSaldo,0) AS Saldo
+            FROM VIDA_APP_CLIENTES c
+            WHERE c.idBranch=@idBranch AND c.idCuenta=@idCuenta AND ISNULL(c.PuntosSaldo,0) > 0
+              AND ISNULL((SELECT MAX(FechaAlta) FROM VIDA_CLIENTE_PUNTOS p
+                          WHERE p.idBranch=c.idBranch AND p.idCuenta=c.idCuenta AND p.idCliente=c.idCliente),
+                         '1900-01-01') < DATEADD(MONTH, -@meses, GETDATE())`);
+  let expirados = 0;
+  for (const cli of cR.recordset) {
+    await movPuntos(pool, idBranch, idCuenta, cli.idCliente, -cli.Saldo, 'VENCIDO', `Vencimiento por ${meses} meses de inactividad`);
+    expirados++;
+  }
+  return { meses, expirados };
+}
+
+// POST /delivery/admin/puntos/expirar-inactivos   (disparo manual desde el panel)
 export async function expirarPuntosInactivos(request, reply) {
   const { idBranch, idCuenta } = request.user;
   try {
     const pool = await getPool();
-    const meses = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'MesesInactividadVence', '12')) || 0;
-    if (meses <= 0) return reply.send({ meses, expirados: 0, mensaje: 'Vencimiento desactivado' });
-
-    // Clientes con saldo > 0 y sin movimientos en los últimos N meses
-    const cR = await pool.request()
-      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('meses', sql.Int, meses)
-      .query(`SELECT c.idCliente, ISNULL(c.PuntosSaldo,0) AS Saldo
-              FROM VIDA_APP_CLIENTES c
-              WHERE c.idBranch=@idBranch AND c.idCuenta=@idCuenta AND ISNULL(c.PuntosSaldo,0) > 0
-                AND ISNULL((SELECT MAX(FechaAlta) FROM VIDA_CLIENTE_PUNTOS p
-                            WHERE p.idBranch=c.idBranch AND p.idCuenta=c.idCuenta AND p.idCliente=c.idCliente),
-                           '1900-01-01') < DATEADD(MONTH, -@meses, GETDATE())`);
-    let expirados = 0;
-    for (const cli of cR.recordset) {
-      await movPuntos(pool, idBranch, idCuenta, cli.idCliente, -cli.Saldo, 'VENCIDO', `Vencimiento por ${meses} meses de inactividad`);
-      expirados++;
-    }
-    return reply.send({ meses, expirados });
+    const r = await expirarPuntosInactivosCore(pool, idBranch, idCuenta);
+    return reply.send(r.desactivado
+      ? { meses: r.meses, expirados: 0, mensaje: 'Vencimiento desactivado' }
+      : { meses: r.meses, expirados: r.expirados });
   } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al expirar puntos' }); }
+}
+
+// Job programado: expira puntos inactivos en TODOS los tenants con clientes.
+// Idempotente: al expirar se registra un movimiento VENCIDO (que actualiza la
+// última actividad) y el saldo queda en 0, así que el cliente no se re-expira.
+export async function expirarPuntosInactivosJob(pool, log) {
+  const tenants = await pool.request().query(
+    `SELECT DISTINCT idBranch, idCuenta FROM VIDA_APP_CLIENTES`);
+  let totalExpirados = 0, tenantsConVencimiento = 0;
+  for (const t of tenants.recordset) {
+    try {
+      const r = await expirarPuntosInactivosCore(pool, t.idBranch, t.idCuenta);
+      if (r.expirados > 0) {
+        tenantsConVencimiento++;
+        totalExpirados += r.expirados;
+        log?.info(`[puntos] vencimiento tenant (${t.idBranch},${t.idCuenta}): ${r.expirados} cliente(s), ${r.meses} meses`);
+      }
+    } catch (e) {
+      log?.error(`[puntos] error en vencimiento tenant (${t.idBranch},${t.idCuenta}): ${e.message}`);
+    }
+  }
+  if (totalExpirados > 0)
+    log?.info(`[puntos] vencimiento total: ${totalExpirados} cliente(s) en ${tenantsConVencimiento} tenant(s)`);
+  return { totalExpirados, tenantsConVencimiento };
 }

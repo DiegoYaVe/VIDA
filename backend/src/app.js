@@ -34,6 +34,7 @@ import { cuponesRoutes }    from './routes/cupones.routes.js';
 import { auditRoutes }      from './routes/audit.routes.js';
 import { marcarInactivos }  from './controllers/heartbeat.controller.js';
 import { expirarPedidosVencidos } from './controllers/pedidos.controller.js';
+import { expirarPuntosInactivosJob } from './controllers/premios.controller.js';
 import { procesarBusquedas } from './services/dispatch.service.js';
 import { wsRoutes } from './ws/ws.routes.js';
 import multipart from '@fastify/multipart';
@@ -202,6 +203,32 @@ setInterval(async () => {
     await procesarBusquedas(fastify.log);
   } catch {}
 }, 60_000);
+
+// Job: vencimiento de puntos por inactividad. Corre una vez al día (el
+// vencimiento es por meses, no necesita más). Configurable con
+// PUNTOS_EXPIRACION_INTERVALO_MS (0 lo desactiva). En producción hace una
+// corrida inicial al arrancar, porque el server puede reiniciarse a diario y
+// no llegar nunca al intervalo.
+const PUNTOS_EXP_MS = process.env.PUNTOS_EXPIRACION_INTERVALO_MS !== undefined
+  ? parseInt(process.env.PUNTOS_EXPIRACION_INTERVALO_MS)
+  : 24 * 60 * 60 * 1000;
+if (PUNTOS_EXP_MS > 0) {
+  setInterval(async () => {
+    try {
+      const pool = await getPool();
+      await expirarPuntosInactivosJob(pool, fastify.log);
+    } catch {}
+  }, PUNTOS_EXP_MS);
+
+  if (process.env.NODE_ENV === 'production') {
+    setTimeout(async () => {
+      try {
+        const pool = await getPool();
+        await expirarPuntosInactivosJob(pool, fastify.log);
+      } catch {}
+    }, 120_000);
+  }
+}
 
 // Arrancar
 const PORT = process.env.PORT || 3001;
