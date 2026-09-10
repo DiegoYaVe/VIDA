@@ -25,6 +25,7 @@ import Corporativo   from './pages/Corporativo.jsx';
 import Catalogos     from './pages/Catalogos.jsx';
 import Academia      from './pages/Academia.jsx';
 import Operaciones   from './pages/Operaciones.jsx';
+import Cupones       from './pages/Cupones.jsx';
 import Tienda        from './pages/Tienda.jsx';
 import { ToastContainer } from './components/Toast.jsx';
 
@@ -183,6 +184,10 @@ export default function App() {
 
         <Route path="/operaciones" element={
           <ProtectedRoute modulo="/operaciones"><Layout><Operaciones /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/cupones" element={
+          <ProtectedRoute modulo="/cupones"><Layout><Cupones /></Layout></ProtectedRoute>
         } />
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
