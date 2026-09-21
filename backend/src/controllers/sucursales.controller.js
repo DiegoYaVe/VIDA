@@ -1,6 +1,13 @@
 // src/controllers/sucursales.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
 
+// Coordenada válida o null: número dentro de [-max, max]; vacío/fuera de rango = null.
+// (El repartidor y el despacho usan Latitud/Longitud de la sucursal como origen.)
+function latLng(v, max) {
+  const n = parseFloat(v);
+  return (v === '' || v == null || Number.isNaN(n) || n < -max || n > max) ? null : n;
+}
+
 async function nextId(pool, idBranch, idCuenta) {
   const r = await pool.request()
     .input('idBranch', sql.BigInt, idBranch)
@@ -67,7 +74,7 @@ export async function crearPuntoVenta(request, reply) {
     Nombre, NomComercial, TipoPuntoVenta,
     Correo, Telefono, Encargado,
     Calle, NumExt, NumInt, Colonia, CP, Ciudad,
-    idEstado, idPais,
+    idEstado, idPais, Latitud, Longitud,
   } = request.body;
 
   if (!Nombre) return reply.code(400).send({ error: 'El nombre es requerido' });
@@ -96,15 +103,17 @@ export async function crearPuntoVenta(request, reply) {
       .input('Ciudad',        sql.VarChar(100), Ciudad || null)
       .input('idEstado',      sql.BigInt,       idEstado)
       .input('idPais',        sql.BigInt,       idPais)
+      .input('Latitud',       sql.Float,        latLng(Latitud, 90))
+      .input('Longitud',      sql.Float,        latLng(Longitud, 180))
       .input('UsuAlta',       sql.VarChar(20),  String(idUsuario))
       .query(`INSERT INTO VIDA_CUENTA_PUNTOS_VENTA
                 (idBranch, idCuenta, idPuntoVenta, Nombre, NomComercial, TipoPuntoVenta,
                  Correo, Telefono, Encargado, Calle, NumExt, NumInt, Colonia, CP,
-                 Ciudad, idEstado, idPais, UsuAlta)
+                 Ciudad, idEstado, idPais, Latitud, Longitud, UsuAlta)
               VALUES
                 (@idBranch, @idCuenta, @idPuntoVenta, @Nombre, @NomComercial, @TipoPuntoVenta,
                  @Correo, @Telefono, @Encargado, @Calle, @NumExt, @NumInt, @Colonia, @CP,
-                 @Ciudad, @idEstado, @idPais, @UsuAlta)`);
+                 @Ciudad, @idEstado, @idPais, @Latitud, @Longitud, @UsuAlta)`);
 
     return reply.code(201).send({ message: 'Punto de venta creado', idPuntoVenta: nuevoId });
   } catch (err) {
@@ -121,7 +130,7 @@ export async function editarPuntoVenta(request, reply) {
     Nombre, NomComercial, TipoPuntoVenta,
     Correo, Telefono, Encargado,
     Calle, NumExt, NumInt, Colonia, CP, Ciudad,
-    idEstado, idPais,
+    idEstado, idPais, Latitud, Longitud,
   } = request.body;
 
   if (!Nombre)   return reply.code(400).send({ error: 'El nombre es requerido' });
@@ -148,12 +157,15 @@ export async function editarPuntoVenta(request, reply) {
       .input('Ciudad',        sql.VarChar(100), Ciudad || null)
       .input('idEstado',      sql.BigInt,       idEstado)
       .input('idPais',        sql.BigInt,       idPais)
+      .input('Latitud',       sql.Float,        latLng(Latitud, 90))
+      .input('Longitud',      sql.Float,        latLng(Longitud, 180))
       .input('UsuMod',        sql.VarChar(20),  String(idUsuario))
       .query(`UPDATE VIDA_CUENTA_PUNTOS_VENTA SET
                 Nombre=@Nombre, NomComercial=@NomComercial, TipoPuntoVenta=@TipoPuntoVenta,
                 Correo=@Correo, Telefono=@Telefono, Encargado=@Encargado,
                 Calle=@Calle, NumExt=@NumExt, NumInt=@NumInt, Colonia=@Colonia,
                 CP=@CP, Ciudad=@Ciudad, idEstado=@idEstado, idPais=@idPais,
+                Latitud=COALESCE(@Latitud, Latitud), Longitud=COALESCE(@Longitud, Longitud),
                 FechaMod=GETDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta`);
 
