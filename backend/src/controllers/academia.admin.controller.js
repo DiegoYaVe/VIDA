@@ -398,9 +398,11 @@ export async function guardarQuiz(request, reply) {
         const ops = Array.isArray(preg.opciones) ? preg.opciones : [];
         for (const op of ops) {
           if (!op?.Texto?.trim()) continue;
+          // En respuesta corta cada opción es una respuesta ACEPTADA → siempre correcta.
+          const esCorrecta = tipoPreg === 'RESPUESTA_CORTA' ? 1 : (op.EsCorrecta ? 1 : 0);
           await tx.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta)
             .input('p', sql.BigInt, idPregunta).input('t', sql.VarChar(500), op.Texto.trim())
-            .input('ec', sql.Bit, op.EsCorrecta ? 1 : 0).input('o', sql.Int, oOrden++)
+            .input('ec', sql.Bit, esCorrecta).input('o', sql.Int, oOrden++)
             .query(`INSERT INTO VIDA_ACADEMIA_QUIZ_OPCIONES (idBranch,idCuenta,idOpcion,idPregunta,Texto,EsCorrecta,Orden)
                     SELECT @b,@c,ISNULL(MAX(idOpcion),0)+1,@p,@t,@ec,@o FROM VIDA_ACADEMIA_QUIZ_OPCIONES WITH (UPDLOCK,HOLDLOCK) WHERE idBranch=@b AND idCuenta=@c`);
         }
