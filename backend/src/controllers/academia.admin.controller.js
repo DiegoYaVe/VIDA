@@ -63,7 +63,7 @@ export async function detalleCursoAdmin(request, reply) {
       pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('cur', sql.BigInt, idCurso)
         .query(`SELECT idLeccion, idModulo, Titulo, Descripcion, TipoLeccion, VideoUrl, ArchivoUrl, Contenido, DuracionMin, QuizAprob, Orden FROM VIDA_ACADEMIA_LECCIONES WHERE idBranch=@b AND idCuenta=@c AND idCurso=@cur AND Status='ACTIVO' ORDER BY Orden, idLeccion`),
       pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('cur', sql.BigInt, idCurso)
-        .query(`SELECT p.idPregunta, p.idLeccion, p.Texto, p.Orden FROM VIDA_ACADEMIA_QUIZ_PREGUNTAS p
+        .query(`SELECT p.idPregunta, p.idLeccion, p.Texto, p.TipoPregunta, p.Orden FROM VIDA_ACADEMIA_QUIZ_PREGUNTAS p
                 JOIN VIDA_ACADEMIA_LECCIONES l ON l.idBranch=p.idBranch AND l.idCuenta=p.idCuenta AND l.idLeccion=p.idLeccion
                 WHERE p.idBranch=@b AND p.idCuenta=@c AND l.idCurso=@cur ORDER BY p.Orden`),
       pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('cur', sql.BigInt, idCurso)
@@ -382,15 +382,17 @@ export async function guardarQuiz(request, reply) {
                 WHERE o.idBranch=@b AND o.idCuenta=@c AND p.idLeccion=@l;
                 DELETE FROM VIDA_ACADEMIA_QUIZ_PREGUNTAS WHERE idBranch=@b AND idCuenta=@c AND idLeccion=@l;`);
 
+      const TIPOS_PREG = ['OPCION_UNICA', 'VERDADERO_FALSO', 'OPCION_MULTIPLE', 'RESPUESTA_CORTA'];
       let pOrden = 1;
       for (const preg of preguntas) {
         if (!preg?.Texto?.trim()) continue;
+        const tipoPreg = TIPOS_PREG.includes(preg.TipoPregunta) ? preg.TipoPregunta : 'OPCION_UNICA';
         // id atómico de pregunta
         const pr = await tx.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta)
-          .input('l', sql.BigInt, idLeccion).input('t', sql.VarChar(500), preg.Texto.trim()).input('o', sql.Int, pOrden++)
-          .query(`INSERT INTO VIDA_ACADEMIA_QUIZ_PREGUNTAS (idBranch,idCuenta,idPregunta,idLeccion,Texto,Orden)
+          .input('l', sql.BigInt, idLeccion).input('t', sql.VarChar(500), preg.Texto.trim()).input('tp', sql.VarChar(20), tipoPreg).input('o', sql.Int, pOrden++)
+          .query(`INSERT INTO VIDA_ACADEMIA_QUIZ_PREGUNTAS (idBranch,idCuenta,idPregunta,idLeccion,Texto,TipoPregunta,Orden)
                   OUTPUT inserted.idPregunta AS id
-                  SELECT @b,@c,ISNULL(MAX(idPregunta),0)+1,@l,@t,@o FROM VIDA_ACADEMIA_QUIZ_PREGUNTAS WITH (UPDLOCK,HOLDLOCK) WHERE idBranch=@b AND idCuenta=@c`);
+                  SELECT @b,@c,ISNULL(MAX(idPregunta),0)+1,@l,@t,@tp,@o FROM VIDA_ACADEMIA_QUIZ_PREGUNTAS WITH (UPDLOCK,HOLDLOCK) WHERE idBranch=@b AND idCuenta=@c`);
         const idPregunta = pr.recordset[0].id;
         let oOrden = 1;
         const ops = Array.isArray(preg.opciones) ? preg.opciones : [];

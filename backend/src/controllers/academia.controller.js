@@ -285,7 +285,7 @@ export async function detalleCurso(request, reply) {
         .query(`SELECT idLeccion, Completado, FechaInicio, FechaFin, SegundosTomados, QuizPuntaje
                 FROM VIDA_ACADEMIA_LECCION_PROGRESO WHERE idBranch=@b AND idCuenta=@c AND TipoActor=@ta AND idUsuario=@u AND idCurso=@cur`),
       pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('cur', sql.BigInt, idCurso)
-        .query(`SELECT p.idPregunta, p.idLeccion, p.Texto, p.Orden FROM VIDA_ACADEMIA_QUIZ_PREGUNTAS p
+        .query(`SELECT p.idPregunta, p.idLeccion, p.Texto, p.TipoPregunta, p.Orden FROM VIDA_ACADEMIA_QUIZ_PREGUNTAS p
                 JOIN VIDA_ACADEMIA_LECCIONES l ON l.idBranch=p.idBranch AND l.idCuenta=p.idCuenta AND l.idLeccion=p.idLeccion
                 WHERE p.idBranch=@b AND p.idCuenta=@c AND l.idCurso=@cur ORDER BY p.Orden`),
       pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('cur', sql.BigInt, idCurso)
@@ -298,10 +298,11 @@ export async function detalleCurso(request, reply) {
     for (const p of progQ.recordset) progPorLec[p.idLeccion] = p;
     const preguntasPorLec = {};
     for (const p of pregQ.recordset) {
-      (preguntasPorLec[p.idLeccion] ||= []).push({
-        idPregunta: p.idPregunta, Texto: p.Texto,
-        opciones: opcQ.recordset.filter(o => o.idPregunta === p.idPregunta).map(o => ({ idOpcion: o.idOpcion, Texto: o.Texto })),
-      });
+      const tipo = p.TipoPregunta || 'OPCION_UNICA';
+      // RESPUESTA_CORTA: las opciones SON las respuestas aceptadas → no enviarlas.
+      const opciones = tipo === 'RESPUESTA_CORTA' ? []
+        : opcQ.recordset.filter(o => o.idPregunta === p.idPregunta).map(o => ({ idOpcion: o.idOpcion, Texto: o.Texto }));
+      (preguntasPorLec[p.idLeccion] ||= []).push({ idPregunta: p.idPregunta, Texto: p.Texto, TipoPregunta: tipo, opciones });
     }
 
     const modulos = modQ.recordset.map(m => ({
@@ -395,14 +396,27 @@ export async function responderQuiz(request, reply) {
     if (l.recordset[0].TipoLeccion !== 'QUIZ') return reply.code(400).send({ error: 'La lección no es un quiz' });
     const idCurso = l.recordset[0].idCurso, minAprob = l.recordset[0].QuizAprob;
 
-    const pregQ = await pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('l', sql.BigInt, idLeccion)
-      .query(`SELECT p.idPregunta,
-                (SELECT TOP 1 o.idOpcion FROM VIDA_ACADEMIA_QUIZ_OPCIONES o
-                   WHERE o.idBranch=p.idBranch AND o.idCuenta=p.idCuenta AND o.idPregunta=p.idPregunta AND o.EsCorrecta=1) AS opcionCorrecta
-              FROM VIDA_ACADEMIA_QUIZ_PREGUNTAS p WHERE p.idBranch=@b AND p.idCuenta=@c AND p.idLeccion=@l ORDER BY p.Orden`);
+    const [pregQ, corrQ] = await Promise.all([
+      pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('l', sql.BigInt, idLeccion)
+        .query(`SELECT idPregunta, TipoPregunta FROM VIDA_ACADEMIA_QUIZ_PREGUNTAS WHERE idBranch=@b AND idCuenta=@c AND idLeccion=@l ORDER BY Orden`),
+      pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('l', sql.BigInt, idLeccion)
+        .query(`SELECT o.idPregunta, o.idOpcion, o.Texto FROM VIDA_ACADEMIA_QUIZ_OPCIONES o
+                JOIN VIDA_ACADEMIA_QUIZ_PREGUNTAS p ON p.idBranch=o.idBranch AND p.idCuenta=o.idCuenta AND p.idPregunta=o.idPregunta
+                WHERE o.idBranch=@b AND o.idCuenta=@c AND p.idLeccion=@l AND o.EsCorrecta=1`),
+    ]);
     if (!pregQ.recordset.length) return reply.code(400).send({ error: 'El quiz no tiene preguntas' });
 
-    const res = calificarQuiz(pregQ.recordset, respuestas, minAprob);
+    // Arma la estructura de calificación (ids y textos correctos por pregunta)
+    const preguntas = pregQ.recordset.map(p => {
+      const correctas = corrQ.recordset.filter(o => String(o.idPregunta) === String(p.idPregunta));
+      return {
+        idPregunta: p.idPregunta,
+        tipo: p.TipoPregunta || 'OPCION_UNICA',
+        correctasIds: correctas.map(o => o.idOpcion),
+        correctasTextos: correctas.map(o => o.Texto),
+      };
+    });
+    const res = calificarQuiz(preguntas, respuestas, minAprob);
 
     await pool.request()
       .input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('ta', sql.VarChar(20), actorTipo).input('u', sql.BigInt, actorId)

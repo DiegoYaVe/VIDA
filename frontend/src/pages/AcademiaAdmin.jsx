@@ -9,6 +9,14 @@ import {
 } from 'lucide-react';
 import api, { API_ORIGIN } from '../services/api.js';
 import { useToast } from '../components/Toast.jsx';
+import RichText from '../components/RichText.jsx';
+
+const TIPOS_PREGUNTA = [
+  { v: 'OPCION_UNICA', l: 'Opción única' },
+  { v: 'VERDADERO_FALSO', l: 'Verdadero / Falso' },
+  { v: 'OPCION_MULTIPLE', l: 'Selección múltiple' },
+  { v: 'RESPUESTA_CORTA', l: 'Respuesta corta' },
+];
 
 const TIPOS_CURSO = [
   { v:'CAPACITACION', l:'Capacitación del sistema' },
@@ -329,7 +337,7 @@ function LeccionForm({ idModulo, leccion, onDone, onCancel }) {
   const toast = useToast();
   const editando = !!leccion;
   const [f, setF] = useState(leccion ? { ...leccion } : { Titulo:'', TipoLeccion:'VIDEO', VideoUrl:'', ArchivoUrl:'', Contenido:'', DuracionMin:5, QuizAprob:70, Orden:0 });
-  const [quiz, setQuiz] = useState(leccion?.quiz?.map(p=>({ Texto:p.Texto, opciones:p.opciones?.map(o=>({ Texto:o.Texto, EsCorrecta:!!o.EsCorrecta }))||[] })) || []);
+  const [quiz, setQuiz] = useState(leccion?.quiz?.map(p=>({ Texto:p.Texto, TipoPregunta:p.TipoPregunta||'OPCION_UNICA', opciones:p.opciones?.map(o=>({ Texto:o.Texto, EsCorrecta:!!o.EsCorrecta }))||[] })) || []);
   const [guardando, setGuardando] = useState(false);
   const fileRef = useRef();
   function up(k,v){ setF(s=>({ ...s, [k]:v })); }
@@ -379,7 +387,7 @@ function LeccionForm({ idModulo, leccion, onDone, onCancel }) {
         </div>
       )}
       {f.TipoLeccion==='TEXTO' && (
-        <textarea value={f.Contenido||''} onChange={e=>up('Contenido',e.target.value)} rows={4} placeholder="Contenido del artículo…" className="inp"/>
+        <RichText value={f.Contenido||''} onChange={html=>up('Contenido',html)} placeholder="Contenido del artículo…" />
       )}
       {f.TipoLeccion==='QUIZ' && <QuizEditor quiz={quiz} setQuiz={setQuiz} aprob={f.QuizAprob} setAprob={v=>up('QuizAprob',v)} />}
 
@@ -397,34 +405,81 @@ function LeccionForm({ idModulo, leccion, onDone, onCancel }) {
 }
 
 function QuizEditor({ quiz, setQuiz, aprob, setAprob }) {
-  function addPreg(){ setQuiz([...quiz, { Texto:'', opciones:[{Texto:'',EsCorrecta:true},{Texto:'',EsCorrecta:false}] }]); }
+  function addPreg(){ setQuiz([...quiz, { Texto:'', TipoPregunta:'OPCION_UNICA', opciones:[{Texto:'',EsCorrecta:true},{Texto:'',EsCorrecta:false}] }]); }
   function upPreg(i,k,v){ setQuiz(quiz.map((p,idx)=>idx===i?{...p,[k]:v}:p)); }
   function delPreg(i){ setQuiz(quiz.filter((_,idx)=>idx!==i)); }
   function addOpc(pi){ setQuiz(quiz.map((p,idx)=>idx===pi?{...p,opciones:[...p.opciones,{Texto:'',EsCorrecta:false}]}:p)); }
-  function upOpc(pi,oi,k,v){ setQuiz(quiz.map((p,idx)=>{ if(idx!==pi) return p; const opciones=p.opciones.map((o,j)=>{ if(k==='EsCorrecta'&&v) return {...o,EsCorrecta:j===oi}; if(j===oi) return {...o,[k]:v}; return o;}); return {...p,opciones}; })); }
   function delOpc(pi,oi){ setQuiz(quiz.map((p,idx)=>idx===pi?{...p,opciones:p.opciones.filter((_,j)=>j!==oi)}:p)); }
+  function upOpcTexto(pi,oi,v){ setQuiz(quiz.map((p,idx)=>idx===pi?{...p,opciones:p.opciones.map((o,j)=>j===oi?{...o,Texto:v}:o)}:p)); }
+  // Marca correcta según el tipo: única/VF → exclusiva; múltiple → toggle.
+  function marcarCorrecta(pi,oi){
+    setQuiz(quiz.map((p,idx)=>{
+      if(idx!==pi) return p;
+      const multi = p.TipoPregunta==='OPCION_MULTIPLE';
+      const opciones=p.opciones.map((o,j)=> multi
+        ? (j===oi?{...o,EsCorrecta:!o.EsCorrecta}:o)
+        : {...o,EsCorrecta:j===oi});
+      return {...p,opciones};
+    }));
+  }
+  // Cambia el tipo de pregunta, ajustando las opciones por defecto.
+  function cambiarTipo(pi,tipo){
+    setQuiz(quiz.map((p,idx)=>{
+      if(idx!==pi) return p;
+      let opciones=p.opciones;
+      if(tipo==='VERDADERO_FALSO') opciones=[{Texto:'Verdadero',EsCorrecta:true},{Texto:'Falso',EsCorrecta:false}];
+      else if(tipo==='RESPUESTA_CORTA') opciones=(p.opciones.length?p.opciones:[{Texto:'',EsCorrecta:true}]).map(o=>({...o,EsCorrecta:true}));
+      else if(!p.opciones.length) opciones=[{Texto:'',EsCorrecta:true},{Texto:'',EsCorrecta:false}];
+      return {...p,TipoPregunta:tipo,opciones};
+    }));
+  }
 
   return (
-    <div className="space-y-2 bg-white rounded-lg p-2 border border-gray-100">
-      <label className="text-xs text-gray-400 flex items-center gap-2">% mínimo para aprobar
+    <div className="space-y-2 bg-white rounded-lg p-2.5 border border-gray-100">
+      <label className="text-xs text-gray-500 flex items-center gap-2 font-medium">% mínimo para aprobar
         <input type="number" value={aprob} onChange={e=>setAprob(e.target.value)} className="w-20 border border-gray-200 rounded px-2 py-1 text-sm"/></label>
-      {quiz.map((p,pi)=>(
-        <div key={pi} className="border border-gray-100 rounded-lg p-2 space-y-1.5">
-          <div className="flex gap-1 items-center">
-            <input value={p.Texto} onChange={e=>upPreg(pi,'Texto',e.target.value)} placeholder={`Pregunta ${pi+1}`} className="inp flex-1"/>
-            <button onClick={()=>delPreg(pi)} className="text-gray-300 hover:text-red-500 p-1"><Trash2 size={13}/></button>
-          </div>
-          {p.opciones.map((o,oi)=>(
-            <div key={oi} className="flex items-center gap-1.5 pl-3">
-              <input type="radio" name={`correcta-${pi}`} checked={!!o.EsCorrecta} onChange={()=>upOpc(pi,oi,'EsCorrecta',true)} title="Correcta"/>
-              <input value={o.Texto} onChange={e=>upOpc(pi,oi,'Texto',e.target.value)} placeholder={`Opción ${oi+1}`} className="inp flex-1"/>
-              <button onClick={()=>delOpc(pi,oi)} className="text-gray-300 hover:text-red-500"><X size={13}/></button>
+      {quiz.map((p,pi)=>{
+        const tipo=p.TipoPregunta||'OPCION_UNICA';
+        const corta=tipo==='RESPUESTA_CORTA', multi=tipo==='OPCION_MULTIPLE', vf=tipo==='VERDADERO_FALSO';
+        return (
+          <div key={pi} className="border border-gray-100 rounded-lg p-2.5 space-y-2 bg-gray-50/50">
+            <div className="flex gap-1.5 items-center">
+              <span className="text-xs font-bold text-gray-400 w-5">{pi+1}.</span>
+              <input value={p.Texto} onChange={e=>upPreg(pi,'Texto',e.target.value)} placeholder="Enunciado de la pregunta" className="inp flex-1"/>
+              <select value={tipo} onChange={e=>cambiarTipo(pi,e.target.value)} className="inp !w-auto text-xs">
+                {TIPOS_PREGUNTA.map(t=><option key={t.v} value={t.v}>{t.l}</option>)}
+              </select>
+              <button onClick={()=>delPreg(pi)} className="text-gray-300 hover:text-red-500 p-1"><Trash2 size={13}/></button>
             </div>
-          ))}
-          <button onClick={()=>addOpc(pi)} className="text-[11px] text-vida-blue font-semibold pl-3">+ opción</button>
-        </div>
-      ))}
-      <button onClick={addPreg} className="text-xs text-vida-green font-semibold flex items-center gap-1"><Plus size={13}/> Pregunta</button>
+
+            {corta ? (
+              <div className="pl-6 space-y-1">
+                <p className="text-[10px] text-gray-400">Respuestas aceptadas (se comparan sin acentos ni mayúsculas):</p>
+                {p.opciones.map((o,oi)=>(
+                  <div key={oi} className="flex items-center gap-1.5">
+                    <input value={o.Texto} onChange={e=>upOpcTexto(pi,oi,e.target.value)} placeholder={`Respuesta válida ${oi+1}`} className="inp flex-1"/>
+                    {p.opciones.length>1 && <button onClick={()=>delOpc(pi,oi)} className="text-gray-300 hover:text-red-500"><X size={13}/></button>}
+                  </div>
+                ))}
+                <button onClick={()=>addOpc(pi)} className="text-[11px] text-vida-blue font-semibold">+ respuesta aceptada</button>
+              </div>
+            ) : (
+              <div className="pl-6 space-y-1.5">
+                {p.opciones.map((o,oi)=>(
+                  <div key={oi} className="flex items-center gap-2">
+                    <input type={multi?'checkbox':'radio'} name={`correcta-${pi}`} checked={!!o.EsCorrecta} onChange={()=>marcarCorrecta(pi,oi)} title="Marcar como correcta"/>
+                    <input value={o.Texto} onChange={e=>upOpcTexto(pi,oi,e.target.value)} disabled={vf} placeholder={`Opción ${oi+1}`} className="inp flex-1"/>
+                    {!vf && p.opciones.length>2 && <button onClick={()=>delOpc(pi,oi)} className="text-gray-300 hover:text-red-500"><X size={13}/></button>}
+                  </div>
+                ))}
+                {!vf && <button onClick={()=>addOpc(pi)} className="text-[11px] text-vida-blue font-semibold">+ opción</button>}
+                <p className="text-[10px] text-gray-400">{multi?'Marca todas las correctas.':'Marca la opción correcta.'}</p>
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <button onClick={addPreg} className="text-xs text-vida-green font-semibold flex items-center gap-1.5 mt-1"><Plus size={13}/> Agregar pregunta</button>
     </div>
   );
 }

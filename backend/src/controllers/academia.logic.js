@@ -82,8 +82,40 @@ export function cursoCompleto(totalLecciones, completadas) {
 }
 
 // ── Quiz ────────────────────────────────────────────────────────────────────
-// Califica un intento. `preguntas` = [{ idPregunta, opcionCorrecta }].
-// `respuestas` = { [idPregunta]: idOpcionElegida }. Devuelve
+// Normaliza texto para comparar respuestas cortas: sin acentos, minúsculas,
+// sin espacios de más.
+export function normalizarTexto(s) {
+  return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// ¿La respuesta `a` a la pregunta `p` (de tipo `tipo`) es correcta?
+//   correctasIds    = ids de opciones correctas
+//   correctasTextos = textos aceptados (respuesta corta)
+// Compat: si `p.opcionCorrecta` existe (formato viejo), es OPCION_UNICA.
+function respuestaCorrecta(p, a) {
+  const tipo = p.tipo || (p.opcionCorrecta != null ? 'OPCION_UNICA' : 'OPCION_UNICA');
+  const correctasIds = (p.correctasIds || (p.opcionCorrecta != null ? [p.opcionCorrecta] : [])).map(String);
+  const correctasTextos = p.correctasTextos || [];
+  switch (tipo) {
+    case 'RESPUESTA_CORTA':
+      return typeof a === 'string' && a.trim() !== '' && correctasTextos.some(t => normalizarTexto(t) === normalizarTexto(a));
+    case 'OPCION_MULTIPLE': {
+      if (!Array.isArray(a)) return false;
+      const elegidas = [...new Set(a.map(String))];
+      if (elegidas.length !== correctasIds.length) return false;
+      return elegidas.every(id => correctasIds.includes(id));
+    }
+    case 'OPCION_UNICA':
+    case 'VERDADERO_FALSO':
+    default:
+      return a != null && !Array.isArray(a) && correctasIds.includes(String(a));
+  }
+}
+
+// Califica un intento. `preguntas` = [{ idPregunta, tipo, correctasIds[],
+// correctasTextos[] }] (o el formato viejo { idPregunta, opcionCorrecta }).
+// `respuestas` = { [idPregunta]: idOpcion | [ids] | texto }. Devuelve
 // { total, correctas, puntaje (0..100), aprobado }. `minAprob` = % para aprobar.
 export function calificarQuiz(preguntas, respuestas, minAprob = 70) {
   const lista = Array.isArray(preguntas) ? preguntas : [];
@@ -92,8 +124,8 @@ export function calificarQuiz(preguntas, respuestas, minAprob = 70) {
   const resp = respuestas || {};
   let correctas = 0;
   for (const p of lista) {
-    const elegida = resp[p.idPregunta] ?? resp[String(p.idPregunta)];
-    if (elegida != null && String(elegida) === String(p.opcionCorrecta)) correctas++;
+    const a = resp[p.idPregunta] ?? resp[String(p.idPregunta)];
+    if (respuestaCorrecta(p, a)) correctas++;
   }
   const puntaje = Math.round((correctas / total) * 100);
   return { total, correctas, puntaje, aprobado: puntaje >= (Number(minAprob) || 0) };

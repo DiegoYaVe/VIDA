@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   puedeVerCurso, estaFueraDeTiempo, diasRestantes,
-  porcentajeProgreso, cursoCompleto, calificarQuiz, generarFolio,
+  porcentajeProgreso, cursoCompleto, calificarQuiz, generarFolio, normalizarTexto,
 } from '../src/controllers/academia.logic.js';
 
 const user = (o = {}) => ({ TipoUsuario: 'ADMIN', idUsuario: 7, ...o });
@@ -99,6 +99,51 @@ test('quiz acepta llaves string en respuestas', () => {
 test('quiz umbral 60 aprueba con 67%', () => {
   const r = calificarQuiz(preguntas, { 1: 10, 2: 20, 3: 99 }, 60);
   assert.equal(r.aprobado, true);
+});
+
+// ── calificarQuiz: tipos de pregunta ────────────────────────────────────────
+test('OPCION_UNICA correcta e incorrecta', () => {
+  const preg = [{ idPregunta: 1, tipo: 'OPCION_UNICA', correctasIds: [10] }];
+  assert.equal(calificarQuiz(preg, { 1: 10 }, 100).aprobado, true);
+  assert.equal(calificarQuiz(preg, { 1: 11 }, 100).aprobado, false);
+});
+test('VERDADERO_FALSO se comporta como opción única', () => {
+  const preg = [{ idPregunta: 1, tipo: 'VERDADERO_FALSO', correctasIds: [99] }];
+  assert.equal(calificarQuiz(preg, { 1: 99 }, 100).puntaje, 100);
+  assert.equal(calificarQuiz(preg, { 1: 98 }, 100).puntaje, 0);
+});
+test('OPCION_MULTIPLE exige el conjunto exacto', () => {
+  const preg = [{ idPregunta: 1, tipo: 'OPCION_MULTIPLE', correctasIds: [1, 2] }];
+  assert.equal(calificarQuiz(preg, { 1: [1, 2] }, 100).aprobado, true);
+  assert.equal(calificarQuiz(preg, { 1: [2, 1] }, 100).aprobado, true); // orden no importa
+  assert.equal(calificarQuiz(preg, { 1: [1] }, 100).aprobado, false);    // falta una
+  assert.equal(calificarQuiz(preg, { 1: [1, 2, 3] }, 100).aprobado, false); // sobra una
+  assert.equal(calificarQuiz(preg, { 1: 1 }, 100).aprobado, false);      // no es array
+});
+test('RESPUESTA_CORTA compara normalizado (acentos/mayúsculas/espacios)', () => {
+  const preg = [{ idPregunta: 1, tipo: 'RESPUESTA_CORTA', correctasTextos: ['París', 'paris'] }];
+  assert.equal(calificarQuiz(preg, { 1: '  PARIS ' }, 100).aprobado, true);
+  assert.equal(calificarQuiz(preg, { 1: 'parís' }, 100).aprobado, true);
+  assert.equal(calificarQuiz(preg, { 1: 'londres' }, 100).aprobado, false);
+  assert.equal(calificarQuiz(preg, { 1: '' }, 100).aprobado, false);
+});
+test('quiz mixto puntúa parcial', () => {
+  const preg = [
+    { idPregunta: 1, tipo: 'OPCION_UNICA', correctasIds: [10] },
+    { idPregunta: 2, tipo: 'OPCION_MULTIPLE', correctasIds: [1, 2] },
+    { idPregunta: 3, tipo: 'RESPUESTA_CORTA', correctasTextos: ['si'] },
+  ];
+  const r = calificarQuiz(preg, { 1: 10, 2: [1], 3: 'Sí' }, 60);
+  assert.equal(r.correctas, 2); // p1 ok, p2 mal, p3 ok (normaliza sí→si)
+  assert.equal(r.puntaje, 67);
+  assert.equal(r.aprobado, true);
+});
+test('formato viejo {opcionCorrecta} sigue funcionando', () => {
+  const preg = [{ idPregunta: 1, opcionCorrecta: 5 }];
+  assert.equal(calificarQuiz(preg, { 1: 5 }, 100).aprobado, true);
+});
+test('normalizarTexto quita acentos y colapsa espacios', () => {
+  assert.equal(normalizarTexto('  Él  CORRIÓ '), 'el corrio');
 });
 
 // ── generarFolio ────────────────────────────────────────────────────────────

@@ -6,14 +6,13 @@
 //     pegar enlace, asignar visibilidad por rol/usuario, obligatorio + fecha límite, quiz.
 //   • Analítica (roles de red): quién tomó, fuera de tiempo, menor tiempo, % avance.
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  GraduationCap, PlayCircle, CheckCircle2, Clock, Star, Award, RefreshCw, X,
-  BookOpen, FileText, HelpCircle, Video, Lock, AlertTriangle, ChevronRight,
-  Plus, Pencil, Trash2, Users, BarChart3, Upload, Send, Printer, Eye, Timer,
+  GraduationCap, PlayCircle, CheckCircle2, Clock, Star, Award, RefreshCw,
+  BookOpen, Lock, AlertTriangle, ChevronRight, Pencil, BarChart3, Printer,
 } from 'lucide-react';
-import api, { API_ORIGIN } from '../services/api.js';
+import api from '../services/api.js';
 import { useAuthStore } from '../store/authStore.js';
-import { useToast } from '../components/Toast.jsx';
 import { Gestion, Analitica } from './AcademiaAdmin.jsx';
 
 const CAT_COLOR = { Ventas:'#5BBE6A', Servicio:'#54C4E0', Marketing:'#7B3FBE', Finanzas:'#0A1E3F', Cumplimiento:'#E0574C', Test:'#888' };
@@ -73,10 +72,10 @@ function TabBtn({ active, onClick, icon:Icon, children }) {
 // MIS CURSOS (learner)
 // ════════════════════════════════════════════════════════════════════════════
 function MisCursos() {
+  const navigate = useNavigate();
   const [cursos, setCursos] = useState([]);
   const [resumen, setResumen] = useState({ total:0, completados:0, puntos:0, obligatoriosPendientes:0, fueraDeTiempo:0 });
   const [cargando, setCargando] = useState(true);
-  const [abierto, setAbierto] = useState(null); // idCurso
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -115,13 +114,11 @@ function MisCursos() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {cursos.map(c => <CursoCard key={c.idCurso} c={c} onAbrir={()=>setAbierto(c.idCurso)} />)}
+          {cursos.map(c => <CursoCard key={c.idCurso} c={c} onAbrir={()=>navigate(`/academia/curso/${c.idCurso}`)} />)}
         </div>
       )}
 
       <MisConstancias />
-
-      {abierto != null && <Reproductor idCurso={abierto} onClose={()=>{ setAbierto(null); cargar(); }} />}
     </div>
   );
 }
@@ -206,254 +203,4 @@ function CursoCard({ c, onAbrir }) {
       </div>
     </div>
   );
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// REPRODUCTOR (course player)
-// ════════════════════════════════════════════════════════════════════════════
-function Reproductor({ idCurso, onClose }) {
-  const toast = useToast();
-  const [data, setData] = useState(null);
-  const [sel, setSel] = useState(null); // idLeccion
-  const [cargando, setCargando] = useState(true);
-  const [proc, setProc] = useState(false);
-  const [inicio, setInicio] = useState(Date.now());
-
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    try {
-      const r = await api.get(`/academia/cursos/${idCurso}`);
-      setData(r.data);
-      const lecs = (r.data.modulos||[]).flatMap(m => m.lecciones);
-      const primeraPend = lecs.find(l => !l.Completado) || lecs[0];
-      setSel(prev => prev ?? primeraPend?.idLeccion ?? null);
-    } catch { toast.error('No se pudo abrir el curso'); onClose(); }
-    finally { setCargando(false); }
-  }, [idCurso]); // eslint-disable-line
-  useEffect(() => { cargar(); }, [cargar]);
-
-  const lecciones = (data?.modulos||[]).flatMap(m => m.lecciones);
-  const leccion = lecciones.find(l => l.idLeccion === sel);
-  useEffect(() => { if (sel) { setInicio(Date.now()); if (leccion && !leccion.Completado) api.post(`/academia/lecciones/${sel}/iniciar`).catch(()=>{}); } }, [sel]); // eslint-disable-line
-
-  async function completar() {
-    if (!leccion) return;
-    setProc(true);
-    try {
-      const segundos = Math.round((Date.now()-inicio)/1000);
-      const r = await api.post(`/academia/lecciones/${leccion.idLeccion}/completar`, { segundos });
-      if (r.data?.curso?.completado) toast.success('¡Curso completado!', 'Tu constancia ya está disponible');
-      await cargar();
-      // avanza a la siguiente pendiente
-      const idx = lecciones.findIndex(l => l.idLeccion === leccion.idLeccion);
-      const sig = lecciones.slice(idx+1).find(l => !l.Completado);
-      if (sig) setSel(sig.idLeccion);
-    } catch { toast.error('No se pudo marcar la lección'); }
-    finally { setProc(false); }
-  }
-
-  const total = data?.progreso?.total || 0;
-  const hechas = data?.progreso?.completadas || 0;
-  const pct = total>0 ? Math.round((hechas/total)*100) : 0;
-  const curso = data?.curso;
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-stretch justify-center">
-      <div className="bg-gray-50 w-full max-w-6xl my-0 flex flex-col shadow-2xl">
-        {/* header */}
-        <div className="bg-white border-b border-gray-100 px-5 py-3 flex items-center justify-between shrink-0">
-          <div className="min-w-0">
-            <p className="font-black text-gray-800 truncate">{curso?.Titulo || 'Curso'}</p>
-            <p className="text-[11px] text-gray-400">{hechas}/{total} lecciones · {pct}%</p>
-          </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"><X size={20}/></button>
-        </div>
-
-        {cargando ? (
-          <p className="flex-1 flex items-center justify-center text-gray-400">Cargando…</p>
-        ) : (
-          <div className="flex-1 flex min-h-0">
-            {/* temario */}
-            <div className="w-72 border-r border-gray-100 bg-white overflow-y-auto shrink-0 hidden md:block">
-              {(data.modulos||[]).map(m => (
-                <div key={m.idModulo}>
-                  <p className="px-4 pt-3 pb-1 text-[11px] font-bold text-gray-400 uppercase tracking-wide">{m.Titulo}</p>
-                  {m.lecciones.map(l => {
-                    const Icon = ICON_LEC[l.TipoLeccion] || Video;
-                    return (
-                      <button key={l.idLeccion} onClick={()=>setSel(l.idLeccion)}
-                        className={`w-full text-left px-4 py-2 flex items-center gap-2 text-sm border-l-2 ${sel===l.idLeccion?'bg-vida-blue/5 border-vida-blue':'border-transparent hover:bg-gray-50'}`}>
-                        {l.Completado ? <CheckCircle2 size={16} className="text-vida-green shrink-0"/> : <Icon size={16} className="text-gray-400 shrink-0"/>}
-                        <span className={`flex-1 truncate ${l.Completado?'text-gray-400':'text-gray-700'}`}>{l.Titulo}</span>
-                        <span className="text-[10px] text-gray-300">{l.DuracionMin}m</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-
-            {/* contenido */}
-            <div className="flex-1 overflow-y-auto">
-              {leccion ? <VistaLeccion leccion={leccion} onCompletar={completar} proc={proc} recargar={cargar} /> : <p className="p-6 text-gray-400">Sin lecciones.</p>}
-              <Comentarios idCurso={idCurso} idLeccion={leccion?.idLeccion} />
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function VistaLeccion({ leccion, onCompletar, proc, recargar }) {
-  return (
-    <div className="p-5">
-      <div className="mb-3">
-        <p className="text-lg font-black text-gray-800">{leccion.Titulo}</p>
-        {leccion.Descripcion ? <p className="text-sm text-gray-500 mt-0.5">{leccion.Descripcion}</p> : null}
-      </div>
-
-      {/* Media según tipo */}
-      {leccion.TipoLeccion === 'VIDEO' && leccion.VideoUrl ? (
-        <div className="aspect-video bg-black rounded-xl overflow-hidden">
-          <iframe src={toEmbed(leccion.VideoUrl)} title={leccion.Titulo} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-        </div>
-      ) : leccion.TipoLeccion === 'VIDEO' && leccion.ArchivoUrl ? (
-        <video controls className="w-full rounded-xl bg-black" src={`${API_ORIGIN}${leccion.ArchivoUrl}`} />
-      ) : leccion.TipoLeccion === 'PDF' && leccion.ArchivoUrl ? (
-        <iframe src={`${API_ORIGIN}${leccion.ArchivoUrl}`} title={leccion.Titulo} className="w-full h-[70vh] rounded-xl border border-gray-200" />
-      ) : leccion.TipoLeccion === 'TEXTO' ? (
-        <div className="bg-white rounded-xl border border-gray-100 p-5 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{leccion.Contenido || 'Sin contenido.'}</div>
-      ) : leccion.TipoLeccion === 'QUIZ' ? (
-        <QuizRunner leccion={leccion} onAprobado={recargar} />
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-100 p-5 text-sm text-gray-400">Contenido no disponible.</div>
-      )}
-
-      {leccion.TipoLeccion !== 'QUIZ' && (
-        <button onClick={onCompletar} disabled={proc || leccion.Completado}
-          className={`mt-4 rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-2 disabled:opacity-60
-            ${leccion.Completado ? 'bg-gray-100 text-gray-400' : 'bg-vida-green text-white hover:opacity-90'}`}>
-          <CheckCircle2 size={16}/> {leccion.Completado ? 'Lección completada' : proc ? 'Guardando…' : 'Marcar como completada'}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function QuizRunner({ leccion, onAprobado }) {
-  const toast = useToast();
-  const preguntas = leccion.quiz || [];
-  const [resp, setResp] = useState({});
-  const [res, setRes] = useState(null);
-  const [proc, setProc] = useState(false);
-  useEffect(() => { setResp({}); setRes(null); }, [leccion.idLeccion]);
-
-  async function enviar() {
-    setProc(true);
-    try {
-      const r = await api.post(`/academia/lecciones/${leccion.idLeccion}/quiz/responder`, { respuestas: resp });
-      setRes(r.data);
-      if (r.data?.aprobado) { toast.success(`¡Aprobado! ${r.data.puntaje}%`); onAprobado?.(); }
-      else toast.warning(`Puntaje ${r.data?.puntaje||0}% — necesitas ${leccion.QuizAprob}%`);
-    } catch { toast.error('No se pudo enviar el quiz'); }
-    finally { setProc(false); }
-  }
-
-  if (preguntas.length === 0) return <div className="bg-white rounded-xl border border-gray-100 p-5 text-sm text-gray-400">Esta evaluación aún no tiene preguntas.</div>;
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-4">
-      <p className="text-sm text-gray-500 flex items-center gap-1.5"><HelpCircle size={15}/> Responde para aprobar (mínimo {leccion.QuizAprob}%).</p>
-      {preguntas.map((p, i) => (
-        <div key={p.idPregunta}>
-          <p className="font-semibold text-gray-800 text-sm">{i+1}. {p.Texto}</p>
-          <div className="mt-1.5 space-y-1.5">
-            {p.opciones.map(o => (
-              <label key={o.idOpcion} className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-sm
-                ${resp[p.idPregunta]===o.idOpcion?'border-vida-blue bg-vida-blue/5':'border-gray-200 hover:bg-gray-50'}`}>
-                <input type="radio" name={`p${p.idPregunta}`} checked={resp[p.idPregunta]===o.idOpcion}
-                  onChange={()=>setResp(s=>({ ...s, [p.idPregunta]:o.idOpcion }))} />
-                <span className="text-gray-700">{o.Texto}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      ))}
-      {res && (
-        <div className={`text-sm font-semibold ${res.aprobado?'text-vida-green':'text-red-500'}`}>
-          Resultado: {res.correctas}/{res.total} ({res.puntaje}%) — {res.aprobado?'Aprobado':'No aprobado'}
-        </div>
-      )}
-      <button onClick={enviar} disabled={proc || Object.keys(resp).length < preguntas.length}
-        className="rounded-xl px-4 py-2.5 text-sm font-semibold bg-vida-blue text-white hover:opacity-90 disabled:opacity-50 flex items-center gap-2">
-        <Send size={15}/> {proc?'Enviando…':'Enviar respuestas'}
-      </button>
-    </div>
-  );
-}
-
-function Comentarios({ idCurso, idLeccion }) {
-  const { usuario } = useAuthStore();
-  const toast = useToast();
-  const [lista, setLista] = useState([]);
-  const [texto, setTexto] = useState('');
-  const esCorp = CORP.includes(usuario?.TipoUsuario);
-
-  const cargar = useCallback(async () => {
-    try {
-      const q = idLeccion ? `?idLeccion=${idLeccion}` : '';
-      const r = await api.get(`/academia/cursos/${idCurso}/comentarios${q}`);
-      setLista(r.data || []);
-    } catch { setLista([]); }
-  }, [idCurso, idLeccion]);
-  useEffect(() => { cargar(); }, [cargar]);
-
-  async function enviar() {
-    if (!texto.trim()) return;
-    try {
-      await api.post(`/academia/cursos/${idCurso}/comentarios`, { texto: texto.trim(), idLeccion: idLeccion||null });
-      setTexto(''); cargar();
-    } catch { toast.error('No se pudo comentar'); }
-  }
-  async function borrar(id) {
-    try { await api.delete(`/academia/comentarios/${id}`); cargar(); }
-    catch { toast.error('No se pudo eliminar'); }
-  }
-
-  return (
-    <div className="p-5 border-t border-gray-100">
-      <p className="font-bold text-gray-700 text-sm mb-3">Comentarios {idLeccion?'de la lección':'del curso'}</p>
-      <div className="flex gap-2 mb-4">
-        <input value={texto} onChange={e=>setTexto(e.target.value)} onKeyDown={e=>e.key==='Enter'&&enviar()}
-          placeholder="Escribe un comentario…" className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-vida-blue" />
-        <button onClick={enviar} className="bg-vida-blue text-white px-3 rounded-xl"><Send size={16}/></button>
-      </div>
-      <div className="space-y-2">
-        {lista.length===0 ? <p className="text-xs text-gray-400">Sé el primero en comentar.</p> :
-          lista.map(cm => (
-            <div key={cm.idComentario} className="bg-white rounded-xl border border-gray-100 p-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold text-gray-700">{cm.Autor}</p>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-gray-300">{new Date(cm.FechaAlta).toLocaleDateString('es-VE')}</span>
-                  {(esCorp || String(cm.idUsuario)===String(usuario?.idUsuario)) &&
-                    <button onClick={()=>borrar(cm.idComentario)} className="text-gray-300 hover:text-red-400"><Trash2 size={13}/></button>}
-                </div>
-              </div>
-              <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{cm.Texto}</p>
-            </div>
-          ))}
-      </div>
-    </div>
-  );
-}
-
-function toEmbed(url) {
-  if (!url) return url;
-  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
-  if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
-  const vm = url.match(/vimeo\.com\/(\d+)/);
-  if (vm) return `https://player.vimeo.com/video/${vm[1]}`;
-  return url;
 }

@@ -97,6 +97,7 @@ function CursoDetalle({ idCurso, onBack }) {
   const [cargando, setCargando] = useState(true);
   const [proc, setProc] = useState(false);
   const [diploma, setDiploma] = useState(null);
+  const [tocable, setTocable] = useState(false); // gating: video debe terminar
 
   const cargar = useCallback(async () => {
     try {
@@ -121,7 +122,11 @@ function CursoDetalle({ idCurso, onBack }) {
   const lecciones = (data?.modulos || []).flatMap(m => m.lecciones);
   const leccion = lecciones.find(l => l.idLeccion === sel);
 
-  useEffect(() => { if (sel && leccion && !leccion.Completado) api.post(`/delivery/cliente/academia/lecciones/${sel}/iniciar`).catch(() => {}); }, [sel]); // eslint-disable-line
+  useEffect(() => {
+    if (!leccion) return;
+    setTocable(leccion.Completado || leccion.TipoLeccion !== 'VIDEO');
+    if (sel && !leccion.Completado) api.post(`/delivery/cliente/academia/lecciones/${sel}/iniciar`).catch(() => {});
+  }, [sel]); // eslint-disable-line
 
   async function completar() {
     if (!leccion) return;
@@ -163,13 +168,18 @@ function CursoDetalle({ idCurso, onBack }) {
         </View>
 
         {/* Media de la lección seleccionada */}
-        {leccion ? <LeccionMedia leccion={leccion} /> : null}
+        {leccion ? <LeccionMedia leccion={leccion} onEnded={() => setTocable(true)} /> : null}
 
         {leccion && leccion.TipoLeccion !== 'QUIZ' ? (
-          <TouchableOpacity style={[styles.btnMain, leccion.Completado && styles.btnDone]} onPress={completar} disabled={proc || leccion.Completado}>
-            <Ionicons name="checkmark-circle" size={18} color="#fff" />
-            <Text style={styles.btnMainTxt}>{leccion.Completado ? 'Lección completada' : proc ? 'Guardando…' : 'Marcar como completada'}</Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity style={[styles.btnMain, (leccion.Completado || !tocable) && styles.btnDone]} onPress={completar} disabled={proc || leccion.Completado || !tocable}>
+              <Ionicons name="checkmark-circle" size={18} color="#fff" />
+              <Text style={styles.btnMainTxt}>{leccion.Completado ? 'Lección completada' : proc ? 'Guardando…' : 'Marcar como completada'}</Text>
+            </TouchableOpacity>
+            {!leccion.Completado && !tocable && leccion.TipoLeccion === 'VIDEO' ? (
+              <Text style={{ fontSize: 11, color: '#A0AEC0', textAlign: 'center', marginBottom: 8 }}>Termina el video para poder completar.</Text>
+            ) : null}
+          </>
         ) : null}
 
         {leccion && leccion.TipoLeccion === 'QUIZ' ? <Quiz leccion={leccion} onDone={cargar} /> : null}
@@ -206,17 +216,20 @@ function CursoDetalle({ idCurso, onBack }) {
   );
 }
 
-function LeccionMedia({ leccion }) {
+function LeccionMedia({ leccion, onEnded }) {
   const { TipoLeccion, VideoUrl, ArchivoUrl, Contenido, Titulo } = leccion;
   const h = Math.round((width - 32) * 9 / 16);
+  // El WebView del video avisa a RN cuando el video TERMINA (gating de completar).
+  const onMsg = (e) => { if (e?.nativeEvent?.data === 'ended') onEnded?.(); };
 
-  if (TipoLeccion === 'VIDEO' && VideoUrl) {
-    return <View style={[styles.media, { height: h }]}><WebView source={{ uri: toEmbed(VideoUrl) }} allowsInlineMediaPlayback mediaPlaybackRequiresUserAction={false} style={{ flex: 1 }} /></View>;
-  }
-  if (TipoLeccion === 'VIDEO' && ArchivoUrl) {
-    const uri = absImg(ArchivoUrl);
-    const html = `<html><body style="margin:0;background:#000"><video controls playsinline style="width:100%;height:100%" src="${uri}"></video></body></html>`;
-    return <View style={[styles.media, { height: h }]}><WebView source={{ html }} allowsInlineMediaPlayback style={{ flex: 1 }} /></View>;
+  if (TipoLeccion === 'VIDEO' && (VideoUrl || ArchivoUrl)) {
+    const html = VideoUrl ? htmlVideoEmbebido(VideoUrl) : htmlVideoArchivo(absImg(ArchivoUrl));
+    return (
+      <View style={[styles.media, { height: h }]}>
+        <WebView source={{ html }} allowsInlineMediaPlayback mediaPlaybackRequiresUserAction={false}
+          javaScriptEnabled domStorageEnabled onMessage={onMsg} style={{ flex: 1 }} />
+      </View>
+    );
   }
   if (TipoLeccion === 'PDF' && ArchivoUrl) {
     return (
@@ -227,10 +240,54 @@ function LeccionMedia({ leccion }) {
     );
   }
   if (TipoLeccion === 'TEXTO') {
-    return <View style={styles.texto}><Text style={styles.textoTitle}>{Titulo}</Text><Text style={styles.textoBody}>{Contenido || 'Sin contenido.'}</Text></View>;
+    // Contenido es HTML enriquecido (del editor). Se muestra en un WebView con
+    // JS deshabilitado en el documento (sin <script>), estilizado y legible.
+    return (
+      <View style={[styles.texto, { padding: 0, overflow: 'hidden' }]}>
+        <WebView originWhitelist={["*"]} javaScriptEnabled={false} scrollEnabled={false}
+          source={{ html: htmlTexto(Titulo, Contenido) }} style={{ height: alturaTexto(Contenido) }} />
+      </View>
+    );
   }
   if (TipoLeccion === 'QUIZ') return null;
   return <View style={styles.texto}><Text style={styles.textoBody}>Contenido no disponible.</Text></View>;
+}
+
+// Quita <script> de forma básica (defensa; el contenido es de admins del tenant).
+function limpiarHtml(s) { return String(s || '').replace(/<script[\s\S]*?<\/script>/gi, ''); }
+function alturaTexto(html) { const n = String(html || '').length; return Math.max(120, Math.min(900, 160 + n * 0.35)); }
+function htmlTexto(titulo, contenido) {
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>body{font-family:-apple-system,Roboto,sans-serif;color:#2D3748;margin:0;padding:14px;font-size:15px;line-height:1.6}
+  h1,h2,h3{color:#0A1E3F}a{color:#0A1E3F}img{max-width:100%}blockquote{border-left:3px solid #54C4E0;margin:0;padding-left:12px;color:#4A5568}
+  pre,code{background:#f1f5f9;border-radius:6px;padding:2px 4px}</style></head>
+  <body>${limpiarHtml(contenido) || '<p style="color:#A0AEC0">Sin contenido.</p>'}</body></html>`;
+}
+function htmlVideoArchivo(uri) {
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+  <body style="margin:0;background:#000">
+  <video id="v" controls playsinline style="width:100%;height:100%" src="${uri}"></video>
+  <script>document.getElementById('v').addEventListener('ended',function(){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage('ended')});</script>
+  </body></html>`;
+}
+function htmlVideoEmbebido(url) {
+  const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]+)/);
+  const vm = url.match(/vimeo\.com\/(\d+)/);
+  if (yt) {
+    // API de iframe de YouTube: postMessage 'ended' cuando el estado es 0 (ENDED).
+    return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+    <body style="margin:0;background:#000"><div id="p" style="width:100%;height:100%"></div>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>function onYouTubeIframeAPIReady(){new YT.Player('p',{videoId:'${yt[1]}',playerVars:{playsinline:1},
+    events:{onStateChange:function(e){if(e.data===0)window.ReactNativeWebView&&window.ReactNativeWebView.postMessage('ended')}}})}</script>
+    </body></html>`;
+  }
+  const src = vm ? `https://player.vimeo.com/video/${vm[1]}` : url;
+  // Fallback: sin API fiable de fin, se habilita tras un tiempo mínimo visto.
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+  <body style="margin:0;background:#000"><iframe src="${src}" style="width:100%;height:100%;border:0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>
+  <script>setTimeout(function(){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage('ended')},60000);</script>
+  </body></html>`;
 }
 
 function Quiz({ leccion, onDone }) {
@@ -253,22 +310,55 @@ function Quiz({ leccion, onDone }) {
 
   if (preguntas.length === 0) return <View style={styles.texto}><Text style={styles.textoBody}>Esta evaluación aún no tiene preguntas.</Text></View>;
 
+  function setUnica(idP, idO) { setResp(s => ({ ...s, [idP]: idO })); }
+  function toggleMulti(idP, idO) { setResp(s => { const a = Array.isArray(s[idP]) ? s[idP] : []; return { ...s, [idP]: a.includes(idO) ? a.filter(x => x !== idO) : [...a, idO] }; }); }
+  function setTexto(idP, v) { setResp(s => ({ ...s, [idP]: v })); }
+
+  const contestadas = preguntas.filter(p => {
+    const a = resp[p.idPregunta];
+    if (p.TipoPregunta === 'RESPUESTA_CORTA') return typeof a === 'string' && a.trim().length > 0;
+    if (p.TipoPregunta === 'OPCION_MULTIPLE') return Array.isArray(a) && a.length > 0;
+    return a != null;
+  }).length;
+
   return (
     <View style={styles.quiz}>
       <Text style={styles.quizHint}>Evaluación · mínimo {leccion.QuizAprob}% para aprobar</Text>
-      {preguntas.map((p, i) => (
-        <View key={p.idPregunta} style={{ marginBottom: 12 }}>
-          <Text style={styles.quizPreg}>{i + 1}. {p.Texto}</Text>
-          {p.opciones.map(o => (
-            <TouchableOpacity key={o.idOpcion} style={[styles.quizOpc, resp[p.idPregunta] === o.idOpcion && styles.quizOpcOn]} onPress={() => setResp(s => ({ ...s, [p.idPregunta]: o.idOpcion }))}>
-              <Ionicons name={resp[p.idPregunta] === o.idOpcion ? 'radio-button-on' : 'radio-button-off'} size={16} color="#0A1E3F" />
-              <Text style={styles.quizOpcTxt}>{o.Texto}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      ))}
+      {preguntas.map((p, i) => {
+        const tipo = p.TipoPregunta || 'OPCION_UNICA';
+        return (
+          <View key={p.idPregunta} style={{ marginBottom: 14 }}>
+            <Text style={styles.quizPreg}>{i + 1}. {p.Texto}{tipo === 'OPCION_MULTIPLE' ? '  (varias correctas)' : ''}</Text>
+            {tipo === 'RESPUESTA_CORTA' ? (
+              <TextInput value={resp[p.idPregunta] || ''} onChangeText={v => setTexto(p.idPregunta, v)}
+                placeholder="Tu respuesta…" placeholderTextColor="#A0AEC0"
+                style={{ borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14, marginTop: 4 }} />
+            ) : tipo === 'OPCION_MULTIPLE' ? (
+              p.opciones.map(o => {
+                const on = Array.isArray(resp[p.idPregunta]) && resp[p.idPregunta].includes(o.idOpcion);
+                return (
+                  <TouchableOpacity key={o.idOpcion} style={[styles.quizOpc, on && styles.quizOpcOn]} onPress={() => toggleMulti(p.idPregunta, o.idOpcion)}>
+                    <Ionicons name={on ? 'checkbox' : 'square-outline'} size={16} color="#0A1E3F" />
+                    <Text style={styles.quizOpcTxt}>{o.Texto}</Text>
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              p.opciones.map(o => {
+                const on = resp[p.idPregunta] === o.idOpcion;
+                return (
+                  <TouchableOpacity key={o.idOpcion} style={[styles.quizOpc, on && styles.quizOpcOn]} onPress={() => setUnica(p.idPregunta, o.idOpcion)}>
+                    <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={16} color="#0A1E3F" />
+                    <Text style={styles.quizOpcTxt}>{o.Texto}</Text>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </View>
+        );
+      })}
       {res ? <Text style={{ color: res.aprobado ? '#16A34A' : '#DC2626', fontWeight: '700', marginBottom: 8 }}>{res.correctas}/{res.total} ({res.puntaje}%) — {res.aprobado ? 'Aprobado' : 'No aprobado'}</Text> : null}
-      <TouchableOpacity style={[styles.btnMain, (proc || Object.keys(resp).length < preguntas.length) && { opacity: 0.5 }]} onPress={enviar} disabled={proc || Object.keys(resp).length < preguntas.length}>
+      <TouchableOpacity style={[styles.btnMain, (proc || contestadas < preguntas.length) && { opacity: 0.5 }]} onPress={enviar} disabled={proc || contestadas < preguntas.length}>
         <Text style={styles.btnMainTxt}>{proc ? 'Enviando…' : 'Enviar respuestas'}</Text>
       </TouchableOpacity>
     </View>

@@ -24,6 +24,7 @@ import Matriz        from './pages/Matriz.jsx';
 import Corporativo   from './pages/Corporativo.jsx';
 import Catalogos     from './pages/Catalogos.jsx';
 import Academia      from './pages/Academia.jsx';
+import AcademiaCurso from './pages/AcademiaCurso.jsx';
 import Operaciones   from './pages/Operaciones.jsx';
 import Cupones       from './pages/Cupones.jsx';
 import Constancia    from './pages/Constancia.jsx';
@@ -181,6 +182,10 @@ export default function App() {
 
         <Route path="/academia" element={
           <ProtectedRoute modulo="/academia"><Layout><Academia /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/academia/curso/:idCurso" element={
+          <ProtectedRoute modulo="/academia"><Layout><AcademiaCurso /></Layout></ProtectedRoute>
         } />
 
         <Route path="/operaciones" element={
