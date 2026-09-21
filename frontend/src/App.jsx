@@ -26,6 +26,7 @@ import Catalogos     from './pages/Catalogos.jsx';
 import Academia      from './pages/Academia.jsx';
 import Operaciones   from './pages/Operaciones.jsx';
 import Cupones       from './pages/Cupones.jsx';
+import Constancia    from './pages/Constancia.jsx';
 import Tienda        from './pages/Tienda.jsx';
 import { ToastContainer } from './components/Toast.jsx';
 
@@ -188,6 +189,11 @@ export default function App() {
 
         <Route path="/cupones" element={
           <ProtectedRoute modulo="/cupones"><Layout><Cupones /></Layout></ProtectedRoute>
+        } />
+
+        {/* Vista imprimible de constancia (sin Layout; se abre en pestaña nueva) */}
+        <Route path="/constancia/:folio" element={
+          <ProtectedRoute><Constancia /></ProtectedRoute>
         } />
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

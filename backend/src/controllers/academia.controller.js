@@ -198,7 +198,7 @@ export async function detalleCurso(request, reply) {
       return reply.code(403).send({ error: 'No tienes acceso a este curso' });
     }
 
-    const [modQ, lecQ, progQ] = await Promise.all([
+    const [modQ, lecQ, progQ, pregQ, opcQ] = await Promise.all([
       pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('cur', sql.BigInt, idCurso)
         .query(`SELECT idModulo, Titulo, Descripcion, Orden FROM VIDA_ACADEMIA_MODULOS
                 WHERE idBranch=@b AND idCuenta=@c AND idCurso=@cur AND Status='ACTIVO' ORDER BY Orden, idModulo`),
@@ -209,9 +209,27 @@ export async function detalleCurso(request, reply) {
       pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('u', sql.BigInt, idUsuario).input('cur', sql.BigInt, idCurso)
         .query(`SELECT idLeccion, Completado, FechaInicio, FechaFin, SegundosTomados, QuizPuntaje
                 FROM VIDA_ACADEMIA_LECCION_PROGRESO WHERE idBranch=@b AND idCuenta=@c AND idUsuario=@u AND idCurso=@cur`),
+      // Preguntas del quiz de todas las lecciones QUIZ del curso
+      pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('cur', sql.BigInt, idCurso)
+        .query(`SELECT p.idPregunta, p.idLeccion, p.Texto, p.Orden FROM VIDA_ACADEMIA_QUIZ_PREGUNTAS p
+                JOIN VIDA_ACADEMIA_LECCIONES l ON l.idBranch=p.idBranch AND l.idCuenta=p.idCuenta AND l.idLeccion=p.idLeccion
+                WHERE p.idBranch=@b AND p.idCuenta=@c AND l.idCurso=@cur ORDER BY p.Orden`),
+      // Opciones SIN el flag EsCorrecta (no filtrar respuestas al alumno)
+      pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('cur', sql.BigInt, idCurso)
+        .query(`SELECT o.idOpcion, o.idPregunta, o.Texto, o.Orden FROM VIDA_ACADEMIA_QUIZ_OPCIONES o
+                JOIN VIDA_ACADEMIA_QUIZ_PREGUNTAS p ON p.idBranch=o.idBranch AND p.idCuenta=o.idCuenta AND p.idPregunta=o.idPregunta
+                JOIN VIDA_ACADEMIA_LECCIONES l ON l.idBranch=p.idBranch AND l.idCuenta=p.idCuenta AND l.idLeccion=p.idLeccion
+                WHERE o.idBranch=@b AND o.idCuenta=@c AND l.idCurso=@cur ORDER BY o.Orden`),
     ]);
     const progPorLec = {};
     for (const p of progQ.recordset) progPorLec[p.idLeccion] = p;
+    const preguntasPorLec = {};
+    for (const p of pregQ.recordset) {
+      (preguntasPorLec[p.idLeccion] ||= []).push({
+        idPregunta: p.idPregunta, Texto: p.Texto,
+        opciones: opcQ.recordset.filter(o => o.idPregunta === p.idPregunta).map(o => ({ idOpcion: o.idOpcion, Texto: o.Texto })),
+      });
+    }
 
     const modulos = modQ.recordset.map(m => ({
       ...m,
@@ -223,6 +241,7 @@ export async function detalleCurso(request, reply) {
           Contenido: l.Contenido, DuracionMin: l.DuracionMin, QuizAprob: l.QuizAprob, Orden: l.Orden,
           Completado: progPorLec[l.idLeccion]?.Completado === true || progPorLec[l.idLeccion]?.Completado === 1,
           QuizPuntaje: progPorLec[l.idLeccion]?.QuizPuntaje ?? null,
+          quiz: l.TipoLeccion === 'QUIZ' ? (preguntasPorLec[l.idLeccion] || []) : undefined,
         })),
     }));
 
