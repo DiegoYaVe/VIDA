@@ -125,6 +125,22 @@ fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, bo
 
 await fastify.register(multipart, { limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB máximo
 
+// Los archivos subidos (imágenes, video y PDF de Academia) deben poder
+// EMBEBERSE en el panel, que en desarrollo corre en otro origen (5173) que el
+// API (3001). Helmet pone X-Frame-Options: SAMEORIGIN globalmente, lo que hace
+// que el navegador rechace el <iframe>/<embed> del PDF cross-origin (se veía en
+// blanco/roto). Como estos son assets estáticos pensados para incrustarse y la
+// CSP ya está desactivada, se quita ese header solo para las rutas /uploads.
+// Se usa onSend (no setHeaders de @fastify/static) porque helmet escribe sus
+// cabeceras después, así que hay que retirarla del store de la reply antes del flush.
+fastify.addHook('onSend', async (request, reply) => {
+  const url = request.raw.url || '';
+  if (url.startsWith('/uploads/') || url.startsWith('/api/uploads/')) {
+    reply.removeHeader('X-Frame-Options');           // store de fastify
+    try { reply.raw.removeHeader('X-Frame-Options'); } catch { /* noop */ } // por si helmet escribió en el res crudo
+  }
+});
+
 await fastify.register(staticFiles, {
   root: path.join(__dirname, '..', 'uploads'),
   prefix: '/uploads/',
