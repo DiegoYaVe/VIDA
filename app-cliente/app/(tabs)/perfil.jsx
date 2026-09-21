@@ -227,6 +227,22 @@ export default function PerfilScreen() {
           <Ionicons name="chevron-forward" size={20} color="#fff" />
         </TouchableOpacity>
 
+        {/* Academia VIDA */}
+        <TouchableOpacity
+          style={[styles.aguaCard, { backgroundColor: '#54C4E0' }]}
+          onPress={() => router.push('/academia')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.aguaIcon}>
+            <Ionicons name="school" size={22} color="#fff" />
+          </View>
+          <View style={styles.pedidosInfo}>
+            <Text style={styles.aguaTitle}>Academia VIDA</Text>
+            <Text style={styles.aguaSub}>Aprende y gana puntos con cada curso</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#fff" />
+        </TouchableOpacity>
+
         {/* Mi Consumo Vida — hidratación */}
         <TouchableOpacity
           style={styles.aguaCard}

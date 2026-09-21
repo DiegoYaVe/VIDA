@@ -1,7 +1,8 @@
 // src/routes/academia.routes.js
 import { authenticate, requireRole } from '../middlewares/auth.js';
+import { authenticateCliente } from '../middlewares/authDelivery.js';
 import {
-  listarCursos, detalleCurso, iniciarLeccion, completarLeccion, responderQuiz, completarCurso,
+  listarCursos, listarCursosCliente, detalleCurso, iniciarLeccion, completarLeccion, responderQuiz, completarCurso,
   listarComentarios, crearComentario, eliminarComentario,
   misDiplomas, verConstancia,
 } from '../controllers/academia.controller.js';
@@ -89,4 +90,29 @@ export async function academiaRoutes(fastify) {
     { preHandler: [authenticate, requireRole(...CORP)] }, analitica);
   fastify.get('/academia/admin/analitica/curso/:idCurso',
     { preHandler: [authenticate, requireRole(...CORP)] }, analiticaCurso);
+
+  // ── CLIENTE (app móvil) — mismos handlers, actor = request.cliente ───────────
+  // El controller deriva el actor de request.cliente (TipoActor='CLIENTE').
+  fastify.get('/delivery/cliente/academia/cursos',
+    { preHandler: [authenticateCliente] }, listarCursosCliente);
+  fastify.get('/delivery/cliente/academia/cursos/:idCurso',
+    { preHandler: [authenticateCliente] }, detalleCurso);
+  fastify.post('/delivery/cliente/academia/cursos/:idCurso/completar',
+    { preHandler: [authenticateCliente] }, completarCurso);
+  fastify.post('/delivery/cliente/academia/lecciones/:idLeccion/iniciar',
+    { preHandler: [authenticateCliente] }, iniciarLeccion);
+  fastify.post('/delivery/cliente/academia/lecciones/:idLeccion/completar',
+    { preHandler: [authenticateCliente] }, completarLeccion);
+  fastify.post('/delivery/cliente/academia/lecciones/:idLeccion/quiz/responder',
+    { preHandler: [authenticateCliente] }, responderQuiz);
+  fastify.get('/delivery/cliente/academia/cursos/:idCurso/comentarios',
+    { preHandler: [authenticateCliente] }, listarComentarios);
+  fastify.post('/delivery/cliente/academia/cursos/:idCurso/comentarios',
+    { preHandler: [authenticateCliente] }, crearComentario);
+  fastify.delete('/delivery/cliente/academia/comentarios/:idComentario',
+    { preHandler: [authenticateCliente] }, eliminarComentario);
+  fastify.get('/delivery/cliente/academia/diplomas',
+    { preHandler: [authenticateCliente] }, misDiplomas);
+  fastify.get('/delivery/cliente/academia/constancia/:folio',
+    { preHandler: [authenticateCliente] }, verConstancia);
 }

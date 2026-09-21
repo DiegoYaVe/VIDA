@@ -425,12 +425,12 @@ export async function analitica(request, reply) {
       .query(`
         SELECT c.idCurso, c.Titulo, c.Tipo, c.Obligatorio, c.FechaLimite,
           (SELECT COUNT(*) FROM VIDA_ACADEMIA_LECCIONES l WHERE l.idBranch=c.idBranch AND l.idCuenta=c.idCuenta AND l.idCurso=c.idCurso AND l.Status='ACTIVO') AS TotalLecciones,
-          (SELECT COUNT(DISTINCT p.idUsuario) FROM VIDA_ACADEMIA_LECCION_PROGRESO p WHERE p.idBranch=c.idBranch AND p.idCuenta=c.idCuenta AND p.idCurso=c.idCurso) AS Inscritos,
-          (SELECT COUNT(*) FROM VIDA_ACADEMIA_PROGRESO pr WHERE pr.idBranch=c.idBranch AND pr.idCuenta=c.idCuenta AND pr.idCurso=c.idCurso AND pr.Completado=1) AS Completaron,
+          (SELECT COUNT(DISTINCT p.idUsuario) FROM VIDA_ACADEMIA_LECCION_PROGRESO p WHERE p.idBranch=c.idBranch AND p.idCuenta=c.idCuenta AND p.idCurso=c.idCurso AND p.TipoActor='EMPRESARIO') AS Inscritos,
+          (SELECT COUNT(*) FROM VIDA_ACADEMIA_PROGRESO pr WHERE pr.idBranch=c.idBranch AND pr.idCuenta=c.idCuenta AND pr.idCurso=c.idCurso AND pr.TipoActor='EMPRESARIO' AND pr.Completado=1) AS Completaron,
           (SELECT MIN(DATEDIFF(SECOND, x.Inicio, x.Fin)) FROM (
              SELECT p.idUsuario, MIN(p.FechaInicio) AS Inicio, MAX(p.FechaFin) AS Fin
              FROM VIDA_ACADEMIA_LECCION_PROGRESO p
-             WHERE p.idBranch=c.idBranch AND p.idCuenta=c.idCuenta AND p.idCurso=c.idCurso AND p.Completado=1 AND p.FechaInicio IS NOT NULL AND p.FechaFin IS NOT NULL
+             WHERE p.idBranch=c.idBranch AND p.idCuenta=c.idCuenta AND p.idCurso=c.idCurso AND p.TipoActor='EMPRESARIO' AND p.Completado=1 AND p.FechaInicio IS NOT NULL AND p.FechaFin IS NOT NULL
              GROUP BY p.idUsuario
              HAVING COUNT(*) >= (SELECT COUNT(*) FROM VIDA_ACADEMIA_LECCIONES l2 WHERE l2.idBranch=c.idBranch AND l2.idCuenta=c.idCuenta AND l2.idCurso=c.idCurso AND l2.Status='ACTIVO')
            ) x) AS MenorTiempoSeg
@@ -474,11 +474,11 @@ export async function analiticaCurso(request, reply) {
         SELECT u.idUsuario, u.Nombre, u.Apellidos, u.TipoUsuario,
           (SELECT COUNT(*) FROM VIDA_ACADEMIA_LECCION_PROGRESO p
              JOIN VIDA_ACADEMIA_LECCIONES l ON l.idBranch=p.idBranch AND l.idCuenta=p.idCuenta AND l.idLeccion=p.idLeccion AND l.Status='ACTIVO'
-             WHERE p.idBranch=@b AND p.idCuenta=@c AND p.idCurso=@cur AND p.idUsuario=u.idUsuario AND p.Completado=1) AS Hechas,
-          (SELECT MIN(p.FechaInicio) FROM VIDA_ACADEMIA_LECCION_PROGRESO p WHERE p.idBranch=@b AND p.idCuenta=@c AND p.idCurso=@cur AND p.idUsuario=u.idUsuario) AS Inicio,
-          (SELECT MAX(p.FechaFin) FROM VIDA_ACADEMIA_LECCION_PROGRESO p WHERE p.idBranch=@b AND p.idCuenta=@c AND p.idCurso=@cur AND p.idUsuario=u.idUsuario AND p.Completado=1) AS Fin,
-          (SELECT TOP 1 pr.Completado FROM VIDA_ACADEMIA_PROGRESO pr WHERE pr.idBranch=@b AND pr.idCuenta=@c AND pr.idCurso=@cur AND pr.idUsuario=u.idUsuario) AS Completado,
-          (SELECT TOP 1 pr.FechaCompletado FROM VIDA_ACADEMIA_PROGRESO pr WHERE pr.idBranch=@b AND pr.idCuenta=@c AND pr.idCurso=@cur AND pr.idUsuario=u.idUsuario) AS FechaCompletado
+             WHERE p.idBranch=@b AND p.idCuenta=@c AND p.idCurso=@cur AND p.TipoActor='EMPRESARIO' AND p.idUsuario=u.idUsuario AND p.Completado=1) AS Hechas,
+          (SELECT MIN(p.FechaInicio) FROM VIDA_ACADEMIA_LECCION_PROGRESO p WHERE p.idBranch=@b AND p.idCuenta=@c AND p.idCurso=@cur AND p.TipoActor='EMPRESARIO' AND p.idUsuario=u.idUsuario) AS Inicio,
+          (SELECT MAX(p.FechaFin) FROM VIDA_ACADEMIA_LECCION_PROGRESO p WHERE p.idBranch=@b AND p.idCuenta=@c AND p.idCurso=@cur AND p.TipoActor='EMPRESARIO' AND p.idUsuario=u.idUsuario AND p.Completado=1) AS Fin,
+          (SELECT TOP 1 pr.Completado FROM VIDA_ACADEMIA_PROGRESO pr WHERE pr.idBranch=@b AND pr.idCuenta=@c AND pr.idCurso=@cur AND pr.TipoActor='EMPRESARIO' AND pr.idUsuario=u.idUsuario) AS Completado,
+          (SELECT TOP 1 pr.FechaCompletado FROM VIDA_ACADEMIA_PROGRESO pr WHERE pr.idBranch=@b AND pr.idCuenta=@c AND pr.idCurso=@cur AND pr.TipoActor='EMPRESARIO' AND pr.idUsuario=u.idUsuario) AS FechaCompletado
         FROM VIDA_CUENTA_USUARIOS u
         WHERE u.idBranch=@b AND u.idCuenta=@c AND u.Status='ACTIVO'
         ORDER BY u.Nombre, u.Apellidos`);
