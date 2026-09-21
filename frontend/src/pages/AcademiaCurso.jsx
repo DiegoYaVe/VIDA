@@ -255,13 +255,17 @@ function VideoEmbebido({ url, yaVisto, onFin, duracionMin }) {
   const vm = url.match(/vimeo\.com\/(\d+)/);
   const [restante, setRestante] = useState(null); // fallback por tiempo
 
-  // YouTube: usa la IFrame API para detectar el fin real del video.
+  // YouTube: la IFrame API CONSTRUYE el player (iframe) desde un div vacío con
+  // el videoId, y avisa cuando el estado es ENDED. (Adjuntarla a un iframe ya
+  // renderizado no es fiable; por eso el div vacío.)
   useEffect(() => {
-    if (!yt || yaVisto) return;
+    if (!yt) return;
     let player, cancel = false;
     function crear() {
       if (cancel || !window.YT?.Player || !ref.current) return;
       player = new window.YT.Player(ref.current, {
+        videoId: yt[1],
+        playerVars: { playsinline: 1, rel: 0 },
         events: { onStateChange: (e) => { if (e.data === window.YT.PlayerState.ENDED) onFin?.(); } },
       });
     }
@@ -291,16 +295,13 @@ function VideoEmbebido({ url, yaVisto, onFin, duracionMin }) {
     return () => clearInterval(iv);
   }, [url]); // eslint-disable-line
 
-  const src = yt ? `https://www.youtube.com/embed/${yt[1]}?enablejsapi=1&playsinline=1`
-    : vm ? `https://player.vimeo.com/video/${vm[1]}` : url;
+  const src = vm ? `https://player.vimeo.com/video/${vm[1]}` : url;
 
   return (
     <div>
       <div className="aspect-video bg-black rounded-xl overflow-hidden">
         {yt
-          ? <div ref={ref} id={`yt-${yt[1]}`} className="w-full h-full">
-              <iframe src={src} title="video" className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-            </div>
+          ? <div ref={ref} className="w-full h-full" />
           : <iframe src={src} title="video" className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />}
       </div>
       {!yt && !yaVisto && restante > 0
