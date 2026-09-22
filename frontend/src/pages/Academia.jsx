@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   GraduationCap, PlayCircle, CheckCircle2, Clock, Star, Award, RefreshCw,
   BookOpen, Lock, AlertTriangle, ChevronRight, Pencil, BarChart3, Printer,
+  Video, FileText, HelpCircle,
 } from 'lucide-react';
 import api from '../services/api.js';
 import { useAuthStore } from '../store/authStore.js';
