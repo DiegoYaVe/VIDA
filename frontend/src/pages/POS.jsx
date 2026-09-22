@@ -9,8 +9,9 @@ import SyncStatusBar from '../components/SyncStatusBar.jsx';
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, CreditCard,
   DollarSign, Layers, Check, X,
-  Barcode, ChevronDown, Printer, RotateCcw, Tag,
+  Barcode, ChevronDown, Printer, RotateCcw, Tag, AlertTriangle,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 // ── Métodos de pago (solo USD) ───────────────────────────────────────────────
 const METODOS_PAGO = [
@@ -411,6 +412,7 @@ export default function POS() {
   const [buscando, setBuscando]         = useState(false);
   const [puntos, setPuntos]             = useState([]);
   const [idPuntoVenta, setIdPuntoVenta] = useState(usuario?.idPuntoVenta || '');
+  const [turnoAbierto, setTurnoAbierto] = useState(null); // null=cargando, true/false
 
   // Carrito
   const [carrito, setCarrito] = useState([]);
@@ -431,6 +433,17 @@ export default function POS() {
       if (!idPuntoVenta && r.data.length > 0) setIdPuntoVenta(r.data[0].idPuntoVenta);
     }).catch(() => {});
   }, []);
+
+  // Verificar si hay turno de caja abierto para la tienda seleccionada.
+  // Las ventas POS quedan sueltas (fuera de un arqueo) si no hay turno; se avisa.
+  useEffect(() => {
+    if (!idPuntoVenta) { setTurnoAbierto(null); return; }
+    let vivo = true;
+    api.get('/caja/turno-activo', { params: { idPuntoVenta } })
+      .then(r => { if (vivo) setTurnoAbierto(!!r.data?.turno); })
+      .catch(() => { if (vivo) setTurnoAbierto(null); });
+    return () => { vivo = false; };
+  }, [idPuntoVenta, ticket]); // re-checa tras cada venta
 
   // Carga de productos con debounce. Con el buscador vacío muestra el catálogo
   // de la tienda por defecto (para poder ver los productos sin escribir); al
@@ -551,6 +564,10 @@ export default function POS() {
   async function confirmarVenta(pagoInfo) {
     if (!idPuntoVenta) { setError('Selecciona una tienda'); return; }
     if (carrito.length === 0) return;
+    if (turnoAbierto === false &&
+        !window.confirm('No hay un turno de caja abierto para esta tienda. La venta no entrará en ningún arqueo/cierre. ¿Vender de todos modos?')) {
+      return;
+    }
     setProcesando(true); setError('');
 
     const clienteUUID = genUUID();
@@ -645,6 +662,14 @@ export default function POS() {
             />
           </div>
         </div>
+
+        {turnoAbierto === false && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2.5 rounded-xl text-sm flex items-center gap-2">
+            <AlertTriangle size={16} className="shrink-0" />
+            <span className="flex-1">No hay <b>turno de caja abierto</b> para esta tienda. Las ventas quedarán fuera del arqueo hasta que abras la caja.</span>
+            <Link to="/caja" className="font-semibold underline whitespace-nowrap">Abrir caja</Link>
+          </div>
+        )}
 
         {error && (
           <div className="bg-red-50 text-red-600 px-4 py-2.5 rounded-xl text-sm flex items-center gap-2">

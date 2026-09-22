@@ -33,8 +33,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Wallet, Clock, DollarSign, CreditCard, ShoppingCart,
-  RefreshCw, X, CheckCircle, AlertTriangle, ChevronLeft, ChevronRight,
+  RefreshCw, X, CheckCircle, AlertTriangle, ChevronLeft, ChevronRight, Store,
 } from 'lucide-react';
+
+// Roles de RED (corporativo): no están atados a una tienda, así que eligen a
+// cuál abrir/gestionar la caja. Los demás roles usan su propia sucursal.
+const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
 import { useAuthStore } from '../store/authStore.js';
 import api from '../services/api.js';
 import { useToast } from '../components/Toast.jsx';
@@ -275,6 +279,11 @@ export default function CierreCaja() {
   const { usuario } = useAuthStore();
   const toast = useToast();
 
+  const esRed = ROLES_RED.includes(usuario?.TipoUsuario);
+  // Corporativo: selector de tienda. Los demás usan su idPuntoVenta del token.
+  const [tiendas, setTiendas] = useState([]);
+  const [pvSel, setPvSel]     = useState(usuario?.idPuntoVenta ? String(usuario.idPuntoVenta) : '');
+
   // Estado de turno
   const [turno, setTurno]               = useState(null);
   const [ventas, setVentas]             = useState(null);
@@ -303,23 +312,29 @@ export default function CierreCaja() {
   // ── Cargar turno activo ──────────────────────────────────────────────────
 
   const cargarTurnoActivo = useCallback(async () => {
+    // Corporativo sin tienda elegida: no consulta hasta que elija una.
+    if (esRed && !pvSel) { setTurno(null); setVentas(null); setPedidos([]); return; }
     try {
-      const res = await api.get('/caja/turno-activo');
+      const params = esRed && pvSel ? { idPuntoVenta: pvSel } : {};
+      const res = await api.get('/caja/turno-activo', { params });
       setTurno(res.data.turno);
-      if (res.data.turno) {
-        cargarResumen(res.data.turno.idTurno);
-      }
+      if (res.data.turno) cargarResumen(res.data.turno.idTurno);
+      else { setVentas(null); setPedidos([]); }
     } catch (err) {
       // sin turno activo es válido
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esRed, pvSel]);
 
   // ── Cargar resumen ───────────────────────────────────────────────────────
 
   const cargarResumen = useCallback(async (idTurnoParam) => {
     setLoadingResumen(true);
     try {
-      const params = idTurnoParam ? { idTurno: idTurnoParam } : {};
+      const params = {
+        ...(idTurnoParam ? { idTurno: idTurnoParam } : {}),
+        ...(esRed && pvSel ? { idPuntoVenta: pvSel } : {}),
+      };
       const res = await api.get('/caja/resumen', { params });
       if (res.data.turno) {
         setTurno(res.data.turno);
@@ -332,7 +347,8 @@ export default function CierreCaja() {
     } finally {
       setLoadingResumen(false);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esRed, pvSel]);
 
   // ── Cargar historial ─────────────────────────────────────────────────────
 
@@ -355,6 +371,18 @@ export default function CierreCaja() {
     cargarTurnoActivo();
     cargarHistorial(1);
   }, [cargarTurnoActivo, cargarHistorial]);
+
+  // Corporativo: cargar la lista de tiendas para el selector (una vez).
+  useEffect(() => {
+    if (!esRed) return;
+    api.get('/sucursales/puntos-venta')
+      .then(r => {
+        const list = r.data || [];
+        setTiendas(list);
+        setPvSel(prev => prev || (list[0] ? String(list[0].idPuntoVenta) : ''));
+      })
+      .catch(() => {});
+  }, [esRed]);
 
   // Actualizar tiempo transcurrido cada minuto
   useEffect(() => {
@@ -382,11 +410,16 @@ export default function CierreCaja() {
       toast.error('Ingresa el monto inicial en caja');
       return;
     }
+    if (esRed && !pvSel) {
+      toast.error('Selecciona una tienda para abrir su caja');
+      return;
+    }
     setLoadingApertura(true);
     try {
       await api.post('/caja/apertura', {
         MontoApertura: parseFloat(montoApertura),
         Observaciones: obsApertura || null,
+        ...(esRed && pvSel ? { idPuntoVenta: parseInt(pvSel) } : {}),
       });
       toast.success('Caja abierta correctamente');
       setMontoApertura('');
@@ -452,6 +485,27 @@ export default function CierreCaja() {
           ))}
         </div>
 
+        {/* Selector de tienda para roles de red (corporativo) */}
+        {esRed && (
+          <div className="card p-4 flex items-center gap-3 flex-wrap">
+            <Store size={18} className="text-gray-400" />
+            <label className="text-sm font-medium text-gray-700">Tienda</label>
+            <select
+              value={pvSel}
+              onChange={(e) => setPvSel(e.target.value)}
+              className="input-field w-full max-w-xs"
+            >
+              <option value="">— Selecciona una tienda —</option>
+              {tiendas.map((t) => (
+                <option key={t.idPuntoVenta} value={t.idPuntoVenta}>
+                  {t.NomComercial || t.Nombre}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-gray-400">Como corporativo, eliges de qué tienda gestionar la caja.</span>
+          </div>
+        )}
+
         {/* ── Tab: Turno Actual ── */}
         {tab === 'turno' && (
           <>
@@ -465,10 +519,17 @@ export default function CierreCaja() {
                     </div>
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-gray-800">No hay turno abierto</h2>
-                    <p className="text-gray-500 text-sm mt-1">Abre la caja para comenzar a registrar ventas POS</p>
+                    <h2 className="text-xl font-bold text-gray-800">
+                      {esRed && !pvSel ? 'Selecciona una tienda' : 'No hay turno abierto'}
+                    </h2>
+                    <p className="text-gray-500 text-sm mt-1">
+                      {esRed && !pvSel
+                        ? 'Elige una tienda arriba para abrir o gestionar su caja.'
+                        : 'Abre la caja para comenzar a registrar ventas POS'}
+                    </p>
                   </div>
 
+                  {!(esRed && !pvSel) && (
                   <form onSubmit={handleAbrirCaja} className="text-left space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -504,6 +565,7 @@ export default function CierreCaja() {
                       {loadingApertura ? 'Abriendo...' : 'Abrir Caja'}
                     </button>
                   </form>
+                  )}
                 </div>
 
                 {/* Mini historial debajo */}
