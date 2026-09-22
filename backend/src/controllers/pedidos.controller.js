@@ -427,7 +427,7 @@ async function procesarVentaOffline(pool, { venta, idBranch, idCuenta, idUsuario
               VALUES
                 (@idBranch, @idCuenta, @idPedido, @idPuntoVenta, 'POS', 'ENTREGADO',
                  @MetodoPago, 'PAGADO', @TotalUSD, @MontoEfectivo, @MontoTarjeta, @MontoCambio,
-                 @Notas, @ClienteUUID, 1, @CuponCodigo, @CuponDescuentoUSD, ISNULL(@FechaVenta, GETDATE()), @UsuAlta)`);
+                 @Notas, @ClienteUUID, 1, @CuponCodigo, @CuponDescuentoUSD, ISNULL(@FechaVenta, GETUTCDATE()), @UsuAlta)`);
 
     let requiereRevision = false;
 

@@ -45,7 +45,10 @@ async function calcularTotales(pool, idBranch, idCuenta, idPuntoVenta, fechaAper
     req.input('fechaHasta', sql.DateTime, new Date(fechaHasta));
     fechaCondicion += ' AND p.FechaAlta <= @fechaHasta';
   } else {
-    fechaCondicion += ' AND p.FechaAlta <= GETDATE()';
+    // UTC: las ventas POS guardan FechaAlta en UTC (el navegador manda
+    // toISOString()); el servidor puede estar en otra zona (QA en UTC-7), así
+    // que GETDATE() (hora local del server) dejaba fuera ventas válidas.
+    fechaCondicion += ' AND p.FechaAlta <= GETUTCDATE()';
   }
 
   const r = await req.query(`
@@ -189,7 +192,7 @@ export async function abrirCaja(request, reply) {
         VALUES
           (@idBranch, @idCuenta, @idTurno, @idPuntoVenta, @idUsuario,
            @NombreUsuario, @NombreSucursal, @MontoApertura,
-           @Observaciones, 'ABIERTO', @UsuAlta, GETDATE(), GETDATE())
+           @Observaciones, 'ABIERTO', @UsuAlta, GETUTCDATE(), GETUTCDATE())
       `);
 
     await registrarAuditoria(transaction, {
@@ -271,7 +274,7 @@ export async function resumenTurno(request, reply) {
       req2.input('fechaHasta', sql.DateTime, new Date(turno.FechaCierre));
       fechaCond += ' AND p.FechaAlta <= @fechaHasta';
     } else {
-      fechaCond += ' AND p.FechaAlta <= GETDATE()';
+      fechaCond += ' AND p.FechaAlta <= GETUTCDATE()';
     }
 
     const pedidosR = await req2.query(`
@@ -377,7 +380,7 @@ export async function cerrarCaja(request, reply) {
       .query(`
         UPDATE VIDA_CAJA_TURNOS SET
           Status               = 'CERRADO',
-          FechaCierre          = GETDATE(),
+          FechaCierre          = GETUTCDATE(),
           TotalVentasEfectivo  = @TotalVentasEfectivo,
           TotalVentasTarjeta   = @TotalVentasTarjeta,
           TotalVentas          = @TotalVentas,
