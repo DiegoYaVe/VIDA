@@ -1,3 +1,4 @@
+import MonedaCuentas from '../components/MonedaCuentas.jsx';
 // src/pages/Cuentas.jsx
 // Cuentas por pagar (proveedores) y por cobrar (sucursales).
 //
@@ -61,16 +62,20 @@ function ModalAbono({ cuenta, onCerrar, onHecho }) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError]   = useState('');
 
+  const [cfg,setCfg]=useState(null);
+  const [moneda,setMoneda]=useState('USD');
+  useEffect(()=>{api.get('/cuentas/config-moneda').then(r=>{setCfg(r.data);setMoneda(r.data.Modo==='VES'?'VES':'USD');}).catch(()=>setError('No se pudo cargar la tasa; cierra y vuelve a intentar'));},[]);
+  const tc=cfg?.tasa?.Vigente ? Number(cfg.tasa.VESporUSD) : null;
   const saldo = Number(cuenta.Saldo) || 0;
-  const montoNum = liquidar ? saldo : (parseFloat(monto) || 0);
+  const montoNum = liquidar ? saldo : (parseFloat(monto) || 0) / (moneda === 'VES' ? (tc || Infinity) : 1);
   const excede = !liquidar && montoNum > saldo + 1e-6;
-  const valido = montoNum > 0 && !excede;
+  const valido = cfg && (moneda==='USD'||tc) && montoNum > 0 && !excede;
 
   async function guardar() {
     setGuardando(true); setError('');
     try {
       await api.post(`/cuentas/${cuenta.idDocumento}/abonos`, {
-        MontoUSD: liquidar ? undefined : montoNum,
+        Moneda:moneda, MontoOriginal:liquidar?undefined:Number(monto), idTasa:cfg?.tasa?.Vigente?cfg.tasa.idTasa:undefined,
         liquidar,
         MetodoPago: metodo,
         Referencia: ref.trim() || null,
@@ -97,6 +102,12 @@ function ModalAbono({ cuenta, onCerrar, onHecho }) {
           {' · '}saldo <b className="text-gray-800 tabular-nums">{fmt(saldo)}</b> de {fmt(cuenta.TotalUSD)}
         </p>
 
+        <label className="block mb-3">Moneda del abono
+          <select value={moneda} onChange={e=>{setMoneda(e.target.value);setMonto('');}} className={inputCls}>
+            {(cfg?.Modo==='AMBAS'?['USD','VES']:[cfg?.Modo||'USD']).map(m=><option key={m}>{m}</option>)}
+          </select>
+        </label>
+        <p className="text-xs mb-3">{tc ? `1 USD = ${tc} VES. Fecha: ${String(cfg.tasa.FechaValor).slice(0,10)}. Fuente: ${cfg.tasa.Fuente}` : 'Sin tasa vigente: los pagos USD no tendrán equivalente VES registrado.'} Equivalente del abono: {fmt(montoNum)} USD.</p>
         <label className="flex items-center gap-2.5 mb-4 cursor-pointer">
           <input type="checkbox" checked={liquidar} onChange={(e) => setLiquidar(e.target.checked)}
                  className="w-4 h-4 accent-vida-green"/>
@@ -108,7 +119,7 @@ function ModalAbono({ cuenta, onCerrar, onHecho }) {
         {!liquidar && (
           <div className="mb-4">
             <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-1.5">Monto a abonar</p>
-            <input type="number" step="0.01" min="0" max={saldo} value={monto} autoFocus
+            <input type="number" step="0.01" min="0" max={moneda==='VES'?saldo*(tc||0):saldo} value={monto} autoFocus
                    onChange={(e) => setMonto(e.target.value)} className={inputCls} placeholder="0.00"/>
             {excede && (
               <p className="text-xs text-red-600 mt-1.5">
@@ -161,7 +172,7 @@ function ModalNotaCredito({ cuenta, onCerrar, onHecho }) {
   const [cancelarTotal, setCancelarTotal] = useState(true);
   const [monto, setMonto]   = useState('');
   const [motivo, setMotivo] = useState('');
-  const [reintegrar, setReintegrar] = useState(false);
+  const reintegrar = false;
   const [guardando, setGuardando]   = useState(false);
   const [error, setError]   = useState('');
 
@@ -227,19 +238,7 @@ function ModalNotaCredito({ cuenta, onCerrar, onHecho }) {
         {excede && <p className="text-xs text-red-600 mb-3">Supera el saldo pendiente de {fmt(saldo)}.</p>}
 
         {abonado > 0 && (
-          <label className="flex items-start gap-2.5 mb-4 cursor-pointer">
-            <input type="checkbox" checked={reintegrar} onChange={(e) => setReintegrar(e.target.checked)}
-                   className="mt-0.5 w-4 h-4 accent-amber-500"/>
-            <span>
-              <span className="text-sm font-semibold text-gray-700 block">
-                Devolver los {fmt(abonado)} ya {cuenta.Tipo === 'CXP' ? 'pagados' : 'cobrados'}
-              </span>
-              <span className="text-xs text-gray-400">
-                Se registra como abono en negativo y la nota de crédito lo cubre, para que
-                la devolución no vuelva a generar deuda. Los abonos originales quedan en el historial.
-              </span>
-            </span>
-          </label>
+          <p className="text-sm text-amber-700 mb-4">Para devolver pagos, reversa primero cada abono desde su historial y después emite la nota de crédito. Así se conserva la moneda y la tasa original de cada pago.</p>
         )}
 
         <div className="mb-5">
@@ -381,6 +380,7 @@ function PanelDetalle({ idDocumento, puedeAbonar, onCerrar, onCambio }) {
                     <div className="flex-1 min-w-0">
                       <p className={`font-bold tabular-nums ${neg ? 'text-red-600' : 'text-gray-800'}`}>
                         {neg ? '−' : '+'}{fmt(Math.abs(a.MontoUSD))}
+                        <span className="block text-xs text-gray-500">{a.MonedaOriginal ? `${a.MontoOriginal} ${a.MonedaOriginal} · ${a.MontoVES ?? 'sin equivalente'} VES · TC ${a.TasaVESporUSD ?? 'no registrada'} · ${a.FechaTasa ? String(a.FechaTasa).slice(0,10) : ''} · ${a.FuenteTasa || ''}` : 'Histórico USD sin tasa registrada'}</span>
                         <span className="font-normal text-gray-400 text-xs ml-2">
                           {a.MetodoPago ? a.MetodoPago.replace('_', ' ') : ''}{a.Referencia ? ` · ${a.Referencia}` : ''}
                         </span>
@@ -466,6 +466,7 @@ export default function Cuentas() {
         </p>
       </div>
 
+      {verTodo && <MonedaCuentas />}
       {verTodo && (
         <div className="flex gap-1 border-b border-gray-100 mb-6">
           {[['CXP', 'Por pagar', 'proveedores'], ['CXC', 'Por cobrar', 'sucursales']].map(([id, label, sub]) => (

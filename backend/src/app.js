@@ -1,3 +1,4 @@
+import { monedaRoutes } from './routes/moneda.routes.js';
 // src/app.js
 import 'dotenv/config';
 import Fastify from 'fastify';
@@ -206,6 +207,7 @@ fastify.register(serviciosRoutes,  { prefix: '/api' });
 fastify.register(academiaRoutes,   { prefix: '/api' });
 fastify.register(premiosRoutes,    { prefix: '/api' });
 fastify.register(cuponesRoutes,    { prefix: '/api' });
+fastify.register(monedaRoutes, { prefix: '/api' });
 fastify.register(cuentasRoutes,    { prefix: '/api' });
 fastify.register(auditRoutes,      { prefix: '/api' });
 fastify.register(wsRoutes,         { prefix: '/api' });

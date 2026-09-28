@@ -1,3 +1,14 @@
+## Actualización 2026-09-28 — commits y monedas en Cuentas (fase 1)
+
+- Usuario confirmó ejecutar migración 39. No se verificó su BD desde esta sesión. Commit `ec40e32c` integra CXC/CXP preexistentes + recepciones + suministro (incluye dependencias compartidas del otro agente). Cambios ajenos en apps, logística, Sucursales y entorno siguen sin commit. Sin push solicitado en esta etapa.
+- Nueva migración **40_moneda_cuentas.sql**, NO ejecutada: configuración monetaria por cuenta, historial de tasas e importes originales/equivalentes en abonos, índice único para reversos.
+- Pantalla **Cuentas → Monedas y tasa para CXC/CXP** permite USD/VES/AMBAS y capturar TC manual con fuente/fecha/usuario. Es alcance explícitamente de Cuentas; NO habilita VES en POS/apps. Deudas siguen denominadas en USD; varios abonos permiten pagar en distintas monedas, no un pago mixto atómico.
+- TC = VES por 1 USD. Se selecciona última fecha no futura (última captura en empate), máximo 4 días naturales de antigüedad. Esto es una política operativa inicial, no una norma del BCV. Sin TC vigente se rechaza VES; USD puede seguir sin equivalente (NULL, nunca tasa ficticia). Con TC vigente se exige confirmación de su ID; cambios de tasa entre formulario y envío devuelven 409.
+- Abono conserva moneda/importe original, USD, VES, valor TC y referencia al registro de tasa con fuente/fecha. Reversos leen el original bajo bloqueo, conservan sus equivalentes y solo se permiten una vez. Reintegro agregado en notas de crédito se sustituye por reversar abonos individualmente antes de emitir NC, para mantener sus tasas; UI y API lo explican.
+- No se encontró documentación verificable de una API oficial BCV en esta revisión; web BCV falló 502. La API automática queda pendiente. No confundir proveedores externos con servicio oficial ni inventar equivalencias anteriores.
+- Verificación: 84 pruebas unitarias aprobadas (7 nuevas de conversión/configuración), sintaxis revisada y build frontend. Falta integración contra SQL Server aislado y comprobación visual; no se han ejecutado migraciones ni pagos reales.
+- Despliegue: aplicar 40 antes del backend y frontend nuevos. No publicar el backend nuevo sin la tabla de configuración. Siguiente: snapshots en documentos/facturas, API de tasa verificada, POS/app/offline, reportes financieros completos; no llamar a esta etapa multimoneda global terminada.
+
 ## Actualización 2026-09-28 — precio Matriz → Tienda (fase 1)
 
 - Inventario distingue CostoUSD (proveedor), PrecioSuministroUSD (matriz→tienda, opcional) y PrecioUSD (público). Solo operador de Matriz puede cambiar el nuevo precio; omitirlo en PUT lo conserva, null vuelve al cálculo costo+margen.

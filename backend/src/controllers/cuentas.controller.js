@@ -109,7 +109,9 @@ export async function detalleCuenta(request, reply) {
       .input('idBranch',    sql.BigInt, idBranch)
       .input('idCuenta',    sql.BigInt, idCuenta)
       .input('idDocumento', sql.BigInt, BigInt(idDocumento))
-      .query(`SELECT idAbono, MontoUSD, FechaAbono, MetodoPago, Referencia, Notas, UsuAlta, FechaAlta
+      .query(`SELECT idAbono, MontoUSD, MonedaOriginal,MontoOriginal,MontoVES,TasaVESporUSD,idTasa,ReversoDe,
+                (SELECT Fuente FROM VIDA_TASAS_CAMBIO t WHERE t.idTasa=VIDA_CUENTAS_ABONOS.idTasa) AS FuenteTasa,
+                (SELECT FechaValor FROM VIDA_TASAS_CAMBIO t WHERE t.idTasa=VIDA_CUENTAS_ABONOS.idTasa) AS FechaTasa, FechaAbono, MetodoPago, Referencia, Notas, UsuAlta, FechaAlta
               FROM VIDA_CUENTAS_ABONOS
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idDocumento=@idDocumento
               ORDER BY FechaAlta ASC, idAbono ASC`);
@@ -150,6 +152,7 @@ export async function abonarCuenta(request, reply) {
       idBranch, idCuenta,
       idDocumento: BigInt(idDocumento),
       MontoUSD:    b.MontoUSD,
+      Moneda: b.Moneda || 'USD', MontoOriginal:b.MontoOriginal, idTasa:b.idTasa,
       liquidar:    b.liquidar === true || b.liquidar === 'true',
       MetodoPago:  b.MetodoPago || null,
       Referencia:  b.Referencia || null,
@@ -170,7 +173,7 @@ export async function abonarCuenta(request, reply) {
     return reply.code(201).send(res);
   } catch (err) {
     request.log.error(err);
-    return reply.code(500).send({ error: 'Error al registrar el abono' });
+    return reply.code(err.statusCode || 500).send({ error: err.statusCode ? err.message : 'Error al registrar el abono' });
   }
 }
 
@@ -207,7 +210,7 @@ export async function reversarAbono(request, reply) {
       idBranch, idCuenta,
       idDocumento: BigInt(idDocumento),
       MontoUSD: -parseFloat(orig.MontoUSD),
-      permitirNegativo: true,
+      permitirNegativo: true, ReversoDe:BigInt(idAbono),
       Notas: `Reverso del abono #${idAbono}: ${motivo}`,
       UsuAlta: idUsuario,
     });
@@ -224,7 +227,7 @@ export async function reversarAbono(request, reply) {
     return reply.code(201).send(res);
   } catch (err) {
     request.log.error(err);
-    return reply.code(500).send({ error: 'Error al reversar el abono' });
+    return reply.code(err.statusCode || 500).send({ error: err.statusCode ? err.message : 'Error al reversar el abono' });
   }
 }
 

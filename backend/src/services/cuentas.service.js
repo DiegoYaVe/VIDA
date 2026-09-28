@@ -1,3 +1,4 @@
+import { convertirImporte, leerMoneda } from './moneda.service.js';
 // src/services/cuentas.service.js
 // Motor único de cuentas por pagar y por cobrar (sql/37).
 //
@@ -146,7 +147,7 @@ export async function emitirCuenta(tx, {
 export async function registrarAbono(pool, {
   idBranch, idCuenta, idDocumento, MontoUSD, liquidar = false,
   MetodoPago = null, Referencia = null, Notas = null, UsuAlta = null,
-  permitirNegativo = false,
+  permitirNegativo = false, Moneda = 'USD', MontoOriginal, idTasa, ReversoDe = null,
 }) {
   const tx = new sql.Transaction(pool);
   let enTx = false;
@@ -173,7 +174,33 @@ export async function registrarAbono(pool, {
     const acreditado = await acreditadoTx(tx, idBranch, idCuenta, idDocumento);
     const saldo      = dec(total - abonado - acreditado);
 
-    const monto = liquidar ? saldo : dec(MontoUSD);
+    let conversion;
+    let tasaId = null;
+    if (permitirNegativo) {
+      if (!ReversoDe) throw Object.assign(new Error('Se requiere el abono original'), {statusCode:400});
+      const origen = await new sql.Request(tx).input('b',sql.BigInt,idBranch).input('c',sql.BigInt,idCuenta)
+        .input('d',sql.BigInt,idDocumento).input('a',sql.BigInt,ReversoDe)
+        .query(`SELECT * FROM VIDA_CUENTAS_ABONOS WITH (UPDLOCK,HOLDLOCK)
+          WHERE idBranch=@b AND idCuenta=@c AND idDocumento=@d AND idAbono=@a;
+          SELECT idAbono FROM VIDA_CUENTAS_ABONOS WHERE idBranch=@b AND idCuenta=@c AND idDocumento=@d AND ReversoDe=@a;`);
+      const o=origen.recordsets[0][0];
+      if (!o || Number(o.MontoUSD)<=0 || origen.recordsets[1].length)
+        throw Object.assign(new Error('Abono inexistente o ya reversado'),{statusCode:409});
+      conversion={MonedaOriginal:o.MonedaOriginal || 'USD',MontoOriginal:-Number(o.MontoOriginal ?? o.MontoUSD),MontoUSD:-Number(o.MontoUSD),MontoVES:o.MontoVES == null?null:-Number(o.MontoVES),TasaVESporUSD:o.TasaVESporUSD};
+      tasaId=o.idTasa;
+    } else {
+      const cfg=await leerMoneda(tx,idBranch,idCuenta);
+      if (cfg.Modo !== 'AMBAS' && cfg.Modo !== Moneda)
+        throw Object.assign(new Error('Esta moneda no está habilitada en Cuentas'),{statusCode:400});
+      const tasa=cfg.tasa?.Vigente ? cfg.tasa : null;
+      if (Moneda==='VES' && !tasa) throw Object.assign(new Error('No hay tasa vigente; actualízala antes de cobrar'),{statusCode:409});
+      if (tasa && String(idTasa)!==String(tasa.idTasa))
+        throw Object.assign(new Error('Confirma la tasa vigente recargando el formulario'),{statusCode:409});
+      const original=liquidar ? (Moneda==='USD'?saldo:dec(saldo*Number(tasa.VESporUSD))) : (MontoOriginal ?? MontoUSD);
+      conversion=convertirImporte(original,Moneda,tasa?.VESporUSD ?? null);
+      tasaId=tasa?.idTasa ?? null;
+    }
+    const monto = conversion.MontoUSD;
 
     if (monto === 0) { await tx.rollback(); return { ok: false, code: 400, error: 'El monto no puede ser 0' }; }
     if (monto < 0 && !permitirNegativo) {
@@ -205,16 +232,22 @@ export async function registrarAbono(pool, {
       .input('idAbono',     sql.BigInt,       idAbono)
       .input('idDocumento', sql.BigInt,       idDocumento)
       .input('MontoUSD',    sql.Decimal(18,4), monto)
+      .input('MonedaOriginal',sql.VarChar(3),conversion.MonedaOriginal)
+      .input('MontoOriginal',sql.Decimal(18,4),conversion.MontoOriginal)
+      .input('MontoVES',sql.Decimal(18,4),conversion.MontoVES)
+      .input('TasaVESporUSD',sql.Decimal(18,8),conversion.TasaVESporUSD)
+      .input('idTasa',sql.BigInt,tasaId)
+      .input('ReversoDe',sql.BigInt,ReversoDe)
       .input('MetodoPago',  sql.VarChar(20),  MetodoPago)
       .input('Referencia',  sql.VarChar(100), Referencia)
       .input('Notas',       sql.VarChar(300), Notas)
       .input('UsuAlta',     sql.VarChar(30),  UsuAlta == null ? null : String(UsuAlta))
       .query(`INSERT INTO VIDA_CUENTAS_ABONOS
                 (idBranch, idCuenta, idAbono, idDocumento, MontoUSD, FechaAbono,
-                 MetodoPago, Referencia, Notas, UsuAlta)
+                 MetodoPago, Referencia, Notas, UsuAlta,MonedaOriginal,MontoOriginal,MontoVES,TasaVESporUSD,idTasa,ReversoDe)
               VALUES
                 (@idBranch, @idCuenta, @idAbono, @idDocumento, @MontoUSD,
-                 CAST(GETUTCDATE() AS DATE), @MetodoPago, @Referencia, @Notas, @UsuAlta)`);
+                 CAST(GETUTCDATE() AS DATE), @MetodoPago, @Referencia, @Notas, @UsuAlta,@MonedaOriginal,@MontoOriginal,@MontoVES,@TasaVESporUSD,@idTasa,@ReversoDe)`);
 
     const nuevoAbonado = dec(abonado + monto);
     const nuevoStatus  = statusPorSaldo(total, nuevoAbonado, acreditado);
@@ -260,6 +293,7 @@ export async function emitirNotaCredito(pool, {
   const motivo = String(Motivo || '').trim().slice(0, 300);
   if (motivo.length < 3) return { ok: false, code: 400, error: 'Indicá el motivo de la nota de crédito' };
 
+  if (reintegrar) return {ok:false,code:409,error:'Reversa cada abono desde su historial para conservar su moneda y tasa; después emite la nota de crédito'};
   const tx = new sql.Transaction(pool);
   let enTx = false;
   try {
