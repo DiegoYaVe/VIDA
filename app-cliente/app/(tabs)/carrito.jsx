@@ -55,6 +55,8 @@ export default function CarritoScreen() {
   const [datosPM, setDatosPM] = useState(null);
   const [referencia, setReferencia] = useState('');
   const [comprobante, setComprobante] = useState(null); // { uri, mimeType, fileName }
+  const [cotizacion,setCotizacion]=useState(null);
+  const [errorTasa,setErrorTasa]=useState('');
 
   // Puntos / canje
   const [puntosData, setPuntosData] = useState(null);   // { saldo, puntosPorDolarCanje }
@@ -117,6 +119,15 @@ export default function CarritoScreen() {
       .then(r => setDatosPM(r.data))
       .catch(() => setDatosPM({ disponible: false }));
   }, [metodoPago]);
+
+  useEffect(()=>{
+    if(!token||metodoPago!=='PAGO_MOVIL') return;
+    setErrorTasa('');
+    api.get('/delivery/cliente/cotizacion-moneda').then(r=>setCotizacion(r.data)).catch(e=>{setCotizacion(null);setErrorTasa(e.response?.data?.error||'No se pudo consultar la tasa');});
+  },[token,metodoPago]);
+
+  const tasaVES=Number(cotizacion?.tasa?.VESporUSD)||0;
+  const totalVES=Math.round(totalFinal*tasaVES*100)/100;
 
   const elegirComprobante = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -188,6 +199,10 @@ export default function CarritoScreen() {
       return;
     }
     if (metodoPago === 'PAGO_MOVIL') {
+      if (!cotizacion || !['VES','AMBAS'].includes(cotizacion.Modo)) {
+        Alert.alert('Pago Móvil no disponible', errorTasa || 'La cuenta no tiene habilitado el cobro en bolívares.');
+        return;
+      }
       if (!referencia.trim()) {
         Alert.alert('Referencia requerida', 'Ingresa el número de referencia de tu Pago Móvil.');
         return;
@@ -214,18 +229,11 @@ export default function CarritoScreen() {
         NotasCliente: notas.trim(),
         MetodoPago: metodoPago,
         PuntosUsar: puntosUsar,
+        CuponCodigo: cuponCodigo,
+        ...(metodoPago==='PAGO_MOVIL'?{PagoMoneda:{idTasa:cotizacion.tasa.idTasa,Moneda:'VES',MontoOriginal:totalVES}}:{}),
       };
       const res = await api.post('/delivery/pedido', payload);
       const idPedido = res.data?.idPedido ?? res.data?.pedido?.idPedido;
-
-      // Cupón: se aplica al pedido recién creado (ajusta su total y registra el uso)
-      if (cuponCodigo && idPedido) {
-        try {
-          await api.post('/delivery/cliente/cupones/aplicar', { codigo: cuponCodigo, idPedido });
-        } catch {
-          Alert.alert('Cupón no aplicado', 'Tu pedido se creó, pero el cupón no pudo aplicarse. Verás el total sin el descuento.');
-        }
-      }
 
       // Pago Móvil: subir el comprobante — el admin lo revisa y aprueba
       if (metodoPago === 'PAGO_MOVIL' && comprobante && idPedido) {
@@ -255,7 +263,7 @@ export default function CarritoScreen() {
       setReferencia('');
       router.push(`/pedido/${idPedido}`);
     } catch (e) {
-      Alert.alert('Error al hacer el pedido', e.message);
+      Alert.alert('Error al hacer el pedido', e.response?.data?.error || e.message);
     } finally {
       setLoading(false);
     }
@@ -409,7 +417,8 @@ export default function CarritoScreen() {
                     <PMRow label="Teléfono" valor={datosPM.Telefono} />
                     <PMRow label="Cédula"   valor={datosPM.Cedula} />
                     {datosPM.Titular ? <PMRow label="Titular" valor={datosPM.Titular} /> : null}
-                    <PMRow label="Monto" valor={`$${totalPagar.toFixed(2)}`} destacado />
+                    <PMRow label="Monto" valor={cotizacion ? `${totalVES.toFixed(2)} VES` : 'Consultando tasa…'} destacado />
+                    {cotizacion ? <PMRow label="Tasa" valor={`1 USD = ${tasaVES} VES · ${String(cotizacion.tasa.FechaValor).slice(0,10)}`} /> : null}
                   </View>
 
                   <Text style={styles.inputLabel}>Nº de referencia *</Text>
@@ -439,6 +448,7 @@ export default function CarritoScreen() {
                   </TouchableOpacity>
                 </>
               )}
+              {errorTasa ? <Text style={styles.pmNoDisponible}>{errorTasa}</Text> : null}
             </View>
           )}
 

@@ -1,3 +1,13 @@
+## Actualización 2026-09-28 — Pago Móvil VES en app cliente
+
+- El checkout móvil consulta una cotización autenticada al backend y, cuando la configuración de la cuenta es `VES` o `AMBAS`, muestra el total de Pago Móvil en bolívares junto con la tasa, fecha y fuente. La tasa nunca se obtiene directamente desde el teléfono.
+- Al crear el pedido, el backend vuelve a validar configuración y cotización, recalcula precios desde inventario y congela en `PagoMonedaJSON` los importes USD/VES, la tasa histórica y su identificador. Si cambian el total o la tasa, responde 409 y no crea el pedido.
+- El cupón ahora se evalúa y consume dentro de la misma transacción que crea el pedido. Se guardan `CuponCodigo` y `CuponDescuentoUSD`; se controla vigencia, límite total y límite por cliente. El cliente dejó de aplicar el cupón mediante una segunda llamada posterior.
+- Los endpoints de estado e historial del cliente exponen `StatusPago`, `PagoMonedaJSON` y el cupón histórico. El checkout muestra el error real del servidor para que el cliente pueda recotizar.
+- Compatibilidad: clientes antiguos que no envían `PagoMoneda` continúan creando pedidos USD. En esta fase solo **Pago Móvil** usa VES; efectivo y tarjeta delivery siguen con el comportamiento USD anterior porque la liquidación del repartidor todavía asume efectivo USD.
+- Limitaciones pendientes: el comprobante se sube después de crear el pedido (si falla la carga, el pedido queda creado y pendiente); el despacho previo a aprobación del comprobante no cambió; falta adaptar efectivo VES, liquidación del repartidor, recibo visual y conciliación administrativa.
+- Sin migración nueva: requiere la migración 42 (`PagoMonedaJSON`, `CuponCodigo`, `CuponDescuentoUSD`). Validación: 128 pruebas backend aprobadas, sintaxis backend válida y exportación Android Expo completada. No hubo prueba E2E con SQL, sesión, comprobante real ni BCV real.
+
 ## Actualización 2026-09-28 — Reporte de ventas POS multimoneda
 
 - Reportes → Ventas muestra efectivo recibido, tarjeta, cambio y efectivo neto originales USD/VES. Mantiene indicadores y agrupaciones por tienda/día como equivalentes USD para compatibilidad; efectivo recibido no es neto (restar cambio).

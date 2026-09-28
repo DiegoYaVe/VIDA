@@ -20,6 +20,7 @@ import {
   listarSucursales,
   tiendaPublica,
   listarProductosApp,
+  cotizacionMonedaCliente,
   crearPedidoApp,
   estadoPedidoCliente,
   historialPedidosCliente,
@@ -96,6 +97,9 @@ export async function deliveryRoutes(fastify) {
   fastify.post('/delivery/pedido',
     { preHandler: [authenticateCliente] },
     crearPedidoApp);
+
+  fastify.get('/delivery/cliente/cotizacion-moneda',
+    { preHandler: [authenticateCliente] }, cotizacionMonedaCliente);
 
   fastify.get('/delivery/cliente/pedidos',
     { preHandler: [authenticateCliente] },

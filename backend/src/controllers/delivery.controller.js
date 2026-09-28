@@ -5,6 +5,9 @@ import { enviarPush } from '../services/push.service.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 import { recalcularRuta, recalcularRutaThrottled, STATUS_ACTIVOS_REPARTIDOR } from '../services/rutas.service.js';
 import { promocionesVigentes, mejorPromoUnitaria, calcularLinea } from './promociones.controller.js';
+import { evaluarCupon } from './cupones.controller.js';
+import { prepararMoneda,leerMoneda } from '../services/moneda.service.js';
+import { calcularPagoDelivery } from '../services/pagoDelivery.service.js';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import path from 'path';
@@ -847,13 +850,24 @@ export async function listarProductosApp(request, reply) {
 // CREAR PEDIDO DESDE APP
 // POST /delivery/pedido
 // ══════════════════════════════════════════════════════════════════════════
+export async function cotizacionMonedaCliente(request, reply) {
+  const {idBranch,idCuenta,idCliente}=request.cliente;
+  try {
+    const cfg=await prepararMoneda(await getPool(),{idBranch,idCuenta,idUsuario:idCliente});
+    if(!cfg.tasa||!cfg.tasa.Vigente) return reply.code(422).send({error:'No hay una tasa vigente para cobrar'});
+    return reply.send({Modo:cfg.Modo,tasa:{idTasa:cfg.tasa.idTasa,VESporUSD:cfg.tasa.VESporUSD,FechaValor:cfg.tasa.FechaValor,Fuente:cfg.tasa.Fuente}});
+  } catch(err) {
+    request.log.error(err);return reply.code(err.statusCode||503).send({error:err.message||'No se pudo consultar la tasa'});
+  }
+}
+
 export async function crearPedidoApp(request, reply) {
   const { idBranch, idCuenta, idCliente } = request.cliente;
   const {
     idPuntoVenta, items, DireccionEntrega,
     UbicacionEntregaLat, UbicacionEntregaLon,
     NotasCliente, MetodoPago = 'EFECTIVO',
-    PuntosUsar = 0,
+    PuntosUsar = 0, CuponCodigo = null, PagoMoneda = null,
   } = request.body;
 
   if (!idPuntoVenta || !items?.length) {
@@ -943,7 +957,15 @@ export async function crearPedidoApp(request, reply) {
       puntosUsados = Math.min(pedirPuntos, saldo, maxPorSubtotal);
       descuentoPuntos = +(puntosUsados / canjeRate).toFixed(2);
     }
-    const TotalUSD = +(subtotal - descuentoPuntos).toFixed(2);
+    let TotalUSD = +(subtotal - descuentoPuntos).toFixed(2);
+    let descuentoCupon=0,cupon=null,pagoSnapshot=null;
+
+    // La tasa se consulta fuera de la transacción; al guardar se valida por ID.
+    if(PagoMoneda) {
+      const cfg=await prepararMoneda(pool,{idBranch,idCuenta,idUsuario:idCliente});
+      if(String(cfg.tasa?.idTasa)!==String(PagoMoneda.idTasa))
+        return reply.code(409).send({error:'La tasa cambió. Actualiza el pago antes de confirmar.'});
+    }
 
     // ── Obtener nombre de sucursal para broadcast ─────────────────────────
     const pvR = await pool.request()
@@ -962,6 +984,28 @@ export async function crearPedidoApp(request, reply) {
     try {
       await transaction.begin();
 
+      if(CuponCodigo) {
+        const cr=await new sql.Request(transaction).input('b',sql.BigInt,idBranch).input('c',sql.BigInt,idCuenta)
+          .input('codigo',sql.VarChar(40),String(CuponCodigo).trim().toUpperCase().slice(0,40))
+          .query(`SELECT TOP 1 * FROM VIDA_CUPONES WITH (UPDLOCK,HOLDLOCK)
+                  WHERE idBranch=@b AND idCuenta=@c AND Codigo=@codigo`);
+        cupon=cr.recordset[0];
+        const ev=evaluarCupon(cupon,{subtotal:TotalUSD,canal:'DELIVERY',items:itemsNorm.map(i=>({idProducto:i.idProducto,idCategoria:prodPorId.get(String(i.idProducto)).idCategoria,subtotal:i.Subtotal}))});
+        if(!ev.ok) throw Object.assign(new Error(ev.motivo),{statusCode:422});
+        const usos=await new sql.Request(transaction).input('b',sql.BigInt,idBranch).input('c',sql.BigInt,idCuenta)
+          .input('cupon',sql.BigInt,cupon.idCupon).input('cliente',sql.BigInt,idCliente)
+          .query(`SELECT COUNT(*) n FROM VIDA_CUPONES_USOS WITH (UPDLOCK,HOLDLOCK) WHERE idBranch=@b AND idCuenta=@c AND idCupon=@cupon AND idCliente=@cliente`);
+        if(cupon.UsosPorCliente!=null&&usos.recordset[0].n>=Number(cupon.UsosPorCliente)) throw Object.assign(new Error('Ya usaste este cupón'),{statusCode:409});
+        descuentoCupon=ev.descuento;TotalUSD=+Math.max(0,TotalUSD-descuentoCupon).toFixed(2);
+      }
+      if(PagoMoneda) {
+        const cfg=await leerMoneda(transaction,idBranch,idCuenta);
+        const tr=await new sql.Request(transaction).input('b',sql.BigInt,idBranch).input('c',sql.BigInt,idCuenta).input('id',sql.BigInt,PagoMoneda.idTasa)
+          .query(`SELECT TOP 1 * FROM VIDA_TASAS_CAMBIO WHERE idBranch=@b AND idCuenta=@c AND idTasa=@id`);
+        if(!tr.recordset[0]||String(cfg.tasa?.idTasa)!==String(PagoMoneda.idTasa)) throw Object.assign(new Error('La tasa cambió. Actualiza el pago.'),{statusCode:409});
+        pagoSnapshot=calcularPagoDelivery(TotalUSD,{...PagoMoneda,Metodo:MetodoPago},tr.recordset[0],cfg.Modo);
+      }
+
       idPedido = await nextIdTx(transaction, 'VIDA_PEDIDOS', 'idPedido', idBranch, idCuenta);
 
       await new sql.Request(transaction)
@@ -975,6 +1019,9 @@ export async function crearPedidoApp(request, reply) {
         .input('MetodoPago',          sql.VarChar(20), MetodoPago)
         .input('StatusPago',          sql.VarChar(20), 'PENDIENTE')
         .input('TotalUSD',            sql.Decimal(18,4), TotalUSD)
+        .input('PagoMonedaJSON',      sql.NVarChar(sql.MAX), pagoSnapshot?JSON.stringify(pagoSnapshot):null)
+        .input('CuponCodigo',         sql.VarChar(40), cupon?.Codigo||null)
+        .input('CuponDescuentoUSD',   sql.Decimal(18,4), descuentoCupon)
         .input('DescuentoPuntosUSD',  sql.Decimal(18,4), descuentoPuntos)
         .input('PuntosUsados',        sql.Int,           puntosUsados)
         .input('DireccionEntrega',    sql.VarChar(500), DireccionEntrega    || null)
@@ -983,11 +1030,11 @@ export async function crearPedidoApp(request, reply) {
         .input('NotasCliente',        sql.VarChar(500), NotasCliente        || null)
         .query(`INSERT INTO VIDA_PEDIDOS
                   (idBranch,idCuenta,idPedido,idPuntoVenta,idCliente,Canal,Status,
-                   MetodoPago,StatusPago,TotalUSD,DescuentoPuntosUSD,PuntosUsados,DireccionEntrega,
+                   MetodoPago,StatusPago,TotalUSD,PagoMonedaJSON,CuponCodigo,CuponDescuentoUSD,DescuentoPuntosUSD,PuntosUsados,DireccionEntrega,
                    UbicacionEntregaLat,UbicacionEntregaLon,NotasCliente,FechaAlta)
                 VALUES
                   (@idBranch,@idCuenta,@idPedido,@idPuntoVenta,@idCliente,@Canal,@Status,
-                   @MetodoPago,@StatusPago,@TotalUSD,@DescuentoPuntosUSD,@PuntosUsados,@DireccionEntrega,
+                   @MetodoPago,@StatusPago,@TotalUSD,@PagoMonedaJSON,@CuponCodigo,@CuponDescuentoUSD,@DescuentoPuntosUSD,@PuntosUsados,@DireccionEntrega,
                    @UbicacionEntregaLat,@UbicacionEntregaLon,@NotasCliente,GETDATE())`);
 
       // ── Debitar puntos usados (atómico: solo si el saldo alcanza) ────────
@@ -1031,6 +1078,18 @@ export async function crearPedidoApp(request, reply) {
                     (idBranch,idCuenta,idPedido,idDetalle,idProducto,Cantidad,PrecioUnitario)
                   VALUES
                     (@idBranch,@idCuenta,@idPedido,@idDetalle,@idProducto,@Cantidad,@PrecioUnitario)`);
+      }
+
+      if(cupon) {
+        const inc=await new sql.Request(transaction).input('b',sql.BigInt,idBranch).input('c',sql.BigInt,idCuenta).input('id',sql.BigInt,cupon.idCupon)
+          .query(`UPDATE VIDA_CUPONES SET UsosActuales=UsosActuales+1 WHERE idBranch=@b AND idCuenta=@c AND idCupon=@id AND (UsosMax IS NULL OR UsosActuales<UsosMax)`);
+        if(!inc.rowsAffected[0]) throw Object.assign(new Error('El cupón agotó sus usos'),{statusCode:409});
+        const idUso=await nextIdTx(transaction,'VIDA_CUPONES_USOS','idUso',idBranch,idCuenta);
+        await new sql.Request(transaction).input('b',sql.BigInt,idBranch).input('c',sql.BigInt,idCuenta).input('id',sql.BigInt,idUso)
+          .input('cupon',sql.BigInt,cupon.idCupon).input('codigo',sql.VarChar(40),cupon.Codigo).input('cliente',sql.BigInt,idCliente)
+          .input('pedido',sql.BigInt,idPedido).input('d',sql.Decimal(18,4),descuentoCupon).input('u',sql.VarChar(30),String(idCliente))
+          .query(`INSERT VIDA_CUPONES_USOS(idBranch,idCuenta,idUso,idCupon,Codigo,idCliente,idPedido,Canal,DescuentoUSD,UsuAlta)
+                  VALUES(@b,@c,@id,@cupon,@codigo,@cliente,@pedido,'DELIVERY',@d,@u)`);
       }
 
       await transaction.commit();
@@ -1134,14 +1193,14 @@ export async function crearPedidoApp(request, reply) {
 
     return reply.code(201).send({
       idPedido, status: 'BUSCANDO_REPARTIDOR',
-      TotalUSD, subtotal, descuentoPuntos, puntosUsados,
+      TotalUSD, subtotal, descuentoPuntos, puntosUsados, descuentoCupon, PagoMoneda:pagoSnapshot,
     });
   } catch (err) {
     if (String(err.message) === 'SALDO_PUNTOS_INSUFICIENTE') {
       return reply.code(409).send({ error: 'No tienes puntos suficientes para ese canje.' });
     }
     request.log.error(err);
-    return reply.code(500).send({ error: 'Error al crear pedido' });
+    return reply.code(err.statusCode||500).send({ error: err.statusCode?err.message:'Error al crear pedido' });
   }
 }
 
@@ -1160,7 +1219,8 @@ export async function estadoPedidoCliente(request, reply) {
       .input('idPedido',  sql.BigInt, idPedido)
       .input('idCliente', sql.BigInt, idCliente)
       .query(`
-        SELECT p.Status, p.MetodoPago, p.TotalUSD,
+        SELECT p.Status, p.StatusPago, p.MetodoPago, p.TotalUSD,
+               p.PagoMonedaJSON, p.CuponCodigo, p.CuponDescuentoUSD,
                p.DireccionEntrega, p.NotasCliente,
                p.UbicacionEntregaLat, p.UbicacionEntregaLon,
                p.ETAEntrega, p.OrdenRuta, p.DistanciaKm,
@@ -1214,7 +1274,8 @@ export async function historialPedidosCliente(request, reply) {
       .input('idCliente', sql.BigInt, idCliente)
       .query(`
         SELECT TOP 50
-          p.idPedido, p.Status, p.MetodoPago, p.TotalUSD,
+          p.idPedido, p.Status, p.StatusPago, p.MetodoPago, p.TotalUSD,
+          p.PagoMonedaJSON, p.CuponCodigo, p.CuponDescuentoUSD,
           p.FechaAlta AS FechaCreacion, p.DireccionEntrega,
           (SELECT COUNT(*) FROM VIDA_PEDIDOS_DETALLE d
            WHERE d.idBranch=p.idBranch AND d.idCuenta=p.idCuenta AND d.idPedido=p.idPedido) AS TotalItems
