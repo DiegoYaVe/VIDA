@@ -1,3 +1,4 @@
+import {tablasMonedas} from './filasMonedas.mjs';
 // src/utils/exportExcel.js
 // Exportación a Excel usando SheetJS (xlsx)
 // npm install xlsx
@@ -30,13 +31,13 @@ function fmtFecha(f) {
 
 // ─── Exportaciones ───────────────────────────────────────────────────────────
 
-export function exportarVentasExcel({ filas, totales, graficaDiaria, fechaInicio, fechaFin }) {
+export function exportarVentasExcel({ filas, totales, graficaDiaria, fechaInicio, fechaFin, monedas, detalleMonedas, sinTasa }) {
   // Hoja 1: detalle por sucursal
   const encabezado = [
     ['COMERCIALIZADORA VIDA — REPORTE DE VENTAS'],
     [`Período: ${fechaInicio} al ${fechaFin}`, '', '', '', `Generado: ${new Date().toLocaleString('es-VE')}`],
     [],
-    ['País', 'Estado', 'Ciudad', 'Sucursal', 'Ventas', 'Total USD', 'Efectivo', 'Tarjeta', 'Cambio'],
+    ['País', 'Estado', 'Ciudad', 'Sucursal', 'Ventas', 'Total USD', 'Efectivo equiv. USD', 'Tarjeta equiv. USD', 'Cambio equiv. USD'],
   ];
   const filasDatos = filas.map(r => [
     r.Pais || '',
@@ -73,6 +74,7 @@ export function exportarVentasExcel({ filas, totales, graficaDiaria, fechaInicio
   ]);
 
   const wb = crearLibro([
+    ...tablasMonedas({monedas,detalleMonedas,sinTasa}),
     { nombre: 'Por Sucursal', datos: sheet1, anchos: anchos1 },
     { nombre: 'Por Día',      datos: [...encabezadoG, ...filasGrafica], anchos: [14, 12, 14] },
   ]);

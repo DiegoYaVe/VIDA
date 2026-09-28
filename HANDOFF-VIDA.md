@@ -1,3 +1,12 @@
+## Actualización 2026-09-28 — Reporte de ventas POS multimoneda
+
+- Reportes → Ventas muestra efectivo recibido, tarjeta, cambio y efectivo neto originales USD/VES. Mantiene indicadores y agrupaciones por tienda/día como equivalentes USD para compatibilidad; efectivo recibido no es neto (restar cambio).
+- Excel agrega hojas Por moneda y Tasas por venta. PDF agrega secciones equivalentes. Detalle incluye pedido/fecha/tienda/moneda/efectivo/tarjeta/cambio/neto/tasa/fecha/fuente. Venta combinada tiene dos filas de moneda pero cuenta una sola vez como venta. No sumar USD y VES entre sí ni recalcular históricos a tasa actual.
+- Endpoint existente /reportes/ventas ahora obtiene una sola población y deriva resumen, días y detalle desde ella; preserva filtro tenant/tienda existente. Fechas validadas, límite 50,000 ventas: si se excede devuelve 422 y pide acotar, no entrega reporte truncado. Calendario del reporte sigue fechas UTC guardadas, no nuevo calendario Caracas.
+- Legado sin PagoMonedaJSON se identifica como USD sin tasa; TC queda null y se cuenta en sinTasa. Snapshot corrupto impide reporte en vez de inventar importes. No se amplió a delivery, rentabilidad ni reportes de red; no altera inventario o tasas.
+- Validación: 124 tests aprobados (4 nuevos de combinación, distintas tasas, legado, agrupación y errores), backend sintaxis, frontend build. No prueba SQL real ni revisión visual con sesión. Sin migración nueva; requiere 42 para PagoMonedaJSON. Publicar backend/src y frontend/dist nuevos juntos.
+- HANDOFF actualizado local/versionado. Commit local, sin push. Próximo: propagar moneda y TC al checkout de app-cliente, conservando trabajo paralelo; después recibos/app-repartidor y conciliación offline tardía/facturación fiscal.
+
 ## Actualización 2026-09-28 — Exportación histórica de cuentas
 
 - Cuentas → detalle incluye Descargar PDF y Descargar Excel. Vuelve a leer el endpoint autorizado de detalle antes de exportar; respeta su alcance existente. No se agregaron endpoints ni migraciones.

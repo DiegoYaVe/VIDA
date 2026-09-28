@@ -1,3 +1,4 @@
+import {construirReporteVentas} from '../services/reporteMonedas.service.js';
 // src/controllers/reportes.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
 
@@ -79,6 +80,9 @@ export async function reporteVentas(request, reply) {
 
   if (!fechaInicio || !fechaFin)
     return reply.code(400).send({ error: 'fechaInicio y fechaFin son requeridos' });
+  const fechaValida=f=>/^\d{4}-\d{2}-\d{2}$/.test(f)&&Number.isFinite(Date.parse(f))&&new Date(f).toISOString().slice(0,10)===f;
+  if(!fechaValida(fechaInicio)||!fechaValida(fechaFin)||fechaInicio>fechaFin)
+    return reply.code(400).send({error:'Selecciona un rango de fechas válido'});
 
   try {
     const pool = await getPool();
@@ -90,72 +94,18 @@ export async function reporteVentas(request, reply) {
 
     const geoFilter = buildGeoFilter(request.user, request.query, req);
 
-    // Filas agrupadas por sucursal
-    const filas = await req.query(`
-      SELECT
-        pv.idPuntoVenta,
-        pv.NomComercial AS NombrePuntoVenta,
-        pv.Ciudad,
-        pv.Estado,
-        pv.Pais,
-        COUNT(p.idPedido)              AS NumVentas,
-        SUM(p.TotalUSD)                AS TotalUSD,
-        SUM(ISNULL(p.MontoEfectivo,0)) AS TotalEfectivo,
-        SUM(ISNULL(p.MontoTarjeta,0))  AS TotalTarjeta,
-        SUM(ISNULL(p.MontoCambio,0))   AS TotalCambio
-      FROM VIDA_PEDIDOS p
-      JOIN VIDA_CUENTA_PUNTOS_VENTA pv
-        ON pv.idBranch = p.idBranch AND pv.idCuenta = p.idCuenta
-       AND pv.idPuntoVenta = p.idPuntoVenta
-      WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
-        AND p.Canal   = 'POS'
-        AND p.Status  = 'ENTREGADO'
-        AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+    const datos=await req.query(`
+      SELECT TOP (50001) p.idPedido,p.FechaAlta,p.TotalUSD,p.MontoEfectivo,p.MontoTarjeta,p.MontoCambio,p.PagoMonedaJSON,
+        pv.idPuntoVenta,pv.NomComercial AS NombrePuntoVenta,pv.Pais,pv.Estado,pv.Ciudad
+      FROM VIDA_PEDIDOS p JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+        ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
+      WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.Canal='POS' AND p.Status='ENTREGADO'
+        AND p.FechaAlta>=@fechaInicio AND p.FechaAlta<DATEADD(day,1,@fechaFin)
         ${geoFilter}
-      GROUP BY pv.idPuntoVenta, pv.NomComercial, pv.Ciudad, pv.Estado, pv.Pais
-      ORDER BY pv.Pais, pv.Estado, pv.NomComercial
+      ORDER BY p.FechaAlta,p.idPedido
     `);
-
-    // Gráfica: ventas agrupadas por día
-    const req2 = pool.request()
-      .input('idBranch',    sql.BigInt, idBranch)
-      .input('idCuenta',    sql.BigInt, idCuenta)
-      .input('fechaInicio', sql.Date,   new Date(fechaInicio))
-      .input('fechaFin',    sql.Date,   new Date(fechaFin));
-    const geoFilter2 = buildGeoFilter(request.user, request.query, req2);
-
-    const grafica = await req2.query(`
-      SELECT
-        CAST(p.FechaAlta AS DATE)  AS Fecha,
-        COUNT(p.idPedido)              AS NumVentas,
-        SUM(p.TotalUSD)                AS TotalUSD
-      FROM VIDA_PEDIDOS p
-      JOIN VIDA_CUENTA_PUNTOS_VENTA pv
-        ON pv.idBranch = p.idBranch AND pv.idCuenta = p.idCuenta
-       AND pv.idPuntoVenta = p.idPuntoVenta
-      WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
-        AND p.Canal  = 'POS'
-        AND p.Status = 'ENTREGADO'
-        AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
-        ${geoFilter2}
-      GROUP BY CAST(p.FechaAlta AS DATE)
-      ORDER BY CAST(p.FechaAlta AS DATE)
-    `);
-
-    const rows = filas.recordset;
-    const totales = {
-      NumVentas:     rows.reduce((s, r) => s + r.NumVentas, 0),
-      TotalUSD:      rows.reduce((s, r) => s + (r.TotalUSD      || 0), 0),
-      TotalEfectivo: rows.reduce((s, r) => s + (r.TotalEfectivo || 0), 0),
-      TotalTarjeta:  rows.reduce((s, r) => s + (r.TotalTarjeta  || 0), 0),
-      TotalCambio:   rows.reduce((s, r) => s + (r.TotalCambio   || 0), 0),
-    };
-
-    return reply.send({
-      filas: rows,
-      totales,
-      graficaDiaria: grafica.recordset,
-    });
+    if(datos.recordset.length>50000) return reply.code(422).send({error:'El reporte supera 50,000 ventas. Reduce el rango o filtra una tienda.'});
+    return reply.send(construirReporteVentas(datos.recordset));
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error en reporte de ventas: ' + err.message });

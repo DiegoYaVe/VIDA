@@ -1,3 +1,4 @@
+import {tablasMonedas} from './filasMonedas.mjs';
 // src/utils/exportPDF.js
 // Exportación a PDF usando jsPDF + jspdf-autotable
 // npm install jspdf jspdf-autotable
@@ -161,15 +162,15 @@ const FECHA = (f) => f ? new Date(f).toLocaleDateString('es-VE') : '';
 // ─────────────────────────────────────────────────────────────────────────────
 // REPORTE VENTAS
 // ─────────────────────────────────────────────────────────────────────────────
-export function exportarVentasPDF({ filas, totales, graficaDiaria, fechaInicio, fechaFin }) {
+export function exportarVentasPDF({ filas, totales, graficaDiaria, fechaInicio, fechaFin, monedas, detalleMonedas, sinTasa }) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
   agregarEncabezado(doc, 'Reporte de Ventas', `Período: ${fechaInicio} al ${fechaFin}`);
 
   const nextY = tarjetasResumen(doc, [
     { label: 'Total Ventas',   valor: totales.NumVentas,                color: AZUL2  },
     { label: 'Total USD',      valor: USD(totales.TotalUSD),            color: VERDE  },
-    { label: 'Efectivo',       valor: USD(totales.TotalEfectivo),       color: [39, 174, 96]  },
-    { label: 'Tarjeta',        valor: USD(totales.TotalTarjeta),        color: [52, 152, 219] },
+    { label: 'Efectivo equiv. USD',       valor: USD(totales.TotalEfectivo),       color: [39, 174, 96]  },
+    { label: 'Tarjeta equiv. USD',        valor: USD(totales.TotalTarjeta),        color: [52, 152, 219] },
     { label: 'Cambio devuelto',valor: USD(totales.TotalCambio),         color: [231, 76, 60]  },
   ], 33);
 
@@ -180,8 +181,8 @@ export function exportarVentasPDF({ filas, totales, graficaDiaria, fechaInicio, 
     { header: 'Sucursal',   key: 'NombrePuntoVenta', width: 40 },
     { header: 'Ventas',     key: 'NumVentas',        width: 16, align: 'right' },
     { header: 'Total USD',  key: '_TotalUSD',        width: 22, align: 'right' },
-    { header: 'Efectivo',   key: '_Efectivo',        width: 22, align: 'right' },
-    { header: 'Tarjeta',    key: '_Tarjeta',         width: 22, align: 'right' },
+    { header: 'Efectivo USD',   key: '_Efectivo',        width: 22, align: 'right' },
+    { header: 'Tarjeta USD',    key: '_Tarjeta',         width: 22, align: 'right' },
     { header: 'Cambio',     key: '_Cambio',          width: 18, align: 'right' },
   ];
 
@@ -204,6 +205,15 @@ export function exportarVentasPDF({ filas, totales, graficaDiaria, fechaInicio, 
   ];
 
   autoTable(doc, opTabla(nextY, columns, body));
+  for(const hoja of tablasMonedas({monedas,detalleMonedas,sinTasa})) {
+    doc.addPage();
+    agregarEncabezado(doc,hoja.nombre,'Importes originales y tasas históricas');
+    const resumen=hoja.nombre==='Por moneda';
+    if(resumen) {doc.setTextColor(50);doc.setFontSize(9);doc.text('Ventas históricas sin tasa: '+sinTasa+' · USD y VES se muestran por separado.',10,35);}
+    const datos=resumen?hoja.datos.slice(3):hoja.datos;
+    autoTable(doc,{head:[datos[0]],body:datos.slice(1).map(f=>f.map(v=>v??'Sin dato')),startY:resumen?42:34,
+      margin:{top:32,bottom:18},styles:{fontSize:7,overflow:'linebreak'},headStyles:{fillColor:AZUL},rowPageBreak:'avoid'});
+  }
   agregarPiePagina(doc);
   doc.save(`ventas_${fechaInicio}_${fechaFin}.pdf`);
 }

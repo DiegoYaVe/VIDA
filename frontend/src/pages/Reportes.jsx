@@ -232,6 +232,12 @@ function TabVentas({ filtros }) {
             <CardResumen icon={DollarSign}   label="Cambio devuelto" valor={USD(datos.totales.TotalCambio)}      color="red"    />
           </div>
 
+          {datos.monedas&&<div className="bg-white rounded-xl p-4 border space-y-2">
+            <h3 className="font-bold">Dinero recibido por moneda</h3>
+            <p className="text-xs text-gray-500">Los indicadores superiores son equivalentes USD. Aquí se muestran importes originales. {datos.sinTasa} ventas históricas sin tasa registrada.</p>
+            <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{['Moneda','Efectivo recibido','Tarjeta','Cambio','Efectivo neto'].map(t=><th key={t} className="p-2 text-right">{t}</th>)}</tr></thead>
+            <tbody>{['USD','VES'].map(m=><tr key={m}><td className="p-2 font-bold">{m}</td>{['Efectivo','Tarjeta','Cambio','NetoEfectivo'].map(k=><td key={k} className="p-2 text-right">{Number(datos.monedas[m][k]).toFixed(2)}</td>)}</tr>)}</tbody></table></div>
+          </div>}
           {/* Gráfica */}
           {grafData.length > 0 && (
             <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
