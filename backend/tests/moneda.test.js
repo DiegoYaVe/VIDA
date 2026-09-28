@@ -14,5 +14,5 @@ test('tasa posterior no altera snapshot anterior',()=>{
 });
 test('configuración de cuenta ausente conserva USD y ninguna tasa',async()=>{
  const req={input(){return this;},async query(){return {recordsets:[[],[]]};}};
- assert.deepEqual(await leerMoneda({request:()=>req},1,1),{Modo:'USD',tasa:null});
+ assert.deepEqual(await leerMoneda({request:()=>req},1,1),{Modo:'USD',FuenteTasa:'BCV_TODAY',tasa:null});
 });

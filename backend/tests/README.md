@@ -30,3 +30,11 @@ con scripts E2E manuales: aplicar/redimir cupón, vencimiento de puntos, IDs
 concurrentes). Conviene dejarlos **detrás de una bandera de entorno**
 (p. ej. `RUN_DB_TESTS=1`) para no exigir BD en el `npm test` por defecto, ya que
 mutan datos.
+
+### Monedas y tasa externa
+
+`moneda.test.js` y `tasaBcv.test.js`: conversión, fecha efectiva Caracas,
+rechazo de tasas futuras/vencidas, error de red/JSON, consulta por operación,
+selección manual explícita y cambio concurrente de tasa. HTTP simulado en suite;
+no se escribe SQL ni se llama al proveedor en tests. Pendiente SQL aislado para
+índice único y bloqueos de snapshots/reversos (migraciones 40/41).

@@ -1,4 +1,4 @@
-import { convertirImporte, leerMoneda } from './moneda.service.js';
+import { convertirImporte, leerMoneda, prepararMoneda } from './moneda.service.js';
 // src/services/cuentas.service.js
 // Motor único de cuentas por pagar y por cobrar (sql/37).
 //
@@ -149,6 +149,7 @@ export async function registrarAbono(pool, {
   MetodoPago = null, Referencia = null, Notas = null, UsuAlta = null,
   permitirNegativo = false, Moneda = 'USD', MontoOriginal, idTasa, ReversoDe = null,
 }) {
+  if (!permitirNegativo) await prepararMoneda(pool,{idBranch,idCuenta,idUsuario:UsuAlta});
   const tx = new sql.Transaction(pool);
   let enTx = false;
   try {
@@ -193,7 +194,7 @@ export async function registrarAbono(pool, {
       if (cfg.Modo !== 'AMBAS' && cfg.Modo !== Moneda)
         throw Object.assign(new Error('Esta moneda no está habilitada en Cuentas'),{statusCode:400});
       const tasa=cfg.tasa?.Vigente ? cfg.tasa : null;
-      if (Moneda==='VES' && !tasa) throw Object.assign(new Error('No hay tasa vigente; actualízala antes de cobrar'),{statusCode:409});
+      if (!tasa) throw Object.assign(new Error('No hay tasa vigente; actualízala antes de cobrar'),{statusCode:409});
       if (tasa && String(idTasa)!==String(tasa.idTasa))
         throw Object.assign(new Error('Confirma la tasa vigente recargando el formulario'),{statusCode:409});
       const original=liquidar ? (Moneda==='USD'?saldo:dec(saldo*Number(tasa.VESporUSD))) : (MontoOriginal ?? MontoUSD);

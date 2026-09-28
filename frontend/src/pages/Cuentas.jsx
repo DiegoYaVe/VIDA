@@ -64,12 +64,17 @@ function ModalAbono({ cuenta, onCerrar, onHecho }) {
 
   const [cfg,setCfg]=useState(null);
   const [moneda,setMoneda]=useState('USD');
-  useEffect(()=>{api.get('/cuentas/config-moneda').then(r=>{setCfg(r.data);setMoneda(r.data.Modo==='VES'?'VES':'USD');}).catch(()=>setError('No se pudo cargar la tasa; cierra y vuelve a intentar'));},[]);
+  async function cargarTasa() {
+    setCfg(null);
+    try {const r=await api.get('/cuentas/config-moneda');setCfg(r.data);setMoneda(r.data.Modo==='VES'?'VES':'USD');if(r.data.Advertencia) setError(r.data.Advertencia);}
+    catch {setError('No se pudo cargar la tasa. Reintenta.');}
+  }
+  useEffect(()=>{cargarTasa();},[]);
   const tc=cfg?.tasa?.Vigente ? Number(cfg.tasa.VESporUSD) : null;
   const saldo = Number(cuenta.Saldo) || 0;
   const montoNum = liquidar ? saldo : (parseFloat(monto) || 0) / (moneda === 'VES' ? (tc || Infinity) : 1);
   const excede = !liquidar && montoNum > saldo + 1e-6;
-  const valido = cfg && (moneda==='USD'||tc) && montoNum > 0 && !excede;
+  const valido = cfg?.ConsultaCorrecta && tc && montoNum > 0 && !excede;
 
   async function guardar() {
     setGuardando(true); setError('');
@@ -84,6 +89,7 @@ function ModalAbono({ cuenta, onCerrar, onHecho }) {
       onHecho();
     } catch (e) {
       setError(e.response?.data?.error || 'No se pudo registrar el abono');
+      if ([409,503].includes(e.response?.status)) setCfg(null);
       setGuardando(false);
     }
   }
@@ -102,12 +108,13 @@ function ModalAbono({ cuenta, onCerrar, onHecho }) {
           {' · '}saldo <b className="text-gray-800 tabular-nums">{fmt(saldo)}</b> de {fmt(cuenta.TotalUSD)}
         </p>
 
+        <button type="button" disabled={guardando} onClick={()=>{setError('');cargarTasa();}} className="text-vida-blue underline mb-3">Consultar / actualizar tasa</button>
         <label className="block mb-3">Moneda del abono
           <select value={moneda} onChange={e=>{setMoneda(e.target.value);setMonto('');}} className={inputCls}>
             {(cfg?.Modo==='AMBAS'?['USD','VES']:[cfg?.Modo||'USD']).map(m=><option key={m}>{m}</option>)}
           </select>
         </label>
-        <p className="text-xs mb-3">{tc ? `1 USD = ${tc} VES. Fecha: ${String(cfg.tasa.FechaValor).slice(0,10)}. Fuente: ${cfg.tasa.Fuente}` : 'Sin tasa vigente: los pagos USD no tendrán equivalente VES registrado.'} Equivalente del abono: {fmt(montoNum)} USD.</p>
+        <p className="text-xs mb-3">{tc ? `1 USD = ${tc} VES. Fecha: ${String(cfg.tasa.FechaValor).slice(0,10)}. Fuente: ${cfg.tasa.Fuente}` : 'Sin tasa verificada: actualiza antes de cobrar.'} Equivalente del abono: {fmt(montoNum)} USD.</p>
         <label className="flex items-center gap-2.5 mb-4 cursor-pointer">
           <input type="checkbox" checked={liquidar} onChange={(e) => setLiquidar(e.target.checked)}
                  className="w-4 h-4 accent-vida-green"/>
