@@ -1,3 +1,12 @@
+## Actualización 2026-09-28 — Exportación histórica de cuentas
+
+- Cuentas → detalle incluye Descargar PDF y Descargar Excel. Vuelve a leer el endpoint autorizado de detalle antes de exportar; respeta su alcance existente. No se agregaron endpoints ni migraciones.
+- Documento informativo de CXC/CXP, **NO factura fiscal**: contraparte, folio/origen, plazo/vencimiento, total/abonos/notas/saldo USD, snapshot de emisión, pagos/reversos con moneda e importes originales, equivalentes, tasa/fecha/fuente, referencias y notas de crédito separadas. No calcula saldo VES con TC actual ni fabrica equivalencias antiguas.
+- Modelo puro frontend/src/utils/documentoCuenta.mjs, generadores exportCuenta.js (jsPDF/autoTable y SheetJS ya instalados). Excel mantiene números y texto sin convertir referencias en fórmulas. PDF pagina tablas largas. Fecha de generación no sustituye fecha de tasa.
+- Validación: pruebas de proyección histórica, reversos, legado y corrupción; generación PDF de 120 movimientos (11 páginas), Excel generado/releído en memoria. Suite 120 pruebas; build frontend. No prueba visual con sesión ni validación de factura fiscal; no cambios SQL.
+- Despliegue de este lote: compilar/subir frontend/dist completo. Requiere backend del lote anterior y sus migraciones 42/43 para las funciones anteriores; esta exportación no añade migración. Pruebas exportCuenta requieren dependencias frontend instaladas además del backend.
+- Pendiente: facturación fiscal real (datos fiscales/folios/reglas), exportaciones de ventas/reportes multimoneda globales, apps USD/VES y conciliación de ventas offline tardías. Se preservaron cambios ajenos de apps/logística/Sucursales. Commit local sin push.
+
 ## Actualización 2026-09-28 — Cobro combinado POS y arqueo por moneda
 
 Esta entrada prevalece sobre las limitaciones de fase inicial descritas debajo.

@@ -279,6 +279,18 @@ function PanelDetalle({ idDocumento, puedeAbonar, onCerrar, onCambio }) {
   const [error, setError] = useState('');
   const [abonando, setAbonando] = useState(false);
   const [acreditando, setAcreditando] = useState(false);
+  const [exportando,setExportando]=useState(false);
+  const [errorExportacion,setErrorExportacion]=useState('');
+
+  async function descargar(formato) {
+    setExportando(true);setErrorExportacion('');
+    try {
+      const actual=(await api.get(`/cuentas/${idDocumento}`)).data;
+      const {exportarCuenta}=await import('../utils/exportCuenta.js');
+      exportarCuenta(actual,formato);setData(actual);
+    } catch(e) {setErrorExportacion(e.response?.data?.error||e.message||'No se pudo exportar');}
+    finally {setExportando(false);}
+  }
 
   async function cargar() {
     try { setData((await api.get(`/cuentas/${idDocumento}`)).data); }
@@ -320,6 +332,14 @@ function PanelDetalle({ idDocumento, puedeAbonar, onCerrar, onCambio }) {
           <button onClick={onCerrar} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
         </div>
 
+        <div className="px-6 pt-4 space-y-2">
+          <div className="flex gap-4 text-sm font-bold text-vida-blue">
+            <button disabled={exportando} onClick={()=>descargar('pdf')}>{exportando?'Generando…':'Descargar PDF'}</button>
+            <button disabled={exportando} onClick={()=>descargar('excel')}>Descargar Excel</button>
+          </div>
+          <p className="text-xs text-gray-500">Estado de cuenta con tasas históricas. No sustituye factura fiscal.</p>
+          {errorExportacion&&<p role="alert" className="text-sm text-red-600">{errorExportacion}</p>}
+        </div>
         <div className="p-6 grid grid-cols-3 gap-4 border-b border-gray-100">
           <ResumenMoneda datos={c.TasaEmisionJSON} />
           <div><p className="text-xs text-gray-400 font-bold uppercase">Total</p><p className="text-lg font-black tabular-nums">{fmt(c.TotalUSD)}</p></div>
