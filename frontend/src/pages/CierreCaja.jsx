@@ -198,10 +198,12 @@ function ModalCierre({ turno, ventas, efectivoEsperado, onClose, onCerrado }) {
             /* ── Formulario de cierre ── */
             <>
               <div className="bg-blue-50 rounded-xl p-4 text-sm space-y-1">
-                <p className="text-gray-600">Efectivo esperado en caja:</p>
+                <p className="text-gray-600">Efectivo esperado (equivalente USD):</p>
                 <p className="text-2xl font-bold text-[#0A1E3F]">{fmt(efectivoEsperado)}</p>
                 <p className="text-xs text-gray-400">
-                  Inicial {fmt(turno.MontoApertura)} + Ventas en efectivo {fmt(ventas?.TotalEfectivo)}
+                  Inicial {fmt(turno.MontoApertura)} + Ventas en efectivo {fmt(ventas?.TotalEfectivo)} (equivalentes USD).
+                  <br/>Entradas netas originales: {Number(ventas?.EfectivoOriginalUSD||0).toFixed(2)} USD y {Number(ventas?.EfectivoOriginalVES||0).toFixed(2)} VES.
+                  <br/>Este cierre aún registra el conteo como equivalente USD; no es un arqueo independiente de billetes por moneda.
                 </p>
               </div>
 

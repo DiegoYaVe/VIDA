@@ -1,3 +1,4 @@
+import { prepararMoneda } from '../services/moneda.service.js';
 import { precioSuministro } from '../services/precioSuministro.service.js';
 // src/controllers/matriz.controller.js
 // Matriz y reabasto (T-0038/T-0039). La Matriz es un punto de venta central
@@ -381,6 +382,7 @@ export async function cambiarEstadoPedidoMatriz(request, reply) {
     if (StatusNuevo === 'RECIBIDO' && !cantidadesRecibidas?.length)
       return reply.code(400).send({ error: 'cantidadesRecibidas es requerido para recibir' });
 
+    if (StatusNuevo === 'RECIBIDO') await prepararMoneda(pool,request.user);
     await transaction.begin();
     enTx = true;
 

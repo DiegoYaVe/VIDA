@@ -1,3 +1,4 @@
+import { cotizarMonedaPOS } from '../controllers/posMoneda.controller.js';
 // src/routes/pedidos.routes.js
 import { authenticate, requireRole } from '../middlewares/auth.js';
 import {
@@ -12,6 +13,7 @@ const LECTURA   = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERV
 const CAJA      = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
 
 export async function pedidosRoutes(fastify) {
+  fastify.post('/pedidos/pos/cotizacion-moneda', {preHandler:[authenticate,requireRole(...CAJA)]}, cotizarMonedaPOS);
 
   // ── Pedidos ───────────────────────────────────────────────────────────
   fastify.get('/pedidos',

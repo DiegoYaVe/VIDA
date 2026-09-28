@@ -1,3 +1,4 @@
+import {useAuthStore} from '../store/authStore.js';
 // Motor de sincronización de ventas offline.
 // Estrategia: toda venta POS se encola SIEMPRE en IndexedDB y se sincroniza
 // vía POST /pedidos/sync (idempotente por ClienteUUID). Si hay red, sincroniza
@@ -36,7 +37,9 @@ async function emit() {
 
 export async function syncNow() {
   if (syncing) return null;
-  const queue = await getQueue();
+  const usuario=useAuthStore.getState().usuario;
+  if(!usuario) return null;
+  const queue = (await getQueue()).filter(v=>!v.Propietario || ['idBranch','idCuenta','idUsuario'].every(k=>String(v.Propietario[k])===String(usuario[k])));
   if (queue.length === 0) { await emit(); return { synced: [], failed: [] }; }
 
   syncing = true;
@@ -62,7 +65,8 @@ export async function syncNow() {
 
     // Si quedan más de LOTE_MAX pendientes, seguir con el siguiente lote
     if ((await countQueue()) > 0 && (res.data.synced || []).length > 0) {
-      return syncNow();
+      const siguiente=await syncNow();
+      return {synced:[...(res.data.synced||[]),...(siguiente?.synced||[])],failed:[...(res.data.failed||[]),...(siguiente?.failed||[])]};
     }
     return res.data;
   } catch (err) {

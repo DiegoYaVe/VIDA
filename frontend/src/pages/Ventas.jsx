@@ -1,3 +1,4 @@
+import ResumenMoneda from '../components/ResumenMoneda.jsx';
 // src/pages/Ventas.jsx
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../services/api.js';
@@ -49,6 +50,8 @@ function TicketPrint({ venta }) {
       </div>
 
       <div className="border-t border-dashed border-gray-400 my-2"/>
+      <ResumenMoneda datos={venta.PagoMonedaJSON} />
+      {venta.PagoMonedaJSON && <p className="text-xs">Desglose equivalente USD:</p>}
       {venta.MontoEfectivo > 0 && (
         <div className="flex justify-between text-xs">
           <span>Efectivo recibido</span>

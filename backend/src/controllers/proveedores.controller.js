@@ -1,3 +1,4 @@
+import { prepararMoneda } from '../services/moneda.service.js';
 import { validarRecepcion } from '../services/recepcionOrden.service.js';
 // src/controllers/proveedores.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
@@ -600,6 +601,7 @@ export async function cambiarEstadoOrden(request, reply) {
       ? Math.max(0, parseInt(DiasPlazo) || 0)
       : (parseInt(orden.DiasCredito) || 0);
 
+    if (esRecepcion) await prepararMoneda(pool,request.user);
     await tx.begin(); enTx = true;
     // Serializa cambios de estado y recepciones sobre la misma orden.
     const actual = await new sql.Request(tx)

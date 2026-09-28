@@ -103,6 +103,12 @@ export async function emitirCuenta(tx, {
 
   const idDocumento = await nextIdTx(tx, 'VIDA_CUENTAS', 'idDocumento', idBranch, idCuenta);
   const plazo = Math.max(0, parseInt(DiasPlazo) || 0);
+  const monedaEmision=await leerMoneda(tx,idBranch,idCuenta);
+  const tasaEmision=monedaEmision.tasa?.Vigente ? monedaEmision.tasa : null;
+  if(!tasaEmision) throw Object.assign(new Error('Se requiere una tasa vigente para emitir el documento'),{statusCode:409});
+  const snapshot=tasaEmision ? {Moneda:'USD',TotalUSD:total,TotalVES:Math.round(total*Number(tasaEmision.VESporUSD)*100)/100,
+    TasaVESporUSD:Number(tasaEmision.VESporUSD),idTasa:tasaEmision.idTasa,FechaTasa:tasaEmision.FechaValor,Fuente:tasaEmision.Fuente} : null;
+
 
   await new sql.Request(tx)
     .input('idBranch',           sql.BigInt,       idBranch)
@@ -117,6 +123,7 @@ export async function emitirCuenta(tx, {
     .input('Folio',              sql.VarChar(50),  Folio)
     .input('TotalUSD',           sql.Decimal(18,4), total)
     .input('DiasPlazo',          sql.Int,          plazo)
+    .input('TasaEmisionJSON',sql.NVarChar(sql.MAX),snapshot ? JSON.stringify(snapshot) : null)
     .input('Notas',              sql.VarChar(500), Notas)
     .input('UsuAlta',            sql.VarChar(30),  UsuAlta == null ? null : String(UsuAlta))
     // FechaEmision y FechaVencimiento se calculan en el server de BD para que no
@@ -125,13 +132,13 @@ export async function emitirCuenta(tx, {
     .query(`INSERT INTO VIDA_CUENTAS
               (idBranch, idCuenta, idDocumento, Tipo, idProveedor, idPuntoVenta,
                idPuntoVentaEmisor, OrigenTipo, idOrigen, Folio, TotalUSD,
-               FechaEmision, DiasPlazo, FechaVencimiento, Status, Notas, UsuAlta)
+               FechaEmision, DiasPlazo, FechaVencimiento, Status, Notas, UsuAlta,TasaEmisionJSON)
             VALUES
               (@idBranch, @idCuenta, @idDocumento, @Tipo, @idProveedor, @idPuntoVenta,
                @idPuntoVentaEmisor, @OrigenTipo, @idOrigen, @Folio, @TotalUSD,
                CAST(GETUTCDATE() AS DATE), @DiasPlazo,
                DATEADD(DAY, @DiasPlazo, CAST(GETUTCDATE() AS DATE)),
-               'ABIERTA', @Notas, @UsuAlta)`);
+               'ABIERTA', @Notas, @UsuAlta,@TasaEmisionJSON)`);
 
   return { idDocumento, TotalUSD: total, yaExistia: false };
 }
@@ -412,7 +419,7 @@ export async function emitirNotaCredito(pool, {
 // SELECT reutilizable: el documento con su saldo derivado y su contraparte
 // resuelta. `Vencida` se calcula en la consulta, no se guarda como estado.
 export const SELECT_CUENTA = `
-  SELECT c.idDocumento, c.Tipo, c.Folio, c.TotalUSD, c.FechaEmision,
+  SELECT c.idDocumento, c.Tipo, c.Folio, c.TotalUSD, c.FechaEmision,c.TasaEmisionJSON,
          c.DiasPlazo, c.FechaVencimiento, c.Status, c.Notas, c.FechaAlta,
          c.OrigenTipo, c.idOrigen, c.idProveedor, c.idPuntoVenta,
          ISNULL(ab.Abonado, 0)    AS Abonado,

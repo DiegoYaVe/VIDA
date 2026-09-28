@@ -1,3 +1,4 @@
+import ResumenMoneda from '../components/ResumenMoneda.jsx';
 import MonedaCuentas from '../components/MonedaCuentas.jsx';
 // src/pages/Cuentas.jsx
 // Cuentas por pagar (proveedores) y por cobrar (sucursales).
@@ -320,6 +321,7 @@ function PanelDetalle({ idDocumento, puedeAbonar, onCerrar, onCambio }) {
         </div>
 
         <div className="p-6 grid grid-cols-3 gap-4 border-b border-gray-100">
+          <ResumenMoneda datos={c.TasaEmisionJSON} />
           <div><p className="text-xs text-gray-400 font-bold uppercase">Total</p><p className="text-lg font-black tabular-nums">{fmt(c.TotalUSD)}</p></div>
           <div><p className="text-xs text-gray-400 font-bold uppercase">Abonado</p><p className="text-lg font-black tabular-nums text-green-600">{fmt(c.Abonado)}</p></div>
           <div>

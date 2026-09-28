@@ -1,3 +1,5 @@
+import ModalPagoMoneda from '../components/ModalPagoMoneda.jsx';
+import ResumenMoneda from '../components/ResumenMoneda.jsx';
 // src/pages/POS.jsx
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore.js';
@@ -13,13 +15,6 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-// ── Métodos de pago (solo USD) ───────────────────────────────────────────────
-const METODOS_PAGO = [
-  { key: 'EFECTIVO',  label: 'Efectivo',      icon: DollarSign, color: 'bg-green-500'  },
-  { key: 'TARJETA',   label: 'Tarjeta',        icon: CreditCard, color: 'bg-blue-600'   },
-  { key: 'MIXTO',     label: 'Efectivo+Tarjeta', icon: Layers,   color: 'bg-purple-500' },
-];
-
 // ── Ticket de venta ─────────────────────────────────────────────────────────
 function Ticket({ venta, onCerrar }) {
   const handlePrint = () => window.print();
@@ -33,8 +28,9 @@ function Ticket({ venta, onCerrar }) {
             <Check size={24} className="text-green-600"/>
           </div>
           <h3 className="font-bold text-gray-800 text-lg">
-            {venta.offline ? 'Venta guardada (sin conexión)' : '¡Venta completada!'}
+            {venta.revision ? 'Venta pendiente de revisión' : venta.offline ? 'Venta guardada (pendiente de sincronizar)' : '¡Venta completada!'}
           </h3>
+          {venta.revision && <p role="alert" className="text-red-600 text-xs">{venta.revision}. No vuelvas a cobrar esta venta.</p>}
           <p className="text-gray-400 text-sm mt-1">
             {venta.offline
               ? `Ref. ${venta.refOffline} — se sincronizará al volver la conexión`
@@ -61,6 +57,8 @@ function Ticket({ venta, onCerrar }) {
             <span>${venta.total.toFixed(2)}</span>
           </div>
 
+          <ResumenMoneda datos={venta.pago.resumen} />
+          {venta.pago.resumen && <p className="text-xs">Desglose equivalente en USD:</p>}
           {/* Desglose de pago */}
           <div className="border-t border-dashed border-gray-300 my-2"/>
           {pago.metodo === 'EFECTIVO' && (
@@ -118,284 +116,6 @@ function Ticket({ venta, onCerrar }) {
   );
 }
 
-// ── Modal de pago ───────────────────────────────────────────────────────────
-function ModalPago({ total, onConfirmar, onCerrar, procesando }) {
-  const [metodo,   setMetodo]   = useState('EFECTIVO');
-  const [efectivo, setEfectivo] = useState('');  // monto en cash que entrega el cliente
-  const [tarjeta,  setTarjeta]  = useState('');  // monto en tarjeta (MIXTO)
-  const [error,    setError]    = useState('');
-
-  const efectivoNum = parseFloat(efectivo) || 0;
-  const tarjetaNum  = parseFloat(tarjeta)  || 0;
-
-  // ── Cálculos según método ──────────────────────────────────────────────
-  // EFECTIVO: el cliente entrega X, nosotros devolvemos X - total
-  const cambioEfectivo = metodo === 'EFECTIVO' && efectivoNum > 0
-    ? efectivoNum - total
-    : null;
-
-  // MIXTO: el cajero ingresa cuánto paga en tarjeta,
-  // el resto se asume efectivo; o viceversa.
-  // Usamos el campo "efectivo" para ingresar el monto en cash,
-  // y "tarjeta" para el monto en tarjeta. Los dos se calculan mutuamente.
-  const tarjetaAutoMixto  = metodo === 'MIXTO' && efectivoNum > 0
-    ? Math.max(0, total - efectivoNum)
-    : null;
-  const efectivoAutoMixto = metodo === 'MIXTO' && tarjetaNum > 0 && !efectivoNum
-    ? Math.max(0, total - tarjetaNum)
-    : null;
-
-  const efectivoFinalMixto = efectivoNum || efectivoAutoMixto || 0;
-  const tarjetaFinalMixto  = tarjetaNum  || tarjetaAutoMixto  || 0;
-  const totalCubierto      = metodo === 'MIXTO' ? efectivoFinalMixto + tarjetaFinalMixto : 0;
-  const cambioMixto        = metodo === 'MIXTO' && totalCubierto > total
-    ? totalCubierto - total
-    : null;
-  const faltaMixto         = metodo === 'MIXTO' && totalCubierto < total && totalCubierto > 0
-    ? total - totalCubierto
-    : null;
-
-  function cambiarMetodo(m) {
-    setMetodo(m); setEfectivo(''); setTarjeta(''); setError('');
-  }
-
-  function handleConfirmar() {
-    if (metodo === 'EFECTIVO') {
-      if (efectivoNum > 0 && efectivoNum < total) {
-        setError('El efectivo recibido es menor al total'); return;
-      }
-      onConfirmar({
-        metodo,
-        efectivo: efectivoNum > 0 ? efectivoNum : total,
-        tarjeta:  0,
-        cambio:   efectivoNum > 0 ? Math.max(0, efectivoNum - total) : 0,
-      });
-    } else if (metodo === 'TARJETA') {
-      onConfirmar({ metodo, efectivo: 0, tarjeta: total, cambio: 0 });
-    } else {
-      // MIXTO
-      if (totalCubierto < total) {
-        setError(`Falta $${(total - totalCubierto).toFixed(2)} por cubrir`); return;
-      }
-      onConfirmar({
-        metodo,
-        efectivo: efectivoFinalMixto,
-        tarjeta:  tarjetaFinalMixto,
-        cambio:   Math.max(0, totalCubierto - total),
-      });
-    }
-  }
-
-  // Atajos de monto exacto / billetes comunes
-  const billetesUSD = [1, 5, 10, 20, 50, 100].filter(b => b >= total);
-  const atajosEfectivo = billetesUSD.slice(0, 4);
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
-
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b">
-          <h3 className="font-bold text-gray-800 text-lg">Cobrar venta</h3>
-          <button onClick={onCerrar} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
-        </div>
-
-        <div className="p-5 space-y-4">
-
-          {/* Total destacado */}
-          <div className="rounded-2xl p-4 text-center" style={{ background: 'linear-gradient(135deg, #0A1E3F15, #5BBE6A15)' }}>
-            <p className="text-xs text-gray-500 mb-1 font-medium">Total a cobrar</p>
-            <p className="text-5xl font-black text-vida-blue">${total.toFixed(2)}</p>
-            <p className="text-xs text-gray-400 mt-1">USD</p>
-          </div>
-
-          {error && (
-            <p className="text-red-600 text-sm bg-red-50 border border-red-200 px-3 py-2 rounded-xl">
-              {error}
-            </p>
-          )}
-
-          {/* Selector de método */}
-          <div>
-            <p className="text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">Método de pago</p>
-            <div className="grid grid-cols-3 gap-2">
-              {METODOS_PAGO.map(m => {
-                const Icon = m.icon;
-                const activo = metodo === m.key;
-                return (
-                  <button key={m.key} onClick={() => cambiarMetodo(m.key)}
-                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-xs font-bold transition-all ${
-                      activo
-                        ? 'border-vida-blue bg-blue-50 text-vida-blue'
-                        : 'border-gray-100 text-gray-500 hover:border-gray-200 hover:bg-gray-50'
-                    }`}>
-                    <Icon size={20}/>
-                    {m.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ── EFECTIVO ─────────────────────────────────────────── */}
-          {metodo === 'EFECTIVO' && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1">
-                  Efectivo recibido <span className="font-normal text-gray-400">(opcional)</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
-                  <input
-                    type="number" min="0" step="0.01"
-                    value={efectivo}
-                    onChange={e => { setEfectivo(e.target.value); setError(''); }}
-                    placeholder={total.toFixed(2)}
-                    className="w-full pl-7 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue text-right font-mono text-lg"
-                    autoFocus
-                  />
-                </div>
-                {/* Atajos de billetes */}
-                {atajosEfectivo.length > 0 && (
-                  <div className="flex gap-1.5 mt-2 flex-wrap">
-                    <button onClick={() => setEfectivo(total.toFixed(2))}
-                      className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-600 transition">
-                      Exacto
-                    </button>
-                    {atajosEfectivo.map(b => (
-                      <button key={b} onClick={() => setEfectivo(String(b))}
-                        className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-600 transition">
-                        ${b}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Cambio */}
-              {cambioEfectivo !== null && (
-                <div className={`rounded-xl p-3 flex items-center justify-between ${
-                  cambioEfectivo >= 0 ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
-                }`}>
-                  <span className={`text-sm font-bold ${cambioEfectivo >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                    {cambioEfectivo >= 0 ? 'Cambio a devolver' : 'Monto insuficiente'}
-                  </span>
-                  <span className={`text-2xl font-black ${cambioEfectivo >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                    ${Math.abs(cambioEfectivo).toFixed(2)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── TARJETA ──────────────────────────────────────────── */}
-          {metodo === 'TARJETA' && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
-              <CreditCard size={28} className="text-blue-500 mx-auto mb-2"/>
-              <p className="text-sm font-bold text-blue-700">Cobrar ${total.toFixed(2)} en tarjeta</p>
-              <p className="text-xs text-blue-400 mt-1">Procesa el pago en el terminal y luego confirma</p>
-            </div>
-          )}
-
-          {/* ── MIXTO ────────────────────────────────────────────── */}
-          {metodo === 'MIXTO' && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 flex items-center gap-1">
-                    <DollarSign size={12}/> Efectivo
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">$</span>
-                    <input
-                      type="number" min="0" step="0.01"
-                      value={efectivo}
-                      onChange={e => { setEfectivo(e.target.value); setTarjeta(''); setError(''); }}
-                      placeholder="0.00"
-                      className="w-full pl-6 pr-2 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400 text-right font-mono"
-                      autoFocus
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 flex items-center gap-1">
-                    <CreditCard size={12}/> Tarjeta
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">$</span>
-                    <input
-                      type="number" min="0" step="0.01"
-                      value={tarjeta}
-                      onChange={e => { setTarjeta(e.target.value); setEfectivo(''); setError(''); }}
-                      placeholder="0.00"
-                      className="w-full pl-6 pr-2 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 text-right font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Resumen mixto */}
-              {(efectivoFinalMixto > 0 || tarjetaFinalMixto > 0) && (
-                <div className="bg-gray-50 rounded-xl p-3 space-y-1.5 text-sm">
-                  <div className="flex justify-between text-gray-600">
-                    <span>Efectivo</span>
-                    <span className="font-mono">${efectivoFinalMixto.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Tarjeta</span>
-                    <span className="font-mono">${tarjetaFinalMixto.toFixed(2)}</span>
-                  </div>
-                  <div className="border-t border-gray-200 pt-1.5 flex justify-between font-bold">
-                    <span>Total cubierto</span>
-                    <span className={`font-mono ${totalCubierto >= total ? 'text-green-600' : 'text-red-500'}`}>
-                      ${totalCubierto.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Cambio / falta */}
-              {cambioMixto !== null && cambioMixto > 0 && (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex items-center justify-between">
-                  <span className="text-sm font-bold text-green-700">Cambio a devolver</span>
-                  <span className="text-2xl font-black text-green-600">${cambioMixto.toFixed(2)}</span>
-                </div>
-              )}
-              {faltaMixto !== null && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 flex items-center justify-between">
-                  <span className="text-sm font-bold text-yellow-700">Aún falta</span>
-                  <span className="text-xl font-black text-yellow-600">${faltaMixto.toFixed(2)}</span>
-                </div>
-              )}
-              <p className="text-xs text-gray-400 text-center">
-                Ingresa el monto en efectivo y la tarjeta se calcula sola, o viceversa
-              </p>
-            </div>
-          )}
-
-        </div>
-
-        {/* Botones */}
-        <div className="flex gap-2 p-5 border-t">
-          <button onClick={onCerrar}
-            className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-3 text-sm font-semibold hover:bg-gray-50">
-            Cancelar
-          </button>
-          <button onClick={handleConfirmar} disabled={procesando}
-            className="flex-[2] text-white rounded-xl px-6 py-3 text-sm font-black hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
-            style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
-            <Check size={18}/>
-            {procesando ? 'Procesando...' : 'Confirmar cobro'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-// PANTALLA POS PRINCIPAL
-// ══════════════════════════════════════════════════════════════════════════
 export default function POS() {
   const { usuario } = useAuthStore();
 
@@ -573,12 +293,14 @@ export default function POS() {
     const clienteUUID = genUUID();
     const venta = {
       ClienteUUID:   clienteUUID,
+      Propietario: {idBranch:usuario.idBranch,idCuenta:usuario.idCuenta,idUsuario:usuario.idUsuario},
+      PagoMoneda:pagoInfo.PagoMoneda,
       idPuntoVenta:  parseInt(idPuntoVenta),
       MetodoPago:    pagoInfo.metodo,
       MontoEfectivo: pagoInfo.efectivo || null,
       MontoTarjeta:  pagoInfo.tarjeta  || null,
       MontoCambio:   pagoInfo.cambio   || null,
-      FechaVenta:    new Date().toISOString(),
+      FechaVenta:    pagoInfo.FechaVenta || new Date().toISOString(),
       CuponCodigo:       cuponCodigo || null,
       CuponDescuentoUSD: cuponCodigo ? descuentoCupon : null,
       items: carrito.map(i => ({
@@ -595,14 +317,10 @@ export default function POS() {
       const sincronizada = resultado?.synced?.find(s => s.ClienteUUID === clienteUUID);
       const rechazada    = resultado?.failed?.find(f => f.ClienteUUID === clienteUUID);
 
-      if (rechazada) {
-        // El servidor la rechazó por datos inválidos — no es un problema de red
-        setError(rechazada.motivo || 'Error al procesar la venta');
-        setModalPago(false);
-        return;
-      }
+      if (rechazada) setError(`Venta guardada para revisión: ${rechazada.motivo}. No vuelvas a cobrarla.`);
 
       setTicket({
+        revision: rechazada?.motivo || null,
         idPedido:   sincronizada?.idPedido ?? null,
         offline:    !sincronizada,
         refOffline: clienteUUID.slice(-8).toUpperCase(),
@@ -889,7 +607,8 @@ export default function POS() {
 
       {/* Modal de pago */}
       {modalPago && (
-        <ModalPago
+        <ModalPagoMoneda
+          usuario={usuario} idPuntoVenta={idPuntoVenta}
           total={totalFinal}
           procesando={procesando}
           onConfirmar={confirmarVenta}

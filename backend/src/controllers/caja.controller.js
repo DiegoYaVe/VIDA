@@ -55,7 +55,7 @@ async function calcularTotales(pool, idBranch, idCuenta, idPuntoVenta, fechaAper
     SELECT
       COUNT(*)                                       AS NumTransacciones,
       ISNULL(SUM(p.TotalUSD), 0)                    AS TotalVentas,
-      ISNULL(SUM(CASE WHEN p.MetodoPago IN ('EFECTIVO','MIXTO') THEN ISNULL(p.MontoEfectivo, p.TotalUSD) ELSE 0 END), 0) AS TotalEfectivo,
+      ISNULL(SUM(CASE WHEN p.MetodoPago IN ('EFECTIVO','MIXTO') THEN ISNULL(p.MontoEfectivo, p.TotalUSD) - ISNULL(p.MontoCambio,0) ELSE 0 END), 0) AS TotalEfectivo,
       ISNULL(SUM(CASE WHEN p.MetodoPago IN ('TARJETA','MIXTO')  THEN ISNULL(p.MontoTarjeta,  0)           ELSE 0 END), 0) AS TotalTarjeta
     FROM VIDA_PEDIDOS p
     WHERE p.idBranch      = @idBranch
@@ -63,10 +63,20 @@ async function calcularTotales(pool, idBranch, idCuenta, idPuntoVenta, fechaAper
       AND p.idPuntoVenta  = @idPuntoVenta
       AND p.Canal         = 'POS'
       AND p.Status        = 'ENTREGADO'
-      ${fechaCondicion}
+      ${fechaCondicion};
+    SELECT p.TotalUSD,p.MontoEfectivo,p.MontoCambio,p.PagoMonedaJSON FROM VIDA_PEDIDOS p
+      WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.idPuntoVenta=@idPuntoVenta
+      AND p.Canal='POS' AND p.Status='ENTREGADO' AND p.MetodoPago IN ('EFECTIVO','MIXTO') ${fechaCondicion}
   `);
 
-  return r.recordset[0];
+  const originales={USD:0,VES:0};
+  for(const venta of r.recordsets[1] || []) {
+    if(venta.PagoMonedaJSON) {
+      const p=JSON.parse(venta.PagoMonedaJSON);
+      originales[p.Moneda]+=Number(p.Efectivo)-Number(p.Cambio);
+    } else originales.USD+=Number(venta.MontoEfectivo ?? venta.TotalUSD ?? 0)-Number(venta.MontoCambio||0);
+  }
+  return {...r.recordset[0],EfectivoOriginalUSD:originales.USD,EfectivoOriginalVES:originales.VES};
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -304,6 +314,7 @@ export async function resumenTurno(request, reply) {
       ventas: {
         TotalVentas:      totales.TotalVentas,
         TotalEfectivo:    totales.TotalEfectivo,
+        EfectivoOriginalUSD:totales.EfectivoOriginalUSD,EfectivoOriginalVES:totales.EfectivoOriginalVES,
         TotalTarjeta:     totales.TotalTarjeta,
         NumTransacciones: totales.NumTransacciones,
       },

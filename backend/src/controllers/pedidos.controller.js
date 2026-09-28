@@ -1,3 +1,4 @@
+import { calcularPagoPos, validarVigenciaCotizacion } from '../services/pagoPos.service.js';
 // src/controllers/pedidos.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
 import { broadcast } from '../ws/ws.manager.js';
@@ -71,7 +72,7 @@ export async function listarPedidos(request, reply) {
 
     const r = await req.query(`
       SELECT p.idPedido, p.Canal, p.Status, p.MetodoPago, p.StatusPago,
-             p.TotalUSD, p.MontoEfectivo, p.MontoTarjeta, p.MontoCambio,
+             p.TotalUSD, p.MontoEfectivo, p.MontoTarjeta, p.MontoCambio, p.PagoMonedaJSON,
              p.Notas, p.FechaAlta, p.FechaExpiracion,
              p.RequiereRevision, p.EsOffline,
              p.OrdenRuta, p.ETAEntrega,
@@ -136,7 +137,7 @@ export async function obtenerPedido(request, reply) {
       .query(`
         SELECT p.idPedido, p.idCliente, p.idRepartidor, p.idPuntoVenta,
                p.Canal, p.Status, p.MetodoPago, p.StatusPago,
-               p.TotalUSD, p.MontoEfectivo, p.MontoTarjeta, p.MontoCambio,
+               p.TotalUSD, p.MontoEfectivo, p.MontoTarjeta, p.MontoCambio, p.PagoMonedaJSON,
                p.Notas, p.FechaAlta, p.FechaExpiracion,
                p.RequiereRevision, p.EsOffline, p.EvidenciaEntregaURL,
                p.OrdenRuta, p.DistanciaKm, p.ETAEntrega,
@@ -401,8 +402,25 @@ async function procesarVentaOffline(pool, { venta, idBranch, idCuenta, idUsuario
     // aquí se refleja en el total registrado (lo que realmente se cobró).
     const cuponCodigo = venta.CuponCodigo ? String(venta.CuponCodigo).trim().toUpperCase().slice(0, 40) : null;
     const descuentoCupon = Math.max(0, Math.min(parseFloat(venta.CuponDescuentoUSD) || 0, itemsSum));
-    const totalUSD = +Math.max(0, itemsSum - descuentoCupon).toFixed(4);
+    const totalUSD = +Math.max(0, itemsSum - descuentoCupon).toFixed(venta.PagoMoneda ? 2 : 4);
     const fechaVenta = fechaVentaValida(venta.FechaVenta);
+    let pagoMoneda=null;
+    if (venta.PagoMoneda) {
+      if(!fechaVenta) throw new Error('Fecha de venta inválida');
+      const c=await new sql.Request(transaction).input('id',sql.UniqueIdentifier,venta.PagoMoneda.idCotizacion)
+        .input('b',sql.BigInt,idBranch).input('c',sql.BigInt,idCuenta)
+        .query(`SELECT q.*,t.VESporUSD,t.FechaValor,t.Fuente FROM VIDA_POS_COTIZACIONES q
+          JOIN VIDA_TASAS_CAMBIO t ON t.idTasa=q.idTasa AND t.idBranch=q.idBranch AND t.idCuenta=q.idCuenta
+          WHERE q.idCotizacion=@id AND q.idBranch=@b AND q.idCuenta=@c`);
+      const cot=c.recordset[0];
+      validarVigenciaCotizacion(cot,{idBranch,idCuenta,idUsuario,idPuntoVenta:venta.idPuntoVenta},fechaVenta);
+      pagoMoneda=calcularPagoPos(totalUSD,venta.PagoMoneda,cot,cot.Modo);
+      venta={...venta,MetodoPago:pagoMoneda.Metodo,MontoEfectivo:pagoMoneda.EfectivoUSD,MontoTarjeta:pagoMoneda.TarjetaUSD,MontoCambio:pagoMoneda.CambioUSD};
+    } else {
+      const corte=await new sql.Request(transaction).query('SELECT FechaInicio FROM VIDA_POS_MONEDA_VERSION WHERE id=1');
+      if(!fechaVenta || fechaVenta>=corte.recordset[0].FechaInicio) throw new Error('Actualiza el POS y consulta una tasa antes de cobrar');
+    }
+
 
     await new sql.Request(transaction)
       .input('idBranch',      sql.BigInt,       idBranch)
@@ -410,6 +428,7 @@ async function procesarVentaOffline(pool, { venta, idBranch, idCuenta, idUsuario
       .input('idPedido',      sql.BigInt,       idPedido)
       .input('idPuntoVenta',  sql.BigInt,       venta.idPuntoVenta)
       .input('ClienteUUID',   sql.VarChar(40),  venta.ClienteUUID)
+      .input('PagoMonedaJSON',sql.NVarChar(sql.MAX),pagoMoneda ? JSON.stringify(pagoMoneda) : null)
       .input('MetodoPago',    sql.VarChar(20),  venta.MetodoPago || null)
       .input('TotalUSD',      sql.Decimal(18,4), totalUSD)
       .input('MontoEfectivo', sql.Decimal(18,4), venta.MontoEfectivo ?? null)
@@ -423,11 +442,11 @@ async function procesarVentaOffline(pool, { venta, idBranch, idCuenta, idUsuario
       .query(`INSERT INTO VIDA_PEDIDOS
                 (idBranch, idCuenta, idPedido, idPuntoVenta, Canal, Status,
                  MetodoPago, StatusPago, TotalUSD, MontoEfectivo, MontoTarjeta, MontoCambio,
-                 Notas, ClienteUUID, EsOffline, CuponCodigo, CuponDescuentoUSD, FechaAlta, UsuAlta)
+                 Notas, ClienteUUID, PagoMonedaJSON, EsOffline, CuponCodigo, CuponDescuentoUSD, FechaAlta, UsuAlta)
               VALUES
                 (@idBranch, @idCuenta, @idPedido, @idPuntoVenta, 'POS', 'ENTREGADO',
                  @MetodoPago, 'PAGADO', @TotalUSD, @MontoEfectivo, @MontoTarjeta, @MontoCambio,
-                 @Notas, @ClienteUUID, 1, @CuponCodigo, @CuponDescuentoUSD, ISNULL(@FechaVenta, GETUTCDATE()), @UsuAlta)`);
+                 @Notas, @ClienteUUID, @PagoMonedaJSON, 1, @CuponCodigo, @CuponDescuentoUSD, ISNULL(@FechaVenta, GETUTCDATE()), @UsuAlta)`);
 
     let requiereRevision = false;
 
@@ -596,10 +615,13 @@ export async function sincronizarVentasOffline(request, reply) {
         continue;
       }
 
+      if (!['SUPER_ADMIN','ADMIN_PAIS','ADMIN_ESTADO'].includes(request.user.TipoUsuario) && String(venta.idPuntoVenta)!==String(request.user.idPuntoVenta)) throw new Error('Tienda no autorizada');
+
       // Idempotencia: si el UUID ya está registrado, se responde como synced
       const dupR = await pool.request()
         .input('uuid', sql.VarChar(40), uuid)
-        .query(`SELECT idPedido FROM VIDA_PEDIDOS WHERE ClienteUUID=@uuid`);
+        .input('b',sql.BigInt,idBranch).input('c',sql.BigInt,idCuenta)
+        .query(`SELECT idPedido FROM VIDA_PEDIDOS WHERE ClienteUUID=@uuid AND idBranch=@b AND idCuenta=@c`);
       if (dupR.recordset[0]) {
         synced.push({ ClienteUUID: uuid, idPedido: dupR.recordset[0].idPedido, duplicado: true });
         continue;
@@ -621,7 +643,8 @@ export async function sincronizarVentasOffline(request, reply) {
       if (err.number === 2601 || err.number === 2627) {
         const r = await pool.request()
           .input('uuid', sql.VarChar(40), uuid)
-          .query(`SELECT idPedido FROM VIDA_PEDIDOS WHERE ClienteUUID=@uuid`);
+        .input('b',sql.BigInt,idBranch).input('c',sql.BigInt,idCuenta)
+          .query(`SELECT idPedido FROM VIDA_PEDIDOS WHERE ClienteUUID=@uuid AND idBranch=@b AND idCuenta=@c`);
         if (r.recordset[0]) {
           synced.push({ ClienteUUID: uuid, idPedido: r.recordset[0].idPedido, duplicado: true });
           continue;
@@ -1169,7 +1192,7 @@ export async function listarVentasPOS(request, reply) {
     // Pedidos POS entregados (ventas completadas)
     const pedidosR = await req.query(`
       SELECT p.idPedido, p.FechaAlta, p.MetodoPago, p.StatusPago,
-             p.TotalUSD, p.MontoEfectivo, p.MontoTarjeta, p.MontoCambio,
+             p.TotalUSD, p.MontoEfectivo, p.MontoTarjeta, p.MontoCambio, p.PagoMonedaJSON,
              p.Status, pv.NomComercial AS NombreSucursal
       FROM VIDA_PEDIDOS p
       LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA pv

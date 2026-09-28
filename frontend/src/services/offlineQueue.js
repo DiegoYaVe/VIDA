@@ -73,7 +73,7 @@ export async function marcarFallo(clienteUUID, motivo) {
   if (!venta) return;
   venta.intentos = (venta.intentos || 0) + 1;
   venta.ultimoError = motivo;
-  if (venta.intentos >= MAX_INTENTOS) {
+  if (venta.intentos >= MAX_INTENTOS && !venta.PagoMoneda) {
     await db.put(STORE_DESCARTADAS, { ...venta, descartadaEn: new Date().toISOString() });
     await db.delete(STORE_VENTAS, clienteUUID);
     console.error(`[offline] Venta ${clienteUUID} descartada tras ${MAX_INTENTOS} intentos: ${motivo}`);
