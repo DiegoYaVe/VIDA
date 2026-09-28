@@ -1,3 +1,18 @@
+## Actualización 2026-09-28 — Cobro combinado POS y arqueo por moneda
+
+Esta entrada prevalece sobre las limitaciones de fase inicial descritas debajo.
+
+- Implementado POS USD+VES simultáneo cuando configuración AMBAS. UI captura efectivo/tarjeta por moneda y moneda del cambio; backend recalcula sobre TC autorizada histórica. Conserva compatibilidad de ventas/colas anteriores en una sola moneda. Metodo sigue significando efectivo/tarjeta/mixto; Moneda MIXTA identifica ambas divisas.
+- Cálculo puro compartido: backend/src/domain/pagoPos.mjs (sin dependencias de servidor), reexportado por services/pagoPos.service.js e importado por frontend para vista previa. Publicar backend/src completo, incluyendo domain; frontend ya lleva función compilada en dist. Verificado acceso del módulo en Vite local.
+- PagoMonedaJSON incluye Desglose USD/VES con Efectivo/Tarjeta/Cambio y equivalentes USD anteriores para reportes. Cambio limitado al efectivo recibido en la misma moneda, no usa caja previa para hacer cambio cruzado. Deuda redondeada a centavos USD; cambio a centavos de moneda elegida; AjusteRedondeoUSD guarda residuo a 4 decimales. Tarjetas son registro, NO pasarela nueva.
+- Migración **43_arqueo_monedas.sql**, preparada NO ejecutada por agente. Requiere 42 (tampoco confirmada aplicada después de su preparación). Agrega MontoAperturaVES y ArqueoMonedasJSON. NO modifica cierres antiguos ni stock. Backend y frontend deben desplegarse juntos después de SQL.
+- Apertura cuenta USD físico y VES físico. Cierre exige ambos conteos incluso si son cero, calcula por separado apertura + ventas efectivo neto de cambio, excluye tarjetas y no consulta TC. Guarda snapshot Version=2 con Apertura/VentasNetas/Esperado/Contado/Diferencia por moneda. MontoCierre/Diferencia convencionales representan USD físico para nuevos cierres con JSON; sin JSON siguen significado histórico equivalente USD. No agregar ciegamente cierres de ambas versiones.
+- Cierre usa transacción SERIALIZABLE, bloqueo del turno, una fecha de corte SQL y snapshot al confirmar. Historial/resumen cerrado conserva totales guardados aunque llegue una venta offline tardía. Se corrigió acceso por idTurno de tienda ajena y usuario sin tienda en cierre/historial/resumen.
+- Panel impide cerrar si detecta pendientes de esa tienda en IndexedDB local y avisa sincronizar TODOS los equipos. **Pendiente** conciliación de ventas tardías/idTurno explícito; hoy asignación por tienda+fecha. Listado de pedidos del turno aún puede mostrar ventas recibidas después del cierre; snapshot no cambia. No confundir transacción de cierre con resolución completa del offline entre equipos.
+- **Pendientes**: devoluciones/egresos/depósitos de caja, factura/exportación, apps multimoneda, reportes financieros globales; CXC/CXP continúa con abonos individuales, no cobro combinado atómico nuevo. No se tocó trabajo paralelo de delivery/apps/Sucursales.
+- Validación: 114 pruebas unitarias aprobadas (12 nuevas combinaciones y arqueo), sintaxis backend y build frontend; módulo compartido servido HTTP200 en Vite. Sin SQL real, migraciones, pagos reales ni prueba visual con sesión. Guía reproducible local/versionada: PRUEBA-POS-MONEDAS.md.
+- Próximo: ejecutar 42 si faltaba y 43 en SQL Server de pruebas, probar guía; continuar factura/exportación y después apps. Commit local de este lote, sin push.
+
 ## Actualización 2026-09-28 — POS y tasa de emisión (fase inicial)
 
 - Usuario confirmó migraciones previas aplicadas. **42_pos_moneda_documentos.sql está preparada, NO ejecutada**. Requiere 40/41; aplicar antes de publicar backend/front juntos. Incluye cotizaciones de TC por usuario/tenant/tienda, fecha de corte para clientes antiguos y JSON históricos en pedidos/cuentas.

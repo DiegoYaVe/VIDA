@@ -1,39 +1,7 @@
-/*
- * ============================================================
- * MIGRACIÓN SQL — ejecutar manualmente en SQL Server
- * ============================================================
- *
- * CREATE TABLE VIDA_CAJA_TURNOS (
- *   idBranch              BIGINT          NOT NULL,
- *   idCuenta              BIGINT          NOT NULL,
- *   idTurno               BIGINT          NOT NULL,
- *   idPuntoVenta          BIGINT          NOT NULL,
- *   idUsuario             BIGINT          NOT NULL,
- *   NombreUsuario         VARCHAR(200)    NULL,
- *   NombreSucursal        VARCHAR(200)    NULL,
- *   FechaApertura         DATETIME        NOT NULL DEFAULT GETDATE(),
- *   FechaCierre           DATETIME        NULL,
- *   MontoApertura         DECIMAL(18,4)   NOT NULL DEFAULT 0,
- *   TotalVentasEfectivo   DECIMAL(18,4)   NOT NULL DEFAULT 0,
- *   TotalVentasTarjeta    DECIMAL(18,4)   NOT NULL DEFAULT 0,
- *   TotalVentas           DECIMAL(18,4)   NOT NULL DEFAULT 0,
- *   NumTransacciones      INT             NOT NULL DEFAULT 0,
- *   MontoCierre           DECIMAL(18,4)   NULL,
- *   Diferencia            DECIMAL(18,4)   NULL,
- *   Observaciones         VARCHAR(500)    NULL,
- *   Status                VARCHAR(20)     NOT NULL DEFAULT 'ABIERTO',
- *   UsuAlta               VARCHAR(10)     NULL,
- *   FechaAlta             DATETIME        NOT NULL DEFAULT GETDATE(),
- *   CONSTRAINT PK_VIDA_CAJA_TURNOS PRIMARY KEY (idBranch, idCuenta, idTurno)
- * );
- *
- * ============================================================
- */
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Wallet, Clock, DollarSign, CreditCard, ShoppingCart,
-  RefreshCw, X, CheckCircle, AlertTriangle, ChevronLeft, ChevronRight, Store,
+  RefreshCw, ChevronLeft, ChevronRight, Store,
 } from 'lucide-react';
 
 // Roles de RED (corporativo): no están atados a una tienda, así que eligen a
@@ -41,6 +9,7 @@ import {
 const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
 import { useAuthStore } from '../store/authStore.js';
 import api from '../services/api.js';
+import ModalCierre, {ArqueoHistorial} from '../components/ArqueoCaja.jsx';
 import { useToast } from '../components/Toast.jsx';
 
 // ── Utilidades ─────────────────────────────────────────────────────────────
@@ -114,155 +83,6 @@ function KpiCard({ icon: Icon, label, value, color = 'text-[#0A1E3F]', sub }) {
 // Modal de Cierre
 // ══════════════════════════════════════════════════════════════════════════════
 
-function ModalCierre({ turno, ventas, efectivoEsperado, onClose, onCerrado }) {
-  const toast = useToast();
-  const [montoCierre, setMontoCierre] = useState('');
-  const [observaciones, setObservaciones] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [confirmado, setConfirmado] = useState(false);
-  const [turnoCerrado, setTurnoCerrado] = useState(null);
-
-  const diferencia = montoCierre !== '' ? parseFloat(montoCierre) - (efectivoEsperado || 0) : null;
-
-  async function handleConfirmar() {
-    if (montoCierre === '' || isNaN(parseFloat(montoCierre))) {
-      toast.error('Ingresa el monto contado en caja');
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await api.post('/caja/cierre', {
-        idTurno: turno.idTurno,
-        MontoCierre: parseFloat(montoCierre),
-        Observaciones: observaciones || null,
-      });
-      setTurnoCerrado(res.data.turno);
-      setConfirmado(true);
-      toast.success('Caja cerrada correctamente');
-      onCerrado();
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Error al cerrar caja');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b">
-          <h2 className="text-lg font-bold text-gray-800">
-            {confirmado ? 'Turno Cerrado' : 'Cerrar Turno de Caja'}
-          </h2>
-          {!confirmado && (
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-              <X size={20} />
-            </button>
-          )}
-        </div>
-
-        <div className="p-5 space-y-4">
-          {confirmado && turnoCerrado ? (
-            /* ── Resumen final ── */
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-green-600 font-semibold">
-                <CheckCircle size={20} />
-                Turno #{turnoCerrado.idTurno} cerrado
-              </div>
-              <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
-                <Row label="Cajero"              value={turnoCerrado.NombreUsuario || '—'} />
-                <Row label="Sucursal"            value={turnoCerrado.NombreSucursal || '—'} />
-                <Row label="Apertura"            value={formatHora(turnoCerrado.FechaApertura)} />
-                <Row label="Cierre"              value={formatHora(turnoCerrado.FechaCierre)} />
-                <hr />
-                <Row label="Efectivo inicial"    value={fmt(turnoCerrado.MontoApertura)} />
-                <Row label="Ventas efectivo"     value={fmt(turnoCerrado.TotalVentasEfectivo)} />
-                <Row label="Ventas tarjeta"      value={fmt(turnoCerrado.TotalVentasTarjeta)} />
-                <Row label="Total ventas"        value={fmt(turnoCerrado.TotalVentas)} bold />
-                <Row label="Transacciones"       value={turnoCerrado.NumTransacciones} />
-                <hr />
-                <Row label="Efectivo contado"    value={fmt(turnoCerrado.MontoCierre)} />
-                <Row
-                  label="Diferencia"
-                  value={fmt(turnoCerrado.Diferencia)}
-                  valueColor={parseFloat(turnoCerrado.Diferencia) < 0 ? 'text-red-600' : 'text-green-600'}
-                  bold
-                />
-              </div>
-              <button onClick={onClose} className="btn-primary w-full">
-                Listo
-              </button>
-            </div>
-          ) : (
-            /* ── Formulario de cierre ── */
-            <>
-              <div className="bg-blue-50 rounded-xl p-4 text-sm space-y-1">
-                <p className="text-gray-600">Efectivo esperado (equivalente USD):</p>
-                <p className="text-2xl font-bold text-[#0A1E3F]">{fmt(efectivoEsperado)}</p>
-                <p className="text-xs text-gray-400">
-                  Inicial {fmt(turno.MontoApertura)} + Ventas en efectivo {fmt(ventas?.TotalEfectivo)} (equivalentes USD).
-                  <br/>Entradas netas originales: {Number(ventas?.EfectivoOriginalUSD||0).toFixed(2)} USD y {Number(ventas?.EfectivoOriginalVES||0).toFixed(2)} VES.
-                  <br/>Este cierre aún registra el conteo como equivalente USD; no es un arqueo independiente de billetes por moneda.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Efectivo contado en caja (USD) *
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className="input-field"
-                  placeholder="0.00"
-                  value={montoCierre}
-                  onChange={(e) => setMontoCierre(e.target.value)}
-                />
-                {diferencia !== null && (
-                  <p className={`mt-1 text-sm font-semibold ${diferencia < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    Diferencia: {diferencia >= 0 ? '+' : ''}{fmt(diferencia)}
-                    {diferencia < 0 && <AlertTriangle className="inline ml-1" size={14} />}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Observaciones (opcional)
-                </label>
-                <textarea
-                  className="input-field resize-none"
-                  rows={3}
-                  placeholder="Notas sobre el cierre..."
-                  value={observaciones}
-                  onChange={(e) => setObservaciones(e.target.value)}
-                />
-              </div>
-
-              <div className="flex gap-3 pt-1">
-                <button
-                  onClick={onClose}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleConfirmar}
-                  disabled={loading}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium transition disabled:opacity-50"
-                >
-                  {loading ? 'Cerrando...' : 'Confirmar Cierre'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function Row({ label, value, bold = false, valueColor = 'text-gray-800' }) {
   return (
@@ -290,10 +110,10 @@ export default function CierreCaja() {
   const [turno, setTurno]               = useState(null);
   const [ventas, setVentas]             = useState(null);
   const [pedidos, setPedidos]           = useState([]);
-  const [efectivoEsperado, setEfectivoEsperado] = useState(0);
 
   // Estado apertura
   const [montoApertura, setMontoApertura]       = useState('');
+  const [aperturaVES,setAperturaVES]=useState('0');
   const [obsApertura, setObsApertura]           = useState('');
   const [loadingApertura, setLoadingApertura]   = useState(false);
 
@@ -342,7 +162,6 @@ export default function CierreCaja() {
         setTurno(res.data.turno);
         setVentas(res.data.ventas);
         setPedidos(res.data.pedidos || []);
-        setEfectivoEsperado(res.data.efectivoEsperado || 0);
       }
     } catch (err) {
       toast.error('Error al cargar resumen');
@@ -357,7 +176,7 @@ export default function CierreCaja() {
   const cargarHistorial = useCallback(async (page = 1) => {
     try {
       const res = await api.get('/caja/historial', {
-        params: { page, limit: HIST_LIMIT },
+        params: { page, limit: HIST_LIMIT, ...(esRed&&pvSel?{idPuntoVenta:pvSel}:{}) },
       });
       setHistorial(res.data.data || []);
       setHistTotal(res.data.total || 0);
@@ -365,7 +184,7 @@ export default function CierreCaja() {
     } catch (err) {
       toast.error('Error al cargar historial');
     }
-  }, []);
+  }, [esRed,pvSel]);
 
   // ── Efectos ──────────────────────────────────────────────────────────────
 
@@ -419,12 +238,13 @@ export default function CierreCaja() {
     setLoadingApertura(true);
     try {
       await api.post('/caja/apertura', {
-        MontoApertura: parseFloat(montoApertura),
+        MontoApertura: Number(montoApertura),
+        MontoAperturaVES: Number(aperturaVES),
         Observaciones: obsApertura || null,
         ...(esRed && pvSel ? { idPuntoVenta: parseInt(pvSel) } : {}),
       });
       toast.success('Caja abierta correctamente');
-      setMontoApertura('');
+      setMontoApertura('');setAperturaVES('0');
       setObsApertura('');
       cargarTurnoActivo();
     } catch (err) {
@@ -547,6 +367,9 @@ export default function CierreCaja() {
                         onChange={(e) => setMontoApertura(e.target.value)}
                       />
                     </div>
+                    <label className="block text-sm font-medium">Monto inicial en caja (VES efectivo)
+                      <input type="number" min="0" step="0.01" className="input-field" value={aperturaVES} onChange={e=>setAperturaVES(e.target.value)}/>
+                    </label>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Observaciones (opcional)
@@ -594,7 +417,7 @@ export default function CierreCaja() {
                               <td className="px-4 py-3 text-gray-800">{t.NombreUsuario || '—'}</td>
                               <td className="px-4 py-3 text-right font-medium">{fmt(t.TotalVentas)}</td>
                               <td className={`px-4 py-3 text-right font-medium ${parseFloat(t.Diferencia) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                {t.Diferencia !== null ? (parseFloat(t.Diferencia) >= 0 ? '+' : '') + fmt(t.Diferencia) : '—'}
+                                <ArqueoHistorial turno={t} campo="Diferencia"/>
                               </td>
                               <td className="px-4 py-3 text-center">
                                 <StatusBadge status={t.Status} />
@@ -651,13 +474,13 @@ export default function CierreCaja() {
                   />
                   <KpiCard
                     icon={Wallet}
-                    label="Efectivo recibido"
+                    label="Efectivo neto (equiv. USD)"
                     value={fmt(ventas?.TotalEfectivo)}
                     color="text-[#5BBE6A]"
                   />
                   <KpiCard
                     icon={CreditCard}
-                    label="Tarjeta"
+                    label="Tarjeta (equiv. USD)"
                     value={fmt(ventas?.TotalTarjeta)}
                     color="text-purple-600"
                   />
@@ -672,20 +495,11 @@ export default function CierreCaja() {
                 {/* Resumen de caja */}
                 <div className="card p-5 space-y-3">
                   <h3 className="font-semibold text-gray-700 mb-1">Resumen de Caja</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between text-gray-600">
-                      <span>Efectivo inicial</span>
-                      <span>{fmt(turno.MontoApertura)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600">
-                      <span>Ventas en efectivo</span>
-                      <span>{fmt(ventas?.TotalEfectivo)}</span>
-                    </div>
-                    <div className="flex justify-between border-t pt-2 font-bold text-gray-800 text-base">
-                      <span>Efectivo esperado en caja</span>
-                      <span className="text-[#0A1E3F]">{fmt(efectivoEsperado)}</span>
-                    </div>
-                  </div>
+                  {['USD','VES'].map(m=><div key={m} className="text-sm space-y-1 border-t pt-2">
+                    <Row label={'Apertura '+m} value={Number(m==='USD'?turno.MontoApertura:turno.MontoAperturaVES||0).toFixed(2)+' '+m}/>
+                    <Row label={'Ventas efectivo neto '+m} value={Number(ventas?.['EfectivoOriginal'+m]||0).toFixed(2)+' '+m}/>
+                    <Row bold label={'Esperado '+m} value={(Number(m==='USD'?turno.MontoApertura:turno.MontoAperturaVES||0)+Number(ventas?.['EfectivoOriginal'+m]||0)).toFixed(2)+' '+m}/>
+                  </div>)}
                 </div>
 
                 {/* Tabla de transacciones */}
@@ -758,17 +572,15 @@ export default function CierreCaja() {
                         </td>
                         <td className="px-4 py-3 text-gray-800">{t.NombreUsuario || '—'}</td>
                         <td className="px-4 py-3 text-gray-600">{t.NombreSucursal || '—'}</td>
-                        <td className="px-4 py-3 text-right">{fmt(t.MontoApertura)}</td>
+                        <td className="px-4 py-3 text-right">{fmt(t.MontoApertura)} USD<br/>{Number(t.MontoAperturaVES||0).toFixed(2)} VES</td>
                         <td className="px-4 py-3 text-right font-medium">{fmt(t.TotalVentas)}</td>
-                        <td className="px-4 py-3 text-right">{t.MontoCierre !== null ? fmt(t.MontoCierre) : '—'}</td>
+                        <td className="px-4 py-3 text-right"><ArqueoHistorial turno={t} campo="Contado"/></td>
                         <td className={`px-4 py-3 text-right font-medium ${
                           t.Diferencia === null ? 'text-gray-400'
                           : parseFloat(t.Diferencia) < 0 ? 'text-red-600'
                           : 'text-green-600'
                         }`}>
-                          {t.Diferencia !== null
-                            ? (parseFloat(t.Diferencia) >= 0 ? '+' : '') + fmt(t.Diferencia)
-                            : '—'}
+                          <ArqueoHistorial turno={t} campo="Diferencia"/>
                         </td>
                         <td className="px-4 py-3 text-center">
                           <StatusBadge status={t.Status} />
@@ -811,7 +623,6 @@ export default function CierreCaja() {
         <ModalCierre
           turno={turno}
           ventas={ventas}
-          efectivoEsperado={efectivoEsperado}
           onClose={() => setModalCierre(false)}
           onCerrado={handleCajaCerrada}
         />

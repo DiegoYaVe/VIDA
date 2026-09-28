@@ -1,6 +1,8 @@
 // src/controllers/caja.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
 import { registrarAuditoria } from '../services/audit.service.js';
+import {efectivoPorMoneda,calcularArqueo} from '../services/arqueo.service.js';
+import {importeCaja} from '../services/pagoPos.service.js';
 
 // ── Helper ──────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
@@ -34,7 +36,7 @@ function esRed(user) {
 async function calcularTotales(pool, idBranch, idCuenta, idPuntoVenta, fechaApertura, fechaCierre) {
   const fechaHasta = fechaCierre || null;
 
-  const req = pool.request()
+  const req = new sql.Request(pool)
     .input('idBranch',      sql.BigInt,  idBranch)
     .input('idCuenta',      sql.BigInt,  idCuenta)
     .input('idPuntoVenta',  sql.BigInt,  idPuntoVenta)
@@ -64,18 +66,12 @@ async function calcularTotales(pool, idBranch, idCuenta, idPuntoVenta, fechaAper
       AND p.Canal         = 'POS'
       AND p.Status        = 'ENTREGADO'
       ${fechaCondicion};
-    SELECT p.TotalUSD,p.MontoEfectivo,p.MontoCambio,p.PagoMonedaJSON FROM VIDA_PEDIDOS p
+    SELECT p.TotalUSD,p.MetodoPago,p.MontoEfectivo,p.MontoCambio,p.PagoMonedaJSON FROM VIDA_PEDIDOS p
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.idPuntoVenta=@idPuntoVenta
       AND p.Canal='POS' AND p.Status='ENTREGADO' AND p.MetodoPago IN ('EFECTIVO','MIXTO') ${fechaCondicion}
   `);
 
-  const originales={USD:0,VES:0};
-  for(const venta of r.recordsets[1] || []) {
-    if(venta.PagoMonedaJSON) {
-      const p=JSON.parse(venta.PagoMonedaJSON);
-      originales[p.Moneda]+=Number(p.Efectivo)-Number(p.Cambio);
-    } else originales.USD+=Number(venta.MontoEfectivo ?? venta.TotalUSD ?? 0)-Number(venta.MontoCambio||0);
-  }
+  const originales=efectivoPorMoneda(r.recordsets[1] || []);
   return {...r.recordset[0],EfectivoOriginalUSD:originales.USD,EfectivoOriginalVES:originales.VES};
 }
 
@@ -121,7 +117,7 @@ export async function turnoActivo(request, reply) {
 // ══════════════════════════════════════════════════════════════════════════════
 export async function abrirCaja(request, reply) {
   const { idBranch, idCuenta, idUsuario, TipoUsuario, idPuntoVenta: pvJwt } = request.user;
-  const { MontoApertura = 0, Observaciones = null, idPuntoVenta: pvBody } = request.body || {};
+  const { MontoApertura = 0, MontoAperturaVES = 0, Observaciones = null, idPuntoVenta: pvBody } = request.body || {};
 
   const pvId = esRed({ TipoUsuario }) && pvBody ? BigInt(pvBody) : (pvJwt ? BigInt(pvJwt) : null);
 
@@ -134,6 +130,8 @@ export async function abrirCaja(request, reply) {
   let enTransaccion = false;
 
   try {
+    importeCaja(MontoApertura);
+    importeCaja(MontoAperturaVES);
     // Obtener nombre del cajero
     const cajeroR = await pool.request()
       .input('idBranch',  sql.BigInt, idBranch)
@@ -191,17 +189,18 @@ export async function abrirCaja(request, reply) {
       .input('idUsuario',     sql.BigInt,       idUsuario)
       .input('NombreUsuario', sql.VarChar(200), NombreUsuario)
       .input('NombreSucursal',sql.VarChar(200), NombreSucursal)
-      .input('MontoApertura', sql.Decimal(18,4),parseFloat(MontoApertura))
+      .input('MontoApertura', sql.Decimal(18,4),MontoApertura)
+      .input('MontoAperturaVES', sql.Decimal(18,2),MontoAperturaVES)
       .input('Observaciones', sql.VarChar(500), Observaciones)
       .input('UsuAlta',       sql.VarChar(10),  String(idUsuario).slice(0,10))
       .query(`
         INSERT INTO VIDA_CAJA_TURNOS
           (idBranch, idCuenta, idTurno, idPuntoVenta, idUsuario,
-           NombreUsuario, NombreSucursal, MontoApertura,
+           NombreUsuario, NombreSucursal, MontoApertura, MontoAperturaVES,
            Observaciones, Status, UsuAlta, FechaAlta, FechaApertura)
         VALUES
           (@idBranch, @idCuenta, @idTurno, @idPuntoVenta, @idUsuario,
-           @NombreUsuario, @NombreSucursal, @MontoApertura,
+           @NombreUsuario, @NombreSucursal, @MontoApertura, @MontoAperturaVES,
            @Observaciones, 'ABIERTO', @UsuAlta, GETUTCDATE(), GETUTCDATE())
       `);
 
@@ -209,7 +208,7 @@ export async function abrirCaja(request, reply) {
       idBranch, idCuenta,
       entityType: 'CAJA_TURNO', entityId: idTurno,
       accion: 'CAJA_APERTURA', actor: idUsuario,
-      data: { idPuntoVenta: Number(pvId), MontoApertura: parseFloat(MontoApertura) },
+      data: { idPuntoVenta: Number(pvId), MontoApertura, MontoAperturaVES },
     }, request.log);
 
     await transaction.commit();
@@ -221,7 +220,7 @@ export async function abrirCaja(request, reply) {
       try { await transaction.rollback(); } catch (rbErr) { request.log.error('Rollback falló: ' + rbErr.message); }
     }
     request.log.error(err);
-    return reply.code(500).send({ error: 'Error al abrir caja' });
+    return reply.code(err.statusCode || 500).send({ error: err.statusCode ? err.message : 'Error al abrir caja' });
   }
 }
 
@@ -266,11 +265,17 @@ export async function resumenTurno(request, reply) {
       return reply.send({ turno: null, ventas: null, pedidos: [] });
     }
 
+    if (!esRed({TipoUsuario}) && (!pvJwt || String(turno.idPuntoVenta)!==String(pvJwt))) return reply.code(403).send({error: 'No tienes permiso para consultar este turno'});
+
     // Calcular totales
-    const totales = await calcularTotales(
-      pool, idBranch, idCuenta,
-      turno.idPuntoVenta, turno.FechaApertura, turno.FechaCierre
-    );
+    // Un cierre confirmado conserva sus cifras aunque lleguen ventas offline después.
+    const arqueoGuardado=turno.ArqueoMonedasJSON?JSON.parse(turno.ArqueoMonedasJSON):null;
+    const totales = turno.Status==='CERRADO' ? {
+      TotalVentas:turno.TotalVentas,TotalEfectivo:turno.TotalVentasEfectivo,
+      TotalTarjeta:turno.TotalVentasTarjeta,NumTransacciones:turno.NumTransacciones,
+      EfectivoOriginalUSD:arqueoGuardado?.USD.VentasNetas??null,
+      EfectivoOriginalVES:arqueoGuardado?.VES.VentasNetas??null,
+    } : await calcularTotales(pool,idBranch,idCuenta,turno.idPuntoVenta,turno.FechaApertura,null);
 
     // Últimos 50 pedidos del turno
     const req2 = pool.request()
@@ -307,6 +312,8 @@ export async function resumenTurno(request, reply) {
         FechaApertura: turno.FechaApertura,
         FechaCierre:   turno.FechaCierre,
         MontoApertura: turno.MontoApertura,
+        MontoAperturaVES: turno.MontoAperturaVES,
+        ArqueoMonedasJSON: turno.ArqueoMonedasJSON,
         NombreUsuario: turno.NombreUsuario,
         NombreSucursal:turno.NombreSucursal,
         Status:        turno.Status,
@@ -319,6 +326,8 @@ export async function resumenTurno(request, reply) {
         NumTransacciones: totales.NumTransacciones,
       },
       efectivoEsperado,
+      efectivoEsperadoUSD:arqueoGuardado?.USD.Esperado??(turno.Status==='ABIERTO'?Number(turno.MontoApertura)+totales.EfectivoOriginalUSD:null),
+      efectivoEsperadoVES:arqueoGuardado?.VES.Esperado??(turno.Status==='ABIERTO'?Number(turno.MontoAperturaVES||0)+totales.EfectivoOriginalVES:null),
       pedidos: pedidosR.recordset,
     });
   } catch (err) {
@@ -332,52 +341,61 @@ export async function resumenTurno(request, reply) {
 // ══════════════════════════════════════════════════════════════════════════════
 export async function cerrarCaja(request, reply) {
   const { idBranch, idCuenta, idPuntoVenta: pvJwt, TipoUsuario } = request.user;
-  const { idTurno, MontoCierre, Observaciones = null } = request.body || {};
+  const { idTurno, MontoCierre, MontoCierreVES, Observaciones = null } = request.body || {};
 
-  if (!idTurno || MontoCierre === undefined || MontoCierre === null) {
-    return reply.code(400).send({ error: 'idTurno y MontoCierre son requeridos' });
+  if (!idTurno || MontoCierre == null || MontoCierreVES == null) {
+    return reply.code(400).send({ error: 'idTurno, conteo USD y conteo VES son requeridos. Actualiza el panel si no aparecen ambos.' });
   }
 
+  let transaction;
+  let activa=false;
   try {
+    importeCaja(MontoCierre);importeCaja(MontoCierreVES);
     const pool = await getPool();
+    transaction=new sql.Transaction(pool);
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    activa=true;
 
     // Obtener turno
-    const turnoR = await pool.request()
+    const turnoR = await new sql.Request(transaction)
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
       .input('idTurno',  sql.BigInt, BigInt(idTurno))
       .query(`
-        SELECT TOP 1 * FROM VIDA_CAJA_TURNOS
+        SELECT TOP 1 * FROM VIDA_CAJA_TURNOS WITH (UPDLOCK,HOLDLOCK)
         WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idTurno=@idTurno
       `);
 
     const turno = turnoR.recordset[0];
     if (!turno) {
-      return reply.code(404).send({ error: 'Turno no encontrado' });
+      throw Object.assign(new Error('Turno no encontrado'),{statusCode:404});
     }
     if (turno.Status !== 'ABIERTO') {
-      return reply.code(409).send({ error: 'El turno ya está cerrado' });
+      throw Object.assign(new Error('El turno ya está cerrado'),{statusCode:409});
     }
 
     // Cajero solo puede cerrar su propio PV
-    if (!esRed({ TipoUsuario }) && pvJwt && BigInt(turno.idPuntoVenta) !== BigInt(pvJwt)) {
-      return reply.code(403).send({ error: 'No tienes permiso para cerrar este turno' });
+    if (!esRed({ TipoUsuario }) && (!pvJwt || String(turno.idPuntoVenta) !== String(pvJwt))) {
+      throw Object.assign(new Error('No tienes permiso para cerrar este turno'),{statusCode:403});
     }
 
+    const reloj=await new sql.Request(transaction).query('SELECT GETUTCDATE() AS FechaCierre');
+    const fechaCierre=reloj.recordset[0].FechaCierre;
     // Recalcular totales
     const totales = await calcularTotales(
-      pool, idBranch, idCuenta,
-      turno.idPuntoVenta, turno.FechaApertura, null
+      transaction, idBranch, idCuenta,
+      turno.idPuntoVenta, turno.FechaApertura, fechaCierre
     );
 
     const montoAp  = parseFloat(turno.MontoApertura);
     const totalEf  = parseFloat(totales.TotalEfectivo);
     const montoCi  = parseFloat(MontoCierre);
-    const diferencia = montoCi - (montoAp + totalEf);
+    const arqueo=calcularArqueo(turno,totales,{USD:MontoCierre,VES:MontoCierreVES});
+    const diferencia = arqueo.USD.Diferencia;
 
     // La condición Status='ABIERTO' evita doble cierre concurrente: solo la
     // primera petición cierra; la segunda no afecta filas y recibe 409
-    const cierreR = await pool.request()
+    const cierreR = await new sql.Request(transaction)
       .input('idBranch',             sql.BigInt,       idBranch)
       .input('idCuenta',             sql.BigInt,       idCuenta)
       .input('idTurno',              sql.BigInt,       BigInt(idTurno))
@@ -388,10 +406,13 @@ export async function cerrarCaja(request, reply) {
       .input('MontoCierre',          sql.Decimal(18,4),montoCi)
       .input('Diferencia',           sql.Decimal(18,4),diferencia)
       .input('Observaciones',        sql.VarChar(500), Observaciones)
+      .input('FechaCierre', sql.DateTime, fechaCierre)
+      .input('ArqueoMonedasJSON', sql.NVarChar(sql.MAX), JSON.stringify(arqueo))
       .query(`
         UPDATE VIDA_CAJA_TURNOS SET
           Status               = 'CERRADO',
-          FechaCierre          = GETUTCDATE(),
+          FechaCierre          = @FechaCierre,
+          ArqueoMonedasJSON     = @ArqueoMonedasJSON,
           TotalVentasEfectivo  = @TotalVentasEfectivo,
           TotalVentasTarjeta   = @TotalVentasTarjeta,
           TotalVentas          = @TotalVentas,
@@ -404,10 +425,10 @@ export async function cerrarCaja(request, reply) {
       `);
 
     if (cierreR.rowsAffected[0] === 0) {
-      return reply.code(409).send({ error: 'El turno ya fue cerrado por otra operación' });
+      throw Object.assign(new Error('El turno ya fue cerrado por otra operación'),{statusCode:409});
     }
 
-    await registrarAuditoria(pool, {
+    await registrarAuditoria(transaction, {
       idBranch, idCuenta,
       entityType: 'CAJA_TURNO', entityId: idTurno,
       accion: 'CAJA_CIERRE', actor: request.user.idUsuario,
@@ -417,21 +438,23 @@ export async function cerrarCaja(request, reply) {
         TotalVentas: parseFloat(totales.TotalVentas),
         TotalEfectivo: totalEf, TotalTarjeta: parseFloat(totales.TotalTarjeta),
         NumTransacciones: parseInt(totales.NumTransacciones),
-        Diferencia: diferencia,
+        Diferencia: diferencia, ArqueoMonedas: arqueo,
       },
     }, request.log);
 
     // Retornar el turno cerrado
-    const cerradoR = await pool.request()
+    const cerradoR = await new sql.Request(transaction)
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
       .input('idTurno',  sql.BigInt, BigInt(idTurno))
       .query(`SELECT TOP 1 * FROM VIDA_CAJA_TURNOS WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idTurno=@idTurno`);
 
+    await transaction.commit();activa=false;
     return reply.send({ turno: cerradoR.recordset[0] });
   } catch (err) {
+    if(activa) {try {await transaction.rollback();} catch {}}
     request.log.error(err);
-    return reply.code(500).send({ error: 'Error al cerrar caja' });
+    return reply.code(err.statusCode || 500).send({ error: err.statusCode ? err.message : 'Error al cerrar caja' });
   }
 }
 
@@ -441,6 +464,7 @@ export async function cerrarCaja(request, reply) {
 export async function historialTurnos(request, reply) {
   const { idBranch, idCuenta, idPuntoVenta: pvJwt, TipoUsuario } = request.user;
   const { page = 1, limit = 20, idPuntoVenta: pvQuery, status = '' } = request.query;
+  if(!esRed({TipoUsuario}) && !pvJwt) return reply.code(403).send({error:'Usuario sin tienda asignada'});
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   // Cajero siempre ve solo su PV
@@ -470,7 +494,7 @@ export async function historialTurnos(request, reply) {
         t.idTurno, t.idPuntoVenta, t.idUsuario,
         t.NombreUsuario, t.NombreSucursal,
         t.FechaApertura, t.FechaCierre,
-        t.MontoApertura, t.MontoCierre,
+        t.MontoApertura, t.MontoAperturaVES, t.ArqueoMonedasJSON, t.MontoCierre,
         t.TotalVentas, t.TotalVentasEfectivo, t.TotalVentasTarjeta,
         t.NumTransacciones, t.Diferencia,
         t.Observaciones, t.Status
