@@ -1,3 +1,27 @@
+## Actualización 2026-09-28 — precio Matriz → Tienda (fase 1)
+
+- Inventario distingue CostoUSD (proveedor), PrecioSuministroUSD (matriz→tienda, opcional) y PrecioUSD (público). Solo operador de Matriz puede cambiar el nuevo precio; omitirlo en PUT lo conserva, null vuelve al cálculo costo+margen.
+- Nuevos pedidos guardan CostoUnitario, PrecioTiendaUnitario y TotalSuministroUSD. Si no hay precio explícito se congela costo+MargenMatrizPct al ordenar. La CXC usa el precio congelado al recibir; no vuelve a aplicar margen. Cabecera y detalle se crean en transacción con asignación de ID bloqueada.
+- Catálogo, carrito, detalle y listado Matriz muestran el precio/total para tienda. Los pedidos anteriores sin precio congelado se identifican como históricos. Esos pedidos conservan el cálculo legado al recibir (margen vigente); requiere conciliación antes de migrar compromisos abiertos, no se inventan precios retroactivos.
+- SQL **39_precios_suministro.sql** preparado, NO ejecutado. Requiere 37/38 previos; aplicar ANTES de desplegar backend/frontend. No modifica deudas históricas ni stock. No se ha probado contra SQL real.
+- Verificación: 77 pruebas unitarias aprobadas (5 nuevas sobre precio y margen); sintaxis backend válida. Compilación frontend final aprobada, incluidos los ajustes de etiquetas históricas.
+- Pendiente de esta fase financiera: configuración USD/VES/ambas, fuente de TC verificada y snapshot por documento/abono, cálculo de costo real por tienda en rentabilidad, radiografía financiera y prueba integral en BD aislada. No anunciar soporte de cobro en VES todavía.
+
+
+## Actualización 2026-09-28 — recepciones parciales y nuevo alcance financiero
+
+Esta sección prevalece sobre las decisiones históricas incompatibles del documento.
+
+- Diego aprobó sustituir USD-only por configuración USD / VES / ambas. **Pendiente de implementar**: tasa histórica por documento y por abono, equivalencias y fuente verificable. No se modificó aún el comportamiento monetario.
+- Nuevo modelo solicitado: costo proveedor→matriz y precio matriz→tienda diferenciados. Revisar impacto sobre el antiguo traspaso al costo.
+- Orden de trabajo aprobado: recepciones → costos/monedas → facturas/CXC/CXP/radiografía → restricciones de proveedores → gastos/nómina/contribución/metas → estrella y socios (Israel, Mari Carmen, Lila, Oscar). Texto visible Cancelado→Eliminado también pendiente, conservando trazabilidad.
+- Se encontraron cambios locales previos de otro agente, incluidos Cuentas.jsx, cuentas.controller/routes/service, alcance.service y SQL 37/38. **Ya existe implementación CXC/CXP**; no se debe reconstruir ni dar por validada sin auditar. Se preservaron esos cambios.
+- Corregido Proveedores.jsx: propone cantidad pendiente (30 solicitadas − 10 anteriores = 20), muestra solicitado/anterior/pendiente y etiqueta “Cantidad que recibes ahora”. Permite repetir recepciones parciales.
+- Backend: validarRecepcion valida todos los renglones antes de escribir: finitos/no negativos, cuatro decimales, IDs válidos y únicos, máximo pendiente y coherencia parcial/completa. Bloqueo de cabecera dentro de la transacción y comprobación de estado vigente para serializar cambios. Conserva stock, recepción y CXP en la transacción existente del otro agente.
+- Pruebas: 7 casos nuevos en backend/tests/recepcionOrden.test.js; suite completa 72/72 aprobados; sintaxis del controlador válida; frontend compilado correctamente (avisos de tamaño de bundle/importación mixta). No se ejecutaron migraciones ni escrituras de datos. Falta prueba SQL de concurrencia/rollback y prueba visual con sesión.
+- **Límite pendiente**: no existe clave idempotente de recepción en este cambio. Un reenvío parcial idéntico que todavía cabe en el saldo puede parecer una entrega nueva; requiere identidad de operación persistida para distinguirlo. No confundir bloqueo de cantidades con idempotencia completa.
+- Tampoco se reparan automáticamente existencias históricas sobre-recibidas; necesitan conciliación con documentos reales.
+
 # VIDA / VenezPOS — Handoff de contexto para otro Claude
 
 > Documento para que otro asistente retome el proyecto sabiendo **qué ya está construido**, **cómo está armado** y **en qué seguir**. Escrito 2026-09-04.

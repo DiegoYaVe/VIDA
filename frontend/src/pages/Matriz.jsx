@@ -96,7 +96,7 @@ function TabPedir({ matriz, puntosVenta, onPedidoCreado }) {
   const items = Object.entries(carrito);
   const totalCosto = items.reduce((s, [id, cant]) => {
     const p = productos.find(x => String(x.idProducto) === id);
-    return s + (p ? p.CostoUSD * cant : 0);
+    return s + (p ? p.PrecioTiendaUSD * cant : 0);
   }, 0);
 
   async function enviarPedido() {
@@ -136,7 +136,7 @@ function TabPedir({ matriz, puntosVenta, onPedidoCreado }) {
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-800 text-sm truncate">{p.Nombre}</p>
                     <p className="text-xs text-gray-400">{p.NombreCategoria || '—'} · stock matriz: <b className={p.StockMatriz > 0 ? 'text-gray-600' : 'text-red-500'}>{p.StockMatriz}</b></p>
-                    <p className="text-xs mt-0.5"><span className="text-gray-400">costo</span> <b className="text-vida-blue">{USD(p.CostoUSD)}</b></p>
+                    <p className="text-xs mt-0.5"><span className="text-gray-400">precio tienda</span> <b className="text-vida-blue">{USD(p.PrecioTiendaUSD)}</b></p>
                   </div>
                   {cant === 0 ? (
                     <button onClick={() => setCant(p.idProducto, 1)}
@@ -181,9 +181,9 @@ function TabPedir({ matriz, puntosVenta, onPedidoCreado }) {
                 <div key={id} className="flex items-center gap-2 text-sm">
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-700 truncate">{p.Nombre}</p>
-                    <p className="text-xs text-gray-400">{cant} × {USD(p.CostoUSD)}</p>
+                    <p className="text-xs text-gray-400">{cant} × {USD(p.PrecioTiendaUSD)}</p>
                   </div>
-                  <span className="font-semibold text-gray-800">{USD(p.CostoUSD * cant)}</span>
+                  <span className="font-semibold text-gray-800">{USD(p.PrecioTiendaUSD * cant)}</span>
                   <button onClick={() => setCant(id, 0)} className="text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>
                 </div>
               );
@@ -195,7 +195,7 @@ function TabPedir({ matriz, puntosVenta, onPedidoCreado }) {
           rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-3" />
 
         <div className="flex items-center justify-between border-t border-gray-100 pt-3 mb-3">
-          <span className="text-sm text-gray-500">Total al costo</span>
+          <span className="text-sm text-gray-500">Total para la tienda</span>
           <span className="font-black text-vida-blue text-lg">{USD(totalCosto)}</span>
         </div>
         {msg && <p className={`text-sm text-center mb-2 font-semibold ${msg.includes('✓') ? 'text-green-600' : 'text-red-600'}`}>{msg}</p>}
@@ -277,7 +277,7 @@ function ModalPedido({ idPedidoMatriz, puedeEscribir, onClose, onCambiado }) {
                     <div key={d.idDetalle} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-800 truncate">{d.NombreProducto}</p>
-                        <p className="text-xs text-gray-400">Solicitado: {d.CantidadSolicitada} · costo {USD(d.CostoUnitario)}</p>
+                        <p className="text-xs text-gray-400">Solicitado: {d.CantidadSolicitada} · precio {d.PrecioTiendaUnitario == null ? 'no fijado (histórico)' : USD(d.PrecioTiendaUnitario)}</p>
                       </div>
                       {/* Al recibir, la tienda ajusta cantidades */}
                       {ped.Status === 'ENVIADO' && puedeEscribir ? (
@@ -292,7 +292,7 @@ function ModalPedido({ idPedidoMatriz, puedeEscribir, onClose, onCambiado }) {
                     </div>
                   ))}
                 </div>
-                <div className="text-right text-sm font-bold text-gray-700 mt-2">Total al costo: <span className="text-vida-blue">{USD(ped.TotalCostoUSD)}</span></div>
+                <div className="text-right text-sm font-bold text-gray-700 mt-2">Total para la tienda: <span className="text-vida-blue">{ped.TotalSuministroUSD == null ? 'Histórico: precio no fijado' : USD(ped.TotalSuministroUSD)}</span></div>
               </div>
 
               {ped.historial?.length > 0 && (
@@ -367,7 +367,7 @@ function TabPedidos({ puedeEscribir, refresh }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-left">
-                  {['#', 'Tienda', 'Items', 'Total costo', 'Estado', 'Fecha', ''].map((h, i) => (
+                  {['#', 'Tienda', 'Items', 'Total tienda', 'Estado', 'Fecha', ''].map((h, i) => (
                     <th key={i} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -379,7 +379,7 @@ function TabPedidos({ puedeEscribir, refresh }) {
                     <td className="px-4 py-3 font-bold text-gray-700">#{p.idPedidoMatriz}</td>
                     <td className="px-4 py-3 text-gray-700"><span className="inline-flex items-center gap-1.5"><Store size={13} className="text-gray-400" />{p.NombreTienda}</span></td>
                     <td className="px-4 py-3 text-gray-500">{p.TotalItems}</td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{USD(p.TotalCostoUSD)}</td>
+                    <td className="px-4 py-3 font-bold text-gray-900">{p.TotalSuministroUSD == null ? 'Histórico: sin precio fijado' : USD(p.TotalSuministroUSD)}</td>
                     <td className="px-4 py-3"><StatusBadge status={p.Status} /></td>
                     <td className="px-4 py-3 text-xs text-gray-400">{FECHA(p.FechaAlta)}</td>
                     <td className="px-4 py-3 text-right"><ArrowRight size={15} className="text-gray-300" /></td>

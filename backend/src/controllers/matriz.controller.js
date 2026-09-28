@@ -1,15 +1,29 @@
+import { precioSuministro } from '../services/precioSuministro.service.js';
 // src/controllers/matriz.controller.js
 // Matriz y reabasto (T-0038/T-0039). La Matriz es un punto de venta central
 // que surte a las tiendas; el traspaso se valúa al costo (CostoUSD) y mueve
 // stock: baja en la Matriz, sube en la tienda al recibir.
 import { getPool, sql } from '../db/sqlserver.js';
 import { registrarAuditoria } from '../services/audit.service.js';
+import { emitirCuenta } from '../services/cuentas.service.js';
 
 // Roles de RED: ven/gestionan los pedidos de todas las tiendas (bandeja de la
 // Matriz). Los roles de tienda (ADMIN, SUPERVISOR) solo pueden pedir, ver y
 // recibir el reabasto de SU propia tienda.
 const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
 const esRed = (user) => ROLES_RED.includes(user.TipoUsuario);
+
+// Lee una clave de VIDA_CONFIG_DELIVERY (la tabla clave/valor de la cuenta).
+// Misma forma que el helper homonimo de delivery.controller.js.
+async function getConfigVal(pool, idBranch, idCuenta, clave, defVal = null) {
+  const r = await pool.request()
+    .input('idBranch', sql.BigInt, idBranch)
+    .input('idCuenta', sql.BigInt, idCuenta)
+    .input('clave', sql.VarChar(100), clave)
+    .query(`SELECT Valor FROM VIDA_CONFIG_DELIVERY
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Clave=@clave`);
+  return r.recordset.length ? r.recordset[0].Valor : defVal;
+}
 
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
   const r = await pool.request()
@@ -109,7 +123,7 @@ export async function catalogoMatriz(request, reply) {
 
     const r = await req.query(`
       SELECT p.idProducto, p.Nombre, p.SKU, p.UnidadMedida, p.ImagenProducto,
-             p.CostoUSD, p.PrecioUSD, p.idCategoria, cat.Nombre AS NombreCategoria,
+             p.CostoUSD, p.PrecioSuministroUSD, p.PrecioUSD, p.idCategoria, cat.Nombre AS NombreCategoria,
              ISNULL(inv.Cantidad, 0) AS StockMatriz
       FROM VIDA_INVENTARIO_PRODUCTOS p
       LEFT JOIN VIDA_INVENTARIO_STOCK inv
@@ -121,7 +135,8 @@ export async function catalogoMatriz(request, reply) {
         ${filtro}
       ORDER BY p.Nombre`);
 
-    return reply.send({ matriz, productos: r.recordset });
+    const margen = await getConfigVal(pool, idBranch, idCuenta, 'MargenMatrizPct', '0');
+    return reply.send({ matriz, productos: r.recordset.map(p => ({...p, PrecioTiendaUSD: precioSuministro(p.CostoUSD, p.PrecioSuministroUSD, margen)})) });
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener el catálogo de la matriz' });
@@ -140,9 +155,16 @@ export async function crearPedidoMatriz(request, reply) {
   const idPuntoVentaSolicita = esRed(request.user)
     ? request.body?.idPuntoVentaSolicita
     : pvUsuario;
-  if (!idPuntoVentaSolicita || !items?.length)
+  if (!idPuntoVentaSolicita || !Array.isArray(items) || !items.length)
     return reply.code(400).send({ error: 'idPuntoVentaSolicita e items son requeridos' });
+  if (items.some(i => !i || !Number.isSafeInteger(Number(i.idProducto)) || Number(i.idProducto) <= 0 ||
+      !Number.isFinite(Number(i.Cantidad)) || Number(i.Cantidad) <= 0 ||
+      Math.abs(Number(i.Cantidad) * 10000 - Math.round(Number(i.Cantidad) * 10000)) > 1e-6) ||
+      new Set(items.map(i => String(i.idProducto))).size !== items.length)
+    return reply.code(400).send({ error: 'Productos únicos y cantidades positivas con máximo cuatro decimales son requeridos' });
 
+
+  let tx;
   try {
     const pool = await getPool();
     const matriz = await getMatriz(pool, idBranch, idCuenta);
@@ -155,10 +177,12 @@ export async function crearPedidoMatriz(request, reply) {
     const costoReq = pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta);
     idsProd.forEach((id, i) => costoReq.input(`p${i}`, sql.BigInt, id));
     const costoR = await costoReq.query(`
-      SELECT idProducto, ISNULL(CostoUSD,0) AS CostoUSD FROM VIDA_INVENTARIO_PRODUCTOS
+      SELECT idProducto, ISNULL(CostoUSD,0) AS CostoUSD, PrecioSuministroUSD FROM VIDA_INVENTARIO_PRODUCTOS
       WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'
         AND idProducto IN (${idsProd.map((_, i) => `@p${i}`).join(',')})`);
     const costoPorId = new Map(costoR.recordset.map(p => [String(p.idProducto), parseFloat(p.CostoUSD)]));
+    const margen = await getConfigVal(pool, idBranch, idCuenta, 'MargenMatrizPct', '0');
+    const precioPorId = new Map(costoR.recordset.map(p => [String(p.idProducto), precioSuministro(p.CostoUSD, p.PrecioSuministroUSD, margen)]));
 
     const detalle = items
       .filter(i => costoPorId.has(String(i.idProducto)) && parseFloat(i.Cantidad) > 0)
@@ -166,31 +190,36 @@ export async function crearPedidoMatriz(request, reply) {
         idProducto: parseInt(i.idProducto),
         Cantidad: parseFloat(i.Cantidad),
         CostoUnitario: costoPorId.get(String(i.idProducto)),
+        PrecioTiendaUnitario: precioPorId.get(String(i.idProducto)),
       }));
-    if (!detalle.length) return reply.code(400).send({ error: 'Ningún producto válido en el pedido' });
+    if (detalle.length !== items.length) return reply.code(400).send({ error: 'Algún producto ya no está disponible; actualiza el catálogo' });
 
-    const totalCosto = detalle.reduce((s, d) => s + d.Cantidad * d.CostoUnitario, 0);
-    const idPedidoMatriz = await nextId(pool, 'VIDA_PEDIDOS_MATRIZ', 'idPedidoMatriz', idBranch, idCuenta);
+    const totalCosto = +detalle.reduce((s, d) => s + d.Cantidad * d.CostoUnitario, 0).toFixed(4);
+    const totalSuministro = +detalle.reduce((s, d) => s + d.Cantidad * d.PrecioTiendaUnitario, 0).toFixed(4);
+    tx = new sql.Transaction(pool);
+    await tx.begin();
+    const idPedidoMatriz = await nextIdTx(tx, 'VIDA_PEDIDOS_MATRIZ', 'idPedidoMatriz', idBranch, idCuenta);
 
-    await pool.request()
+    await new sql.Request(tx)
       .input('idBranch',            sql.BigInt,       idBranch)
       .input('idCuenta',            sql.BigInt,       idCuenta)
       .input('idPedidoMatriz',      sql.BigInt,       idPedidoMatriz)
       .input('idPuntoVentaSolicita',sql.BigInt,       idPuntoVentaSolicita)
       .input('idPuntoVentaMatriz',  sql.BigInt,       matriz.idPuntoVenta)
       .input('TotalCostoUSD',       sql.Decimal(18,4), totalCosto)
+      .input('TotalSuministroUSD', sql.Decimal(18,4), totalSuministro)
       .input('Notas',               sql.VarChar(500), Notas?.trim() || null)
       .input('UsuAlta',             sql.VarChar(30),  `U:${idUsuario}`)
       .query(`INSERT INTO VIDA_PEDIDOS_MATRIZ
                 (idBranch,idCuenta,idPedidoMatriz,idPuntoVentaSolicita,idPuntoVentaMatriz,
-                 Status,TotalCostoUSD,Notas,UsuAlta)
+                 Status,TotalCostoUSD,TotalSuministroUSD,Notas,UsuAlta)
               VALUES
                 (@idBranch,@idCuenta,@idPedidoMatriz,@idPuntoVentaSolicita,@idPuntoVentaMatriz,
-                 'SOLICITADO',@TotalCostoUSD,@Notas,@UsuAlta)`);
+                 'SOLICITADO',@TotalCostoUSD,@TotalSuministroUSD,@Notas,@UsuAlta)`);
 
     let idDetalle = 1;
     for (const d of detalle) {
-      await pool.request()
+      await new sql.Request(tx)
         .input('idBranch',           sql.BigInt,       idBranch)
         .input('idCuenta',           sql.BigInt,       idCuenta)
         .input('idPedidoMatriz',     sql.BigInt,       idPedidoMatriz)
@@ -198,14 +227,18 @@ export async function crearPedidoMatriz(request, reply) {
         .input('idProducto',         sql.BigInt,       d.idProducto)
         .input('CantidadSolicitada', sql.Decimal(18,4), d.Cantidad)
         .input('CostoUnitario',      sql.Decimal(18,4), d.CostoUnitario)
+        .input('PrecioTiendaUnitario', sql.Decimal(18,4), d.PrecioTiendaUnitario)
         .query(`INSERT INTO VIDA_PEDIDOS_MATRIZ_DETALLE
-                  (idBranch,idCuenta,idPedidoMatriz,idDetalle,idProducto,CantidadSolicitada,CostoUnitario)
+                  (idBranch,idCuenta,idPedidoMatriz,idDetalle,idProducto,CantidadSolicitada,CostoUnitario,PrecioTiendaUnitario)
                 VALUES
-                  (@idBranch,@idCuenta,@idPedidoMatriz,@idDetalle,@idProducto,@CantidadSolicitada,@CostoUnitario)`);
+                  (@idBranch,@idCuenta,@idPedidoMatriz,@idDetalle,@idProducto,@CantidadSolicitada,@CostoUnitario,@PrecioTiendaUnitario)`);
     }
 
-    return reply.code(201).send({ idPedidoMatriz, status: 'SOLICITADO', TotalCostoUSD: totalCosto });
+    await tx.commit();
+    tx = null;
+    return reply.code(201).send({ idPedidoMatriz, status: 'SOLICITADO', TotalCostoUSD: totalCosto, TotalSuministroUSD: totalSuministro });
   } catch (err) {
+    if (tx) { try { await tx.rollback(); } catch {} }
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al crear el pedido a la matriz' });
   }
@@ -232,7 +265,7 @@ export async function listarPedidosMatriz(request, reply) {
     if (status)       { req.input('st', sql.VarChar(30), status);     filtro += ' AND pm.Status=@st'; }
 
     const r = await req.query(`
-      SELECT pm.idPedidoMatriz, pm.Status, pm.TotalCostoUSD, pm.Notas,
+      SELECT pm.idPedidoMatriz, pm.Status, pm.TotalCostoUSD, pm.TotalSuministroUSD, pm.Notas,
              pm.FechaAlta, pm.FechaMod, pm.idPuntoVentaSolicita,
              pvs.NomComercial AS NombreTienda,
              (SELECT COUNT(*) FROM VIDA_PEDIDOS_MATRIZ_DETALLE d
@@ -277,7 +310,7 @@ export async function obtenerPedidoMatriz(request, reply) {
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
       .input('idPedidoMatriz', sql.BigInt, idPedidoMatriz)
-      .query(`SELECT d.idDetalle, d.idProducto, d.CantidadSolicitada, d.CantidadRecibida, d.CostoUnitario,
+      .query(`SELECT d.idDetalle, d.idProducto, d.CantidadSolicitada, d.CantidadRecibida, d.CostoUnitario, d.PrecioTiendaUnitario,
                      p.Nombre AS NombreProducto, p.SKU, p.UnidadMedida
               FROM VIDA_PEDIDOS_MATRIZ_DETALLE d
               LEFT JOIN VIDA_INVENTARIO_PRODUCTOS p
@@ -436,6 +469,50 @@ export async function cambiarEstadoPedidoMatriz(request, reply) {
                        @TipoMovimiento,@Cantidad,@CantidadAntes,@CantidadDespues,@Motivo,@Referencia,@UsuAlta)`);
         }
       }
+    }
+
+    // ── Cuenta por cobrar a la sucursal ──
+    // El traspaso deja de ser solo mercancia: al recibir, la sucursal queda
+    // debiendole a la Matriz lo que realmente llego, valuado al costo mas el
+    // margen configurado (MargenMatrizPct, 0 por defecto). Nace DENTRO de la
+    // misma transaccion que el stock: o entran las dos cosas o no entra ninguna.
+    if (StatusNuevo === 'RECIBIDO') {
+      const totR = await new sql.Request(transaction)
+        .input('idBranch', sql.BigInt, idBranch)
+        .input('idCuenta', sql.BigInt, idCuenta)
+        .input('idPedidoMatriz', sql.BigInt, idPedidoMatriz)
+        .query(`SELECT ISNULL(SUM(CantidadRecibida * CostoUnitario), 0) AS TotalCosto,
+                       SUM(CantidadRecibida * PrecioTiendaUnitario) AS TotalSuministro,
+                       SUM(CASE WHEN PrecioTiendaUnitario IS NULL THEN 1 ELSE 0 END) AS SinPrecio
+                FROM VIDA_PEDIDOS_MATRIZ_DETALLE
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoMatriz=@idPedidoMatriz`);
+
+      const margenPct = parseFloat(await getConfigVal(pool, idBranch, idCuenta, 'MargenMatrizPct', '0')) || 0;
+      const costo = parseFloat(totR.recordset[0].TotalCosto) || 0;
+      const legado = Number(totR.recordset[0].SinPrecio) > 0;
+      const total = legado ? +(costo * (1 + margenPct / 100)).toFixed(4) : Number(totR.recordset[0].TotalSuministro);
+
+      const plazoR = await new sql.Request(transaction)
+        .input('idBranch', sql.BigInt, idBranch)
+        .input('idCuenta', sql.BigInt, idCuenta)
+        .input('idPuntoVenta', sql.BigInt, ped.idPuntoVentaSolicita)
+        .query(`SELECT ISNULL(DiasCredito,0) AS DiasCredito FROM VIDA_CUENTA_PUNTOS_VENTA
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta`);
+
+      await emitirCuenta(transaction, {
+        idBranch, idCuenta,
+        Tipo: 'CXC',
+        OrigenTipo: 'TRASPASO_MATRIZ',
+        idOrigen: idPedidoMatriz,
+        idPuntoVenta: ped.idPuntoVentaSolicita,
+        idPuntoVentaEmisor: ped.idPuntoVentaMatriz,
+        TotalUSD: total,
+        DiasPlazo: parseInt(plazoR.recordset[0]?.DiasCredito) || 0,
+        Notas: !legado ? `Suministro #${idPedidoMatriz} · precio pactado en el pedido` : margenPct > 0
+          ? `Traspaso #${idPedidoMatriz} · costo $${costo.toFixed(2)} + ${margenPct}% de margen`
+          : `Traspaso #${idPedidoMatriz} · al costo`,
+        UsuAlta: idUsuario,
+      });
     }
 
     // Historial

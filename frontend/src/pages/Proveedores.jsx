@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
+const ROLES_RED       = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 const STATUS_ORDEN_LABEL = {
@@ -22,7 +23,7 @@ const STATUS_ORDEN_LABEL = {
 const TRANSICIONES = {
   BORRADOR:          ['ENVIADA', 'CANCELADA'],
   ENVIADA:           ['RECIBIDA_PARCIAL', 'RECIBIDA_COMPLETA', 'CANCELADA'],
-  RECIBIDA_PARCIAL:  ['RECIBIDA_COMPLETA', 'CANCELADA'],
+  RECIBIDA_PARCIAL:  ['RECIBIDA_PARCIAL', 'RECIBIDA_COMPLETA', 'CANCELADA'],
   RECIBIDA_COMPLETA: [],
   CANCELADA:         [],
 };
@@ -281,7 +282,9 @@ function ModalCambiarEstado({ orden, onClose, onSaved }) {
         idDetalle:         d.idDetalle,
         NombreProducto:    d.NombreProducto,
         CantidadOrdenada:  d.CantidadOrdenada,
-        CantidadRecibida:  d.CantidadOrdenada, // default: todo recibido
+        RecibidoAnterior: Number(d.CantidadRecibida || 0),
+        Pendiente: Math.max(0, Number(d.CantidadOrdenada) - Number(d.CantidadRecibida || 0)),
+        CantidadRecibida: Math.max(0, Number(d.CantidadOrdenada) - Number(d.CantidadRecibida || 0)),
       })));
     }
   }, [statusNuevo, orden.detalle, necesitaCantidades]);
@@ -336,14 +339,15 @@ function ModalCambiarEstado({ orden, onClose, onSaved }) {
 
           {necesitaCantidades && cantidades.length > 0 && (
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-2">Cantidades recibidas</label>
+              <label className="block text-xs font-medium text-gray-600 mb-2">Cantidad que recibes ahora</label>
+              <p className="text-xs text-gray-500 mb-2">Registra solo esta entrega, no el total acumulado.</p>
               <div className="space-y-2 max-h-52 overflow-y-auto">
                 {cantidades.map((c, i) => (
                   <div key={c.idDetalle} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
                     <span className="text-sm flex-1 text-gray-700">{c.NombreProducto}</span>
-                    <span className="text-xs text-gray-400">/ {c.CantidadOrdenada}</span>
+                    <span className="text-xs text-gray-500">Solicitado: {c.CantidadOrdenada} · Anterior: {c.RecibidoAnterior} · Pendiente: {c.Pendiente}</span>
                     <input
-                      type="number" min="0" max={c.CantidadOrdenada} step="0.01"
+                      type="number" min="0" max={c.Pendiente} step="0.0001" aria-label={`Cantidad que recibes ahora de ${c.NombreProducto}`}
                       value={c.CantidadRecibida}
                       onChange={e => setCantidades(arr => arr.map((x, j) =>
                         j === i ? { ...x, CantidadRecibida: parseFloat(e.target.value) || 0 } : x
@@ -938,10 +942,36 @@ export default function Proveedores() {
   const puedeEscribir = ROLES_ESCRITURA.includes(usuario?.TipoUsuario);
   const [tab, setTab] = useState('proveedores');
 
+  // Regla de negocio nueva: la MATRIZ compra y dispersa. Una sucursal ya no le
+  // compra directo al proveedor, así que la pestaña de órdenes solo se muestra
+  // a quien opera la Matriz: roles de red, o el ADMIN del punto de venta
+  // marcado como Matriz. El backend sigue aceptando las órdenes existentes —
+  // esto es el corte visual, no una migración de datos.
+  const [matriz, setMatriz] = useState(null);
+  const [cargandoMatriz, setCargandoMatriz] = useState(true);
+
+  useEffect(() => {
+    api.get('/matriz/estado')
+      .then(r => setMatriz(r.data?.matriz || null))
+      .catch(() => setMatriz(null))
+      .finally(() => setCargandoMatriz(false));
+  }, []);
+
+  const esRed = ROLES_RED.includes(usuario?.TipoUsuario);
+  const operaMatriz = esRed || (
+    usuario?.TipoUsuario === 'ADMIN' && matriz &&
+    String(usuario?.idPuntoVenta) === String(matriz.idPuntoVenta)
+  );
+
   const tabs = [
     { key: 'proveedores', label: 'Proveedores',      icon: Truck },
-    { key: 'ordenes',     label: 'Órdenes de compra', icon: ClipboardList },
+    ...(operaMatriz ? [{ key: 'ordenes', label: 'Órdenes de compra', icon: ClipboardList }] : []),
   ];
+
+  // Si quedó parado en una pestaña que ya no le corresponde, se lo devuelve
+  useEffect(() => {
+    if (!cargandoMatriz && !operaMatriz && tab === 'ordenes') setTab('proveedores');
+  }, [cargandoMatriz, operaMatriz, tab]);
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -969,7 +999,14 @@ export default function Proveedores() {
       </div>
 
       {tab === 'proveedores' && <TabProveedores puedeEscribir={puedeEscribir}/>}
-      {tab === 'ordenes'     && <TabOrdenes     puedeEscribir={puedeEscribir}/>}
+      {tab === 'ordenes' && operaMatriz && <TabOrdenes puedeEscribir={puedeEscribir}/>}
+
+      {!cargandoMatriz && !operaMatriz && (
+        <p className="mt-6 text-sm text-gray-400 border-t border-gray-100 pt-4">
+          Las órdenes de compra las emite la Matriz para toda la red. Si necesitás
+          mercancía, pedila en <b className="text-gray-500">Matriz</b> y te llega como reabasto.
+        </p>
+      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { operadorMatriz } from '../services/alcance.service.js';
 // src/controllers/inventario.controller.js
 import path from 'path';
 import fs from 'fs';
@@ -179,7 +180,7 @@ export async function listarProductos(request, reply) {
       query = `
         SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
-               p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.StockMinimo,
+               p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.PrecioSuministroUSD, p.StockMinimo,
                p.ImagenProducto, p.Notas, p.EsProductoPlus, p.Status, p.FechaAlta,
                ISNULL(s.Cantidad, 0) AS StockDisponible
         FROM VIDA_INVENTARIO_PRODUCTOS p
@@ -206,7 +207,7 @@ export async function listarProductos(request, reply) {
       query = `
         SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
-               p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.StockMinimo,
+               p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.PrecioSuministroUSD, p.StockMinimo,
                p.ImagenProducto, p.Notas, p.EsProductoPlus, p.Status, p.FechaAlta,
                ISNULL((SELECT SUM(s2.Cantidad) FROM VIDA_INVENTARIO_STOCK s2
                        WHERE s2.idBranch=p.idBranch AND s2.idCuenta=p.idCuenta
@@ -280,7 +281,7 @@ export async function obtenerProducto(request, reply) {
       .query(`
         SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
-               p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.StockMinimo,
+               p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.PrecioSuministroUSD, p.StockMinimo,
                p.ImagenProducto, p.Notas, p.EsProductoPlus, p.Status, p.FechaAlta
         FROM VIDA_INVENTARIO_PRODUCTOS p
         LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
@@ -300,13 +301,20 @@ export async function obtenerProducto(request, reply) {
 export async function crearProducto(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const { idCategoria, Nombre, Descripcion, SKU, CodigoBarras, UnidadMedida,
-          PrecioUSD, CostoUSD, StockMinimo, Notas, EsProductoPlus } = request.body;
+          PrecioUSD, CostoUSD, PrecioSuministroUSD, StockMinimo, Notas, EsProductoPlus } = request.body;
 
   if (!Nombre || !UnidadMedida || !idCategoria)
     return reply.code(400).send({ error: 'Nombre, UnidadMedida e idCategoria son requeridos' });
 
   try {
     const pool = await getPool();
+    if (PrecioSuministroUSD !== undefined) {
+      if (!(await operadorMatriz(request.user, pool)).permitido)
+        return reply.code(403).send({ error: 'Solo la Matriz puede fijar el precio de suministro' });
+      if (PrecioSuministroUSD !== null && (typeof PrecioSuministroUSD !== 'number' || !Number.isFinite(PrecioSuministroUSD) || PrecioSuministroUSD < 0))
+        return reply.code(400).send({ error: 'Precio de suministro inválido' });
+    }
+
 
     // SKU único por cuenta
     if (SKU) {
@@ -331,6 +339,8 @@ export async function crearProducto(request, reply) {
       .input('UnidadMedida', sql.VarChar(50),  UnidadMedida)
       .input('PrecioUSD',    sql.Decimal(18,4), PrecioUSD ?? 0)
       .input('CostoUSD',     sql.Decimal(18,4), CostoUSD || null)
+      .input('PrecioSuministroUSD', sql.Decimal(18,4), PrecioSuministroUSD ?? null)
+      .input('CambiarSuministro', sql.Bit, PrecioSuministroUSD !== undefined ? 1 : 0)
       .input('StockMinimo',  sql.Decimal(18,4), StockMinimo ?? 0)
       .input('Notas',        sql.VarChar(500), Notas || null)
       .input('EsProductoPlus', sql.Bit,        EsProductoPlus ? 1 : 0)
@@ -338,9 +348,9 @@ export async function crearProducto(request, reply) {
     const nuevoId = await insertarConId(req, {
       tabla: 'VIDA_INVENTARIO_PRODUCTOS', idCol: 'idProducto',
       columnas: ['idCategoria', 'Nombre', 'Descripcion', 'SKU', 'CodigoBarras', 'UnidadMedida',
-                 'PrecioUSD', 'CostoUSD', 'StockMinimo', 'Notas', 'EsProductoPlus', 'UsuAlta'],
+                 'PrecioUSD', 'CostoUSD', 'PrecioSuministroUSD', 'StockMinimo', 'Notas', 'EsProductoPlus', 'UsuAlta'],
       valores:  ['@idCategoria', '@Nombre', '@Descripcion', '@SKU', '@CodigoBarras', '@UnidadMedida',
-                 '@PrecioUSD', '@CostoUSD', '@StockMinimo', '@Notas', '@EsProductoPlus', '@UsuAlta'],
+                 '@PrecioUSD', '@CostoUSD', '@PrecioSuministroUSD', '@StockMinimo', '@Notas', '@EsProductoPlus', '@UsuAlta'],
     });
 
     return reply.code(201).send({ message: 'Producto creado', idProducto: nuevoId });
@@ -355,13 +365,20 @@ export async function editarProducto(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const { idProducto } = request.params;
   const { idCategoria, Nombre, Descripcion, SKU, CodigoBarras, UnidadMedida,
-          PrecioUSD, CostoUSD, StockMinimo, Notas, EsProductoPlus } = request.body;
+          PrecioUSD, CostoUSD, PrecioSuministroUSD, StockMinimo, Notas, EsProductoPlus } = request.body;
 
   if (!Nombre || !UnidadMedida || !idCategoria)
     return reply.code(400).send({ error: 'Nombre, UnidadMedida e idCategoria son requeridos' });
 
   try {
     const pool = await getPool();
+    if (PrecioSuministroUSD !== undefined) {
+      if (!(await operadorMatriz(request.user, pool)).permitido)
+        return reply.code(403).send({ error: 'Solo la Matriz puede fijar el precio de suministro' });
+      if (PrecioSuministroUSD !== null && (typeof PrecioSuministroUSD !== 'number' || !Number.isFinite(PrecioSuministroUSD) || PrecioSuministroUSD < 0))
+        return reply.code(400).send({ error: 'Precio de suministro inválido' });
+    }
+
 
     // SKU único (excluyendo el producto actual)
     if (SKU) {
@@ -389,6 +406,8 @@ export async function editarProducto(request, reply) {
       .input('UnidadMedida', sql.VarChar(50),   UnidadMedida)
       .input('PrecioUSD',    sql.Decimal(18,4), PrecioUSD ?? 0)
       .input('CostoUSD',     sql.Decimal(18,4), CostoUSD || null)
+      .input('PrecioSuministroUSD', sql.Decimal(18,4), PrecioSuministroUSD ?? null)
+      .input('CambiarSuministro', sql.Bit, PrecioSuministroUSD !== undefined ? 1 : 0)
       .input('StockMinimo',  sql.Decimal(18,4), StockMinimo ?? 0)
       .input('Notas',        sql.VarChar(500),  Notas || null)
       .input('EsProductoPlus', sql.Bit,         EsProductoPlus ? 1 : 0)
@@ -396,7 +415,7 @@ export async function editarProducto(request, reply) {
       .query(`UPDATE VIDA_INVENTARIO_PRODUCTOS SET
                 idCategoria = @idCategoria, Nombre = @Nombre, Descripcion = @Descripcion,
                 SKU = @SKU, CodigoBarras = @CodigoBarras, UnidadMedida = @UnidadMedida,
-                PrecioUSD = @PrecioUSD, CostoUSD = @CostoUSD, StockMinimo = @StockMinimo,
+                PrecioUSD = @PrecioUSD, CostoUSD = @CostoUSD, PrecioSuministroUSD = CASE WHEN @CambiarSuministro=1 THEN @PrecioSuministroUSD ELSE PrecioSuministroUSD END, StockMinimo = @StockMinimo,
                 Notas = @Notas, EsProductoPlus = @EsProductoPlus, FechaMod = GETDATE(), UsuMod = @UsuMod
               WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idProducto = @idProducto`);
 

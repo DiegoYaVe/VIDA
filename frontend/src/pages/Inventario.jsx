@@ -165,6 +165,7 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
     UnidadesPorCaja: data?.UnidadesPorCaja ?? '',
     PrecioUSD:       data?.PrecioUSD       ?? '',
     CostoUSD:        data?.CostoUSD        ?? '',
+    PrecioSuministroUSD: data?.PrecioSuministroUSD ?? '',
     StockMinimo:     data?.StockMinimo     ?? 0,
     Notas:           data?.Notas           || '',
     EsProductoPlus:  !!data?.EsProductoPlus,
@@ -191,6 +192,7 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
         ...form,
         PrecioUSD:       parseFloat(form.PrecioUSD),
         CostoUSD:        form.CostoUSD !== '' ? parseFloat(form.CostoUSD) : null,
+        ...(String(form.PrecioSuministroUSD) !== String(data?.PrecioSuministroUSD ?? '') ? { PrecioSuministroUSD: form.PrecioSuministroUSD === '' ? null : Number(form.PrecioSuministroUSD) } : {}),
         UnidadesPorCaja: form.UnidadMedida === 'Caja' && form.UnidadesPorCaja !== ''
                            ? parseInt(form.UnidadesPorCaja) : null,
       };
@@ -311,11 +313,14 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
             value={form.PrecioUSD} error={errors.PrecioUSD}
             onChange={e => { f('PrecioUSD', e.target.value); setErrors(p => ({ ...p, PrecioUSD: '' })); }}
             placeholder="0.00" />
-          <InputField label="Costo USD" type="number" step="0.0001"
+          <InputField label="Costo proveedor USD" type="number" step="0.0001"
             value={form.CostoUSD} onChange={e => f('CostoUSD', e.target.value)}
             placeholder="0.00 (opcional)" />
         </div>
 
+        <InputField label="Precio Matriz → Tienda USD (solo Matriz)" type="number" min="0" step="0.0001"
+          value={form.PrecioSuministroUSD} onChange={e => f('PrecioSuministroUSD', e.target.value)}
+          placeholder="Vacío: costo + margen configurado" />
         {/* Producto PLUS — alta rentabilidad */}
         <button type="button" onClick={() => f('EsProductoPlus', !form.EsProductoPlus)}
           className={`w-full flex items-center justify-between rounded-xl px-4 py-3 border transition text-left

@@ -26,6 +26,7 @@ import Catalogos     from './pages/Catalogos.jsx';
 import Academia      from './pages/Academia.jsx';
 import AcademiaCurso from './pages/AcademiaCurso.jsx';
 import Operaciones   from './pages/Operaciones.jsx';
+import Cuentas from './pages/Cuentas';
 import Cupones       from './pages/Cupones.jsx';
 import Constancia    from './pages/Constancia.jsx';
 import Tienda        from './pages/Tienda.jsx';
@@ -186,6 +187,10 @@ export default function App() {
 
         <Route path="/academia/curso/:idCurso" element={
           <ProtectedRoute modulo="/academia"><Layout><AcademiaCurso /></Layout></ProtectedRoute>
+        } />
+
+        <Route path="/cuentas" element={
+          <ProtectedRoute modulo="/cuentas"><Layout><Cuentas /></Layout></ProtectedRoute>
         } />
 
         <Route path="/operaciones" element={

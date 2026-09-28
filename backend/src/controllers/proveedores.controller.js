@@ -1,5 +1,7 @@
+import { validarRecepcion } from '../services/recepcionOrden.service.js';
 // src/controllers/proveedores.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
+import { emitirCuenta } from '../services/cuentas.service.js';
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
@@ -12,11 +14,26 @@ async function nextId(pool, tabla, campo, idBranch, idCuenta) {
   return r.recordset[0].nextId;
 }
 
+// Variante transaccional: UPDLOCK+HOLDLOCK serializa la obtencion del ID
+async function nextIdTx(tx, tabla, campo, idBranch, idCuenta) {
+  const r = await new sql.Request(tx)
+    .input('idBranch', sql.BigInt, idBranch)
+    .input('idCuenta', sql.BigInt, idCuenta)
+    .query(`SELECT ISNULL(MAX(${campo}), 0) + 1 AS nextId
+            FROM ${tabla} WITH (UPDLOCK, HOLDLOCK)
+            WHERE idBranch = @idBranch AND idCuenta = @idCuenta`);
+  return r.recordset[0].nextId;
+}
+
 // Transiciones válidas de estado
+// RECIBIDA_PARCIAL admite quedarse en si misma: con la recepcion atomizada una
+// orden puede recibir tres o mas entregas, y antes la segunda parcial no era
+// expresable (obligaba a marcarla COMPLETA antes de tiempo). Cada paso por aca
+// genera su propia recepcion y su propia cuenta por pagar.
 const TRANSICIONES = {
   BORRADOR:          ['ENVIADA', 'CANCELADA'],
   ENVIADA:           ['RECIBIDA_PARCIAL', 'RECIBIDA_COMPLETA', 'CANCELADA'],
-  RECIBIDA_PARCIAL:  ['RECIBIDA_COMPLETA', 'CANCELADA'],
+  RECIBIDA_PARCIAL:  ['RECIBIDA_PARCIAL', 'RECIBIDA_COMPLETA', 'CANCELADA'],
   RECIBIDA_COMPLETA: [],
   CANCELADA:         [],
 };
@@ -528,29 +545,49 @@ export async function crearOrden(request, reply) {
 }
 
 // POST /api/ordenes-compra/:idOrden/estado
+//
+// Cambia el estado de la orden y, cuando es una recepción, registra la entrega
+// como DOCUMENTO propio (VIDA_OC_RECEPCIONES) y emite la cuenta por pagar por
+// lo que realmente llegó.
+//
+// Antes esto hacía `SET CantidadRecibida = @CantidadRecibida` (asignaba, no
+// acumulaba): dos entregas de 5 y 3 dejaban el detalle en 3 aunque el stock
+// subiera a 8. Con dinero de por medio eso le pagaría al proveedor por 3 cajas
+// en vez de 8. Además corría fuera de transacción, así que un fallo a la mitad
+// dejaba unos productos con stock y otros no.
+//
+// Body: { StatusNuevo, Notas?, cantidadesRecibidas?, Folio?, DiasPlazo? }
+//   cantidadesRecibidas: [{ idDetalle, CantidadRecibida }] — requerido al recibir
 export async function cambiarEstadoOrden(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const { idOrden } = request.params;
-  const { StatusNuevo, Notas, cantidadesRecibidas } = request.body;
-  // cantidadesRecibidas: [{ idDetalle, CantidadRecibida }] — requerido para RECIBIDA_PARCIAL/COMPLETA
+  const { StatusNuevo, Notas, cantidadesRecibidas, Folio, DiasPlazo } = request.body || {};
 
   if (!StatusNuevo) return reply.code(400).send({ error: 'StatusNuevo es requerido' });
 
-  try {
-    const pool = await getPool();
+  const esRecepcion = ['RECIBIDA_PARCIAL', 'RECIBIDA_COMPLETA'].includes(StatusNuevo);
+  if (esRecepcion && !cantidadesRecibidas?.length)
+    return reply.code(400).send({ error: 'cantidadesRecibidas es requerido para este estado' });
 
-    // Obtener orden actual
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  let enTx = false;
+
+  try {
     const ordenR = await pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
       .input('idOrden',  sql.BigInt, idOrden)
-      .query(`SELECT Status, idPuntoVenta FROM VIDA_ORDENES_COMPRA
-              WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idOrden = @idOrden`);
+      .query(`SELECT oc.Status, oc.idPuntoVenta, oc.idProveedor, oc.Folio AS FolioOC,
+                     ISNULL(p.DiasCredito, 0) AS DiasCredito
+              FROM VIDA_ORDENES_COMPRA oc
+              LEFT JOIN VIDA_PROVEEDORES p
+                ON p.idBranch=oc.idBranch AND p.idCuenta=oc.idCuenta AND p.idProveedor=oc.idProveedor
+              WHERE oc.idBranch=@idBranch AND oc.idCuenta=@idCuenta AND oc.idOrden=@idOrden`);
 
     const orden = ordenR.recordset[0];
     if (!orden) return reply.code(404).send({ error: 'Orden no encontrada' });
 
-    // Validar transición
     const permitidos = TRANSICIONES[orden.Status] || [];
     if (!permitidos.includes(StatusNuevo))
       return reply.code(400).send({
@@ -558,81 +595,127 @@ export async function cambiarEstadoOrden(request, reply) {
         transicionesValidas: permitidos,
       });
 
-    // Si es recepción, actualizar cantidades recibidas y generar movimientos de inventario
-    if (['RECIBIDA_PARCIAL', 'RECIBIDA_COMPLETA'].includes(StatusNuevo)) {
-      if (!cantidadesRecibidas?.length)
-        return reply.code(400).send({ error: 'cantidadesRecibidas es requerido para este estado' });
+    // El plazo sale del proveedor y se puede pisar por documento
+    const plazo = DiasPlazo != null && DiasPlazo !== ''
+      ? Math.max(0, parseInt(DiasPlazo) || 0)
+      : (parseInt(orden.DiasCredito) || 0);
 
-      for (const item of cantidadesRecibidas) {
-        if (!item.CantidadRecibida || item.CantidadRecibida <= 0) continue;
+    await tx.begin(); enTx = true;
+    // Serializa cambios de estado y recepciones sobre la misma orden.
+    const actual = await new sql.Request(tx)
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('idOrden', sql.BigInt, idOrden)
+      .query(`SELECT Status FROM VIDA_ORDENES_COMPRA WITH (UPDLOCK, HOLDLOCK)
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idOrden=@idOrden`);
+    if (actual.recordset[0]?.Status !== orden.Status) {
+      await tx.rollback(); enTx = false;
+      return reply.code(409).send({ error: 'La orden cambió. Recarga su detalle antes de continuar.' });
+    }
 
-        // Actualizar cantidad recibida en detalle
-        await pool.request()
-          .input('idBranch',         sql.BigInt,       idBranch)
-          .input('idCuenta',         sql.BigInt,       idCuenta)
-          .input('idOrden',          sql.BigInt,       idOrden)
-          .input('idDetalle',        sql.BigInt,       item.idDetalle)
-          .input('CantidadRecibida', sql.Decimal(18,4), item.CantidadRecibida)
-          .query(`UPDATE VIDA_ORDENES_COMPRA_DETALLE SET CantidadRecibida = @CantidadRecibida
-                  WHERE idBranch = @idBranch AND idCuenta = @idCuenta
-                    AND idOrden = @idOrden AND idDetalle = @idDetalle`);
 
-        // Obtener idProducto del detalle
-        const detR = await pool.request()
-          .input('idBranch',  sql.BigInt, idBranch)
-          .input('idCuenta',  sql.BigInt, idCuenta)
-          .input('idOrden',   sql.BigInt, idOrden)
-          .input('idDetalle', sql.BigInt, item.idDetalle)
-          .query(`SELECT idProducto FROM VIDA_ORDENES_COMPRA_DETALLE
-                  WHERE idBranch = @idBranch AND idCuenta = @idCuenta
-                    AND idOrden = @idOrden AND idDetalle = @idDetalle`);
+    let recepcion = null;
 
-        const idProducto = detR.recordset[0]?.idProducto;
-        if (!idProducto) continue;
+    if (esRecepcion) {
+      // Líneas de la orden con lock: se valida TODO antes de escribir nada, para
+      // no dejar media recepción aplicada si un renglón se pasa de lo pedido.
+      const lineasR = await new sql.Request(tx)
+        .input('idBranch', sql.BigInt, idBranch)
+        .input('idCuenta', sql.BigInt, idCuenta)
+        .input('idOrden',  sql.BigInt, idOrden)
+        .query(`SELECT idDetalle, idProducto, CantidadOrdenada,
+                       ISNULL(CantidadRecibida,0) AS CantidadRecibida, PrecioUnitario
+                FROM VIDA_ORDENES_COMPRA_DETALLE WITH (UPDLOCK, HOLDLOCK)
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idOrden=@idOrden`);
 
-        // Stock actual
-        const stockR = await pool.request()
-          .input('idBranch',    sql.BigInt, idBranch)
-          .input('idCuenta',    sql.BigInt, idCuenta)
-          .input('idPuntoVenta',sql.BigInt, orden.idPuntoVenta)
-          .input('idProducto',  sql.BigInt, idProducto)
-          .query(`SELECT ISNULL(Cantidad, 0) AS Cantidad FROM VIDA_INVENTARIO_STOCK
-                  WHERE idBranch = @idBranch AND idCuenta = @idCuenta
-                    AND idPuntoVenta = @idPuntoVenta AND idProducto = @idProducto`);
+      const aplicar = validarRecepcion(lineasR.recordset, cantidadesRecibidas, StatusNuevo);
 
-        const cantAntes   = stockR.recordset[0]?.Cantidad ?? 0;
-        const cantDespues = cantAntes + parseFloat(item.CantidadRecibida);
+      const totalRecepcion = aplicar.reduce((s, a) => s + a.cantidad * a.precio, 0);
 
-        // Upsert stock
-        await pool.request()
-          .input('idBranch',    sql.BigInt,        idBranch)
-          .input('idCuenta',    sql.BigInt,        idCuenta)
-          .input('idPuntoVenta',sql.BigInt,        orden.idPuntoVenta)
-          .input('idProducto',  sql.BigInt,        idProducto)
-          .input('Cantidad',    sql.Decimal(18,4), cantDespues)
-          .query(`MERGE VIDA_INVENTARIO_STOCK AS target
+      // ── Cabecera de la recepción ──
+      const idRecepcion = await nextIdTx(tx, 'VIDA_OC_RECEPCIONES', 'idRecepcion', idBranch, idCuenta);
+      await new sql.Request(tx)
+        .input('idBranch',     sql.BigInt,       idBranch)
+        .input('idCuenta',     sql.BigInt,       idCuenta)
+        .input('idRecepcion',  sql.BigInt,       idRecepcion)
+        .input('idOrden',      sql.BigInt,       idOrden)
+        .input('idPuntoVenta', sql.BigInt,       orden.idPuntoVenta)
+        .input('Folio',        sql.VarChar(50),  Folio || null)
+        .input('TotalUSD',     sql.Decimal(18,4), totalRecepcion)
+        .input('Notas',        sql.VarChar(500), Notas || null)
+        .input('UsuAlta',      sql.VarChar(30),  String(idUsuario))
+        .query(`INSERT INTO VIDA_OC_RECEPCIONES
+                  (idBranch, idCuenta, idRecepcion, idOrden, idPuntoVenta, Folio, TotalUSD, Notas, UsuAlta)
+                VALUES
+                  (@idBranch, @idCuenta, @idRecepcion, @idOrden, @idPuntoVenta, @Folio, @TotalUSD, @Notas, @UsuAlta)`);
+
+      let idDetRecep = 0;
+      for (const a of aplicar) {
+        idDetRecep += 1;
+
+        await new sql.Request(tx)
+          .input('idBranch',       sql.BigInt,       idBranch)
+          .input('idCuenta',       sql.BigInt,       idCuenta)
+          .input('idRecepcion',    sql.BigInt,       idRecepcion)
+          .input('idDetalleRecep', sql.BigInt,       idDetRecep)
+          .input('idDetalleOC',    sql.BigInt,       a.idDetalle)
+          .input('idProducto',     sql.BigInt,       a.idProducto)
+          .input('Cantidad',       sql.Decimal(18,4), a.cantidad)
+          .input('PrecioUnitario', sql.Decimal(18,4), a.precio)
+          .input('Subtotal',       sql.Decimal(18,4), a.cantidad * a.precio)
+          .query(`INSERT INTO VIDA_OC_RECEPCIONES_DETALLE
+                    (idBranch, idCuenta, idRecepcion, idDetalleRecep, idDetalleOC,
+                     idProducto, Cantidad, PrecioUnitario, Subtotal)
+                  VALUES
+                    (@idBranch, @idCuenta, @idRecepcion, @idDetalleRecep, @idDetalleOC,
+                     @idProducto, @Cantidad, @PrecioUnitario, @Subtotal)`);
+
+        // ACUMULA (antes pisaba)
+        await new sql.Request(tx)
+          .input('idBranch',  sql.BigInt,       idBranch)
+          .input('idCuenta',  sql.BigInt,       idCuenta)
+          .input('idOrden',   sql.BigInt,       idOrden)
+          .input('idDetalle', sql.BigInt,       a.idDetalle)
+          .input('Cantidad',  sql.Decimal(18,4), a.cantidad)
+          .query(`UPDATE VIDA_ORDENES_COMPRA_DETALLE
+                  SET CantidadRecibida = ISNULL(CantidadRecibida,0) + @Cantidad
+                  WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                    AND idOrden=@idOrden AND idDetalle=@idDetalle`);
+
+        // Stock: suma relativa y en una sola sentencia, así no hay
+        // leer-modificar-escribir que dos recepciones simultáneas puedan pisar
+        const stockR = await new sql.Request(tx)
+          .input('idBranch',     sql.BigInt,       idBranch)
+          .input('idCuenta',     sql.BigInt,       idCuenta)
+          .input('idPuntoVenta', sql.BigInt,       orden.idPuntoVenta)
+          .input('idProducto',   sql.BigInt,       a.idProducto)
+          .input('Cantidad',     sql.Decimal(18,4), a.cantidad)
+          .query(`MERGE VIDA_INVENTARIO_STOCK WITH (HOLDLOCK) AS target
                   USING (SELECT @idBranch AS idBranch, @idCuenta AS idCuenta,
                                 @idPuntoVenta AS idPuntoVenta, @idProducto AS idProducto) AS src
-                    ON target.idBranch = src.idBranch AND target.idCuenta = src.idCuenta
-                   AND target.idPuntoVenta = src.idPuntoVenta AND target.idProducto = src.idProducto
+                    ON target.idBranch=src.idBranch AND target.idCuenta=src.idCuenta
+                   AND target.idPuntoVenta=src.idPuntoVenta AND target.idProducto=src.idProducto
                   WHEN MATCHED THEN
-                    UPDATE SET Cantidad = @Cantidad, FechaMod = GETDATE()
+                    UPDATE SET Cantidad = ISNULL(target.Cantidad,0) + @Cantidad, FechaMod = GETDATE()
                   WHEN NOT MATCHED THEN
                     INSERT (idBranch, idCuenta, idPuntoVenta, idProducto, Cantidad)
-                    VALUES (@idBranch, @idCuenta, @idPuntoVenta, @idProducto, @Cantidad);`);
+                    VALUES (@idBranch, @idCuenta, @idPuntoVenta, @idProducto, @Cantidad)
+                  OUTPUT ISNULL(deleted.Cantidad,0) AS CantidadAntes,
+                         inserted.Cantidad          AS CantidadDespues;`);
 
-        // Movimiento de inventario
-        const nuevoMovId = await nextId(pool, 'VIDA_INVENTARIO_MOVIMIENTOS', 'idMovimiento', idBranch, idCuenta);
-        await pool.request()
-          .input('idBranch',        sql.BigInt,        idBranch)
-          .input('idCuenta',        sql.BigInt,        idCuenta)
-          .input('idMovimiento',    sql.BigInt,        nuevoMovId)
-          .input('idPuntoVenta',    sql.BigInt,        orden.idPuntoVenta)
-          .input('idProducto',      sql.BigInt,        idProducto)
-          .input('Cantidad',        sql.Decimal(18,4), parseFloat(item.CantidadRecibida))
-          .input('CantidadAntes',   sql.Decimal(18,4), cantAntes)
-          .input('CantidadDespues', sql.Decimal(18,4), cantDespues)
-          .input('Motivo',          sql.VarChar(300),  `Recepción OC #${idOrden}`)
+        const s = stockR.recordset[0] || { CantidadAntes: 0, CantidadDespues: a.cantidad };
+
+        const idMov = await nextIdTx(tx, 'VIDA_INVENTARIO_MOVIMIENTOS', 'idMovimiento', idBranch, idCuenta);
+        await new sql.Request(tx)
+          .input('idBranch',        sql.BigInt,       idBranch)
+          .input('idCuenta',        sql.BigInt,       idCuenta)
+          .input('idMovimiento',    sql.BigInt,       idMov)
+          .input('idPuntoVenta',    sql.BigInt,       orden.idPuntoVenta)
+          .input('idProducto',      sql.BigInt,       a.idProducto)
+          .input('Cantidad',        sql.Decimal(18,4), a.cantidad)
+          .input('CantidadAntes',   sql.Decimal(18,4), parseFloat(s.CantidadAntes))
+          .input('CantidadDespues', sql.Decimal(18,4), parseFloat(s.CantidadDespues))
+          .input('Motivo',          sql.VarChar(300),  `Recepción #${idRecepcion} de OC #${idOrden}`)
           .input('Referencia',      sql.VarChar(100),  String(idOrden))
           .input('UsuAlta',         sql.VarChar(20),   String(idUsuario))
           .query(`INSERT INTO VIDA_INVENTARIO_MOVIMIENTOS
@@ -644,38 +727,65 @@ export async function cambiarEstadoOrden(request, reply) {
                      'ENTRADA', @Cantidad, @CantidadAntes, @CantidadDespues,
                      @Motivo, @Referencia, @UsuAlta)`);
       }
+
+      // ── La cuenta por pagar, por lo que REALMENTE llegó ──
+      // Nace dentro de la misma transacción que la mercancía: o entran las dos
+      // o no entra ninguna.
+      const cuenta = await emitirCuenta(tx, {
+        idBranch, idCuenta,
+        Tipo: 'CXP',
+        OrigenTipo: 'RECEPCION_OC',
+        idOrigen: idRecepcion,
+        idProveedor: orden.idProveedor,
+        idPuntoVentaEmisor: orden.idPuntoVenta,
+        TotalUSD: totalRecepcion,
+        DiasPlazo: plazo,
+        Folio: Folio || orden.FolioOC || null,
+        Notas: `Recepción #${idRecepcion} de la orden de compra #${idOrden}`,
+        UsuAlta: idUsuario,
+      });
+
+      recepcion = {
+        idRecepcion,
+        TotalUSD: +totalRecepcion.toFixed(4),
+        renglones: aplicar.length,
+        idDocumentoCxP: cuenta?.idDocumento ?? null,
+      };
     }
 
-    // Actualizar status de la orden
-    await pool.request()
-      .input('idBranch',   sql.BigInt,     idBranch)
-      .input('idCuenta',   sql.BigInt,     idCuenta)
-      .input('idOrden',    sql.BigInt,     idOrden)
-      .input('Status',     sql.VarChar(30), StatusNuevo)
-      .input('UsuMod',     sql.VarChar(20), String(idUsuario))
-      .query(`UPDATE VIDA_ORDENES_COMPRA SET
-                Status = @Status, FechaMod = GETDATE(), UsuMod = @UsuMod
-              WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idOrden = @idOrden`);
+    await new sql.Request(tx)
+      .input('idBranch', sql.BigInt,      idBranch)
+      .input('idCuenta', sql.BigInt,      idCuenta)
+      .input('idOrden',  sql.BigInt,      idOrden)
+      .input('Status',   sql.VarChar(30), StatusNuevo)
+      .input('UsuMod',   sql.VarChar(20), String(idUsuario))
+      .query(`UPDATE VIDA_ORDENES_COMPRA
+              SET Status=@Status, FechaMod=GETDATE(), UsuMod=@UsuMod
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idOrden=@idOrden`);
 
-    // Registrar historial
-    const nuevoHistId = await nextId(pool, 'VIDA_ORDENES_COMPRA_HISTORIAL', 'idHistorial', idBranch, idCuenta);
-    await pool.request()
-      .input('idBranch',      sql.BigInt,     idBranch)
-      .input('idCuenta',      sql.BigInt,     idCuenta)
-      .input('idHistorial',   sql.BigInt,     nuevoHistId)
-      .input('idOrden',       sql.BigInt,     idOrden)
-      .input('StatusAnterior',sql.VarChar(30), orden.Status)
-      .input('StatusNuevo',   sql.VarChar(30), StatusNuevo)
-      .input('Notas',         sql.VarChar(500), Notas || null)
-      .input('UsuAlta',       sql.VarChar(20), String(idUsuario))
+    const idHist = await nextIdTx(tx, 'VIDA_ORDENES_COMPRA_HISTORIAL', 'idHistorial', idBranch, idCuenta);
+    await new sql.Request(tx)
+      .input('idBranch',       sql.BigInt,       idBranch)
+      .input('idCuenta',       sql.BigInt,       idCuenta)
+      .input('idHistorial',    sql.BigInt,       idHist)
+      .input('idOrden',        sql.BigInt,       idOrden)
+      .input('StatusAnterior', sql.VarChar(30),  orden.Status)
+      .input('StatusNuevo',    sql.VarChar(30),  StatusNuevo)
+      .input('Notas',          sql.VarChar(500), recepcion
+        ? `Recepción #${recepcion.idRecepcion} · $${recepcion.TotalUSD.toFixed(2)}${Notas ? ` · ${Notas}` : ''}`
+        : (Notas || null))
+      .input('UsuAlta',        sql.VarChar(20),  String(idUsuario))
       .query(`INSERT INTO VIDA_ORDENES_COMPRA_HISTORIAL
                 (idBranch, idCuenta, idHistorial, idOrden, StatusAnterior, StatusNuevo, Notas, UsuAlta)
               VALUES
                 (@idBranch, @idCuenta, @idHistorial, @idOrden, @StatusAnterior, @StatusNuevo, @Notas, @UsuAlta)`);
 
-    return reply.send({ message: `Orden actualizada a ${StatusNuevo}` });
+    await tx.commit(); enTx = false;
+
+    return reply.send({ message: `Orden actualizada a ${StatusNuevo}`, recepcion });
   } catch (err) {
+    if (enTx) { try { await tx.rollback(); } catch { /* la tx ya murió */ } }
     request.log.error(err);
-    return reply.code(500).send({ error: 'Error al cambiar estado: ' + err.message });
+    return reply.code(err.statusCode || 500).send({ error: 'Error al cambiar estado: ' + err.message });
   }
 }
