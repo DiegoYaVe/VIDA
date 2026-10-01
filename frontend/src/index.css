@@ -24,3 +24,33 @@ body { font-family: 'Nunito', sans-serif; background: #F4F6F8; }
     @apply bg-vida-blue text-white shadow-sm;
   }
 }
+
+/* ── Impresión universal del ticket POS ──────────────────────────────────────
+ * Al imprimir (window.print) se oculta todo menos #ticket-imprimible y se le da
+ * formato de ticket térmico. Funciona con CUALQUIER impresora instalada en el
+ * sistema (térmica 58/80mm vía driver del SO, láser, "Guardar como PDF"...).
+ * No se fuerza el tamaño de página (size: auto) para que el driver de la
+ * impresora elegida defina el ancho real del papel. */
+@media print {
+  @page { size: auto; margin: 0; }
+  html, body { background: #fff !important; }
+  /* Oculta toda la app excepto el ticket */
+  body * { visibility: hidden !important; }
+  #ticket-imprimible, #ticket-imprimible * { visibility: visible !important; }
+  #ticket-imprimible {
+    position: absolute !important;
+    left: 0; top: 0;
+    width: 80mm; max-width: 80mm;
+    margin: 0 !important;
+    padding: 3mm !important;
+    background: #fff !important;
+    color: #000 !important;
+    font-family: ui-monospace, 'Courier New', monospace !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+  }
+  /* Fuerza negro para que no se pierdan grises/colores en térmica */
+  #ticket-imprimible * { color: #000 !important; }
+  /* Evita cortes raros de líneas del ticket */
+  #ticket-imprimible > * { page-break-inside: avoid; }
+}
