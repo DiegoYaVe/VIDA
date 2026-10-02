@@ -1,5 +1,5 @@
 // src/pages/Sucursales.jsx
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore } from '../store/authStore.js';
 import api from '../services/api.js';
 import { useToast } from '../components/Toast.jsx';
@@ -16,7 +16,113 @@ const FORM_VACIO = {
   Correo: '', Telefono: '', Encargado: '',
   Calle: '', NumExt: '', NumInt: '', Colonia: '', CP: '',
   Ciudad: '', idPais: '', idEstado: '',
+  Latitud: '', Longitud: '',
 };
+
+// ── Carga de Google Maps JS API (una sola vez) ──────────────────────────────
+// La key viene de frontend/.env → VITE_GOOGLE_MAPS_KEY (Maps JavaScript API).
+// Se usa para fijar la ubicación (lat/lng) de la tienda, que el repartidor toma
+// como destino.
+const GMAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY;
+let gmapsPromise = null;
+function cargarGoogleMaps() {
+  if (window.google && window.google.maps) return Promise.resolve(window.google.maps);
+  if (gmapsPromise) return gmapsPromise;
+  gmapsPromise = new Promise((resolve, reject) => {
+    if (!GMAPS_KEY) { reject(new Error('sinkey')); return; }
+    window.__vidaGmapsReady = () => resolve(window.google.maps);
+    const s = document.createElement('script');
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GMAPS_KEY)}&callback=__vidaGmapsReady&loading=async`;
+    s.async = true;
+    s.onerror = () => reject(new Error('error'));
+    document.head.appendChild(s);
+  });
+  return gmapsPromise;
+}
+
+// Selector de ubicación en Google Maps. lat/lng son strings del form; onChange(lat,lng).
+function MapaPicker({ lat, lng, onChange }) {
+  const contRef = useRef(null);
+  const mapRef  = useRef(null);
+  const markRef = useRef(null);
+  const [estado, setEstado] = useState(GMAPS_KEY ? 'cargando' : 'sinkey'); // cargando | ok | error | sinkey
+
+  const tieneCoords = lat !== '' && lng !== '' && !isNaN(Number(lat)) && !isNaN(Number(lng));
+
+  useEffect(() => {
+    if (!GMAPS_KEY) { setEstado('sinkey'); return; }
+    let cancelado = false;
+    cargarGoogleMaps().then((maps) => {
+      if (cancelado || !contRef.current || mapRef.current) return;
+      const centro = tieneCoords ? { lat: Number(lat), lng: Number(lng) } : { lat: 8.0, lng: -66.0 }; // Venezuela
+      const map = new maps.Map(contRef.current, {
+        center: centro, zoom: tieneCoords ? 15 : 6,
+        streetViewControl: false, mapTypeControl: false, fullscreenControl: false,
+      });
+      const poner = (la, ln, pan) => {
+        if (markRef.current) markRef.current.setPosition({ lat: la, lng: ln });
+        else {
+          markRef.current = new maps.Marker({ position: { lat: la, lng: ln }, map, draggable: true });
+          markRef.current.addListener('dragend', () => {
+            const p = markRef.current.getPosition();
+            onChange(+p.lat().toFixed(6), +p.lng().toFixed(6));
+          });
+        }
+        if (pan) map.panTo({ lat: la, lng: ln });
+      };
+      if (tieneCoords) poner(Number(lat), Number(lng));
+      map.addListener('click', (e) => {
+        const la = e.latLng.lat(), ln = e.latLng.lng();
+        poner(la, ln); onChange(+la.toFixed(6), +ln.toFixed(6));
+      });
+      map.__poner = poner; // para el botón "Mi ubicación"
+      mapRef.current = map;
+      setEstado('ok');
+    }).catch((err) => { if (!cancelado) setEstado(err.message === 'sinkey' ? 'sinkey' : 'error'); });
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const miUbicacion = () => {
+    if (!navigator.geolocation || !mapRef.current) return;
+    navigator.geolocation.getCurrentPosition((pos) => {
+      const la = pos.coords.latitude, ln = pos.coords.longitude;
+      mapRef.current.setCenter({ lat: la, lng: ln });
+      mapRef.current.setZoom(16);
+      mapRef.current.__poner(la, ln, true);
+      onChange(+la.toFixed(6), +ln.toFixed(6));
+    });
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="block text-xs font-bold text-gray-600">Ubicación en el mapa</label>
+        {estado === 'ok' && (
+          <button type="button" onClick={miUbicacion}
+            className="text-xs font-semibold text-vida-blue hover:underline">Usar mi ubicación</button>
+        )}
+      </div>
+      {estado === 'sinkey' ? (
+        <div className="w-full rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-xs text-gray-500">
+          Falta configurar <code className="bg-gray-200 px-1 rounded">VITE_GOOGLE_MAPS_KEY</code> en <code className="bg-gray-200 px-1 rounded">frontend/.env</code> y reiniciar el servidor para ver el mapa de Google.
+        </div>
+      ) : (
+        <div ref={contRef} style={{ height: 220 }}
+          className="w-full rounded-xl overflow-hidden border border-gray-200 bg-gray-100 z-0" />
+      )}
+      {estado !== 'sinkey' && (
+        <p className="text-[11px] text-gray-400 mt-1">
+          {estado === 'error'
+            ? 'No se pudo cargar Google Maps (revisa la API key, su facturación y las restricciones de dominio).'
+            : tieneCoords
+              ? `Pin en ${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)} — arrástralo o toca el mapa para ajustar. El repartidor llega a este punto.`
+              : 'Toca el mapa para colocar el pin donde está la tienda. El repartidor usará ese punto como destino.'}
+        </p>
+      )}
+    </div>
+  );
+}
 
 // ── Modal Alta / Edición ───────────────────────────────────────────────────
 function ModalSucursal({ data, onClose, onSaved }) {
@@ -38,6 +144,8 @@ function ModalSucursal({ data, onClose, onSaved }) {
     Ciudad:         data.Ciudad         || '',
     idPais:         data.idPais         || '',
     idEstado:       data.idEstado       || '',
+    Latitud:        data.Latitud ?? '',
+    Longitud:       data.Longitud ?? '',
   } : { ...FORM_VACIO });
 
   const [paises,  setPaises]  = useState([]);
@@ -90,7 +198,7 @@ function ModalSucursal({ data, onClose, onSaved }) {
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] flex flex-col">
         <div className="flex items-center justify-between p-5 border-b">
           <h3 className="font-bold text-gray-800 text-lg">
-            {isEdit ? 'Editar sucursal' : 'Nueva sucursal'}
+            {isEdit ? 'Editar tienda' : 'Nueva tienda'}
           </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
         </div>
@@ -133,7 +241,7 @@ function ModalSucursal({ data, onClose, onSaved }) {
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Correo</label>
                 <input type="email" value={form.Correo} onChange={e => f('Correo', e.target.value)}
-                  className={inputCls} placeholder="sucursal@correo.com" />
+                  className={inputCls} placeholder="tienda@correo.com" />
               </div>
             </div>
             <div>
@@ -200,6 +308,12 @@ function ModalSucursal({ data, onClose, onSaved }) {
                 <input value={form.Ciudad} onChange={e => f('Ciudad', e.target.value)} className={inputCls}/>
               </div>
             </div>
+
+            <MapaPicker
+              lat={form.Latitud}
+              lng={form.Longitud}
+              onChange={(la, ln) => setForm(p => ({ ...p, Latitud: la, Longitud: ln }))}
+            />
           </div>
         </form>
 
@@ -211,7 +325,7 @@ function ModalSucursal({ data, onClose, onSaved }) {
           <button onClick={handleSubmit} disabled={saving}
             className="flex-1 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50 hover:opacity-90"
             style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
-            {saving ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Crear sucursal')}
+            {saving ? 'Guardando...' : (isEdit ? 'Actualizar' : 'Crear tienda')}
           </button>
         </div>
       </div>
@@ -265,18 +379,19 @@ export default function Sucursales() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="flex-1 overflow-y-auto">
+      <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-black text-gray-900">Tiendas</h1>
-          <p className="text-gray-500 text-sm mt-1">Gestiona las sucursales y sus datos de contacto</p>
+          <p className="text-gray-500 text-sm mt-1">Gestiona las tiendas y sus datos de contacto</p>
         </div>
         {puedeEscribir && (
           <button onClick={() => setModal({})}
             className="flex items-center gap-2 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition"
             style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
-            <Plus size={16}/> Nueva sucursal
+            <Plus size={16}/> Nueva tienda
           </button>
         )}
       </div>
@@ -286,10 +401,10 @@ export default function Sucursales() {
       ) : sucursales.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <Store size={52} className="mx-auto mb-3 opacity-20"/>
-          <p className="font-bold text-gray-500">No hay sucursales registradas</p>
+          <p className="font-bold text-gray-500">No hay tiendas registradas</p>
           {puedeEscribir && (
             <button onClick={() => setModal({})} className="mt-4 text-vida-blue text-sm underline">
-              Crear la primera sucursal
+              Crear la primera tienda
             </button>
           )}
         </div>
@@ -383,6 +498,7 @@ export default function Sucursales() {
           ))}
         </div>
       )}
+      </div>
 
       {modal !== null && (
         <ModalSucursal

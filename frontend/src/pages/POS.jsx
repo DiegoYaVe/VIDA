@@ -10,7 +10,7 @@ import { startSyncEngine, syncNow } from '../services/syncEngine.js';
 import SyncStatusBar from '../components/SyncStatusBar.jsx';
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, CreditCard,
-  DollarSign, Layers, Check, X,
+  Check, X,
   Barcode, ChevronDown, Printer, RotateCcw, Tag, AlertTriangle,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -130,6 +130,7 @@ export default function POS() {
   const [busqueda, setBusqueda]         = useState('');
   const [productos, setProductos]       = useState([]);
   const [buscando, setBuscando]         = useState(false);
+  const [catalogoVersion, setCatalogoVersion] = useState(0);
   const [puntos, setPuntos]             = useState([]);
   const [idPuntoVenta, setIdPuntoVenta] = useState(usuario?.idPuntoVenta || '');
   const [turnoAbierto, setTurnoAbierto] = useState(null); // null=cargando, true/false
@@ -170,12 +171,17 @@ export default function POS() {
   // escribir, filtra. Sin red usa el catálogo cacheado en IndexedDB.
   useEffect(() => {
     clearTimeout(busquedaTimer.current);
+    if (!idPuntoVenta) {
+      setProductos([]);
+      setBuscando(false);
+      return;
+    }
     const q = busqueda.trim();
     busquedaTimer.current = setTimeout(async () => {
       setBuscando(true);
       try {
         const r = await api.get('/inventario/productos', {
-          params: { search: q, limit: 50, page: 1 },
+          params: { search: q, limit: 50, page: 1, idPuntoVenta },
         });
         setProductos(r.data.data || []);
       } catch {
@@ -186,10 +192,21 @@ export default function POS() {
       }
     }, q ? 300 : 0);
     return () => clearTimeout(busquedaTimer.current);
-  }, [busqueda]);
+  }, [busqueda, idPuntoVenta, catalogoVersion]);
 
   // ── Carrito ──────────────────────────────────────────────────────────────
   function agregarAlCarrito(producto) {
+    const disponibles = Number(producto.StockDisponible ?? producto.StockTotal ?? 0);
+    if (disponibles <= 0) {
+      setError('Este producto no tiene stock disponible en la tienda seleccionada');
+      return;
+    }
+    const existenteActual = carrito.find(i => i.idProducto === producto.idProducto);
+    if (existenteActual && existenteActual.Cantidad >= disponibles) {
+      setError(`Solo hay ${disponibles} unidad${disponibles === 1 ? '' : 'es'} disponible${disponibles === 1 ? '' : 's'}`);
+      return;
+    }
+    setError('');
     setCarrito(prev => {
       const existe = prev.find(i => i.idProducto === producto.idProducto);
       if (existe) {
@@ -203,6 +220,7 @@ export default function POS() {
         NombreProducto: producto.Nombre,
         SKU:           producto.SKU,
         PrecioUnitario: parseFloat(producto.PrecioUSD) || 0,
+        StockDisponible: disponibles,
         Cantidad:      1,
       }];
     });
@@ -213,7 +231,43 @@ export default function POS() {
     searchRef.current?.focus();
   }
 
+  // Lector de código de barras: el scanner teclea el código + Enter (actúa como
+  // teclado). Si hay match exacto por código de barras o SKU (o un único
+  // resultado), agrega el producto al carrito y limpia el buscador para el
+  // siguiente escaneo. Hace un fetch directo por si el escaneo fue más rápido
+  // que el debounce del buscador.
+  async function onBuscarKeyDown(e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const q = busqueda.trim();
+    if (!q || !idPuntoVenta) return;
+    clearTimeout(busquedaTimer.current);
+    const exacto = (list) =>
+      list.find(p =>
+        (p.CodigoBarras && String(p.CodigoBarras).trim() === q) ||
+        (p.SKU && String(p.SKU).toLowerCase() === q.toLowerCase())
+      ) || (list.length === 1 ? list[0] : null);
+    let match = exacto(productos);
+    if (!match) {
+      try {
+        const r = await api.get('/inventario/productos', { params: { search: q, limit: 10, page: 1, idPuntoVenta } });
+        const list = r.data.data || [];
+        setProductos(list);
+        match = exacto(list);
+      } catch {
+        try { match = exacto(await buscarEnCatalogo(q, 10)); } catch { /* noop */ }
+      }
+    }
+    if (match) agregarAlCarrito(match); // limpia el buscador y re-enfoca
+  }
+
   function cambiarCantidad(idProducto, delta) {
+    const actual = carrito.find(i => i.idProducto === idProducto);
+    if (actual && delta > 0 && actual.Cantidad + delta > Number(actual.StockDisponible ?? Infinity)) {
+      setError(`Solo hay ${actual.StockDisponible} unidades disponibles`);
+      return;
+    }
+    setError('');
     setCarrito(prev => prev
       .map(i => i.idProducto === idProducto ? { ...i, Cantidad: Math.max(0, i.Cantidad + delta) } : i)
       .filter(i => i.Cantidad > 0)
@@ -329,6 +383,18 @@ export default function POS() {
         cupon:      cuponCodigo ? { codigo: cuponCodigo, descuento: descuentoCupon } : null,
         pago:       pagoInfo,
       });
+
+      // Reflejo inmediato para el operador. Si hubo respuesta del servidor,
+      // además recargamos el catálogo para tomar el valor definitivo de BD.
+      const cantidadesVendidas = new Map(carrito.map(i => [String(i.idProducto), Number(i.Cantidad)]));
+      setProductos(prev => prev.map(p => {
+        const cantidad = cantidadesVendidas.get(String(p.idProducto));
+        if (!cantidad) return p;
+        const stockActual = Number(p.StockDisponible ?? p.StockTotal ?? 0);
+        return { ...p, StockDisponible: Math.max(0, stockActual - cantidad) };
+      }));
+      if (sincronizada || rechazada) setCatalogoVersion(v => v + 1);
+
       setModalPago(false);
       setCarrito([]);
       quitarCupon();
@@ -374,7 +440,8 @@ export default function POS() {
               ref={searchRef}
               value={busqueda}
               onChange={e => setBusqueda(e.target.value)}
-              placeholder="Buscar por nombre, SKU o código de barras..."
+              onKeyDown={onBuscarKeyDown}
+              placeholder="Escanea o busca por nombre, SKU o código de barras..."
               className="w-full pl-10 pr-10 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-vida-blue"
               autoFocus
             />
@@ -571,28 +638,8 @@ export default function POS() {
             </div>
           </div>
 
-          {/* Botones método rápido (solo Efectivo y Tarjeta — sin modal) */}
-          <div className="px-4 pb-2 grid grid-cols-2 gap-1.5">
-            {METODOS_PAGO.filter(m => m.key !== 'MIXTO').map(m => {
-              const Icon = m.icon;
-              return (
-                <button key={m.key}
-                  disabled={carrito.length === 0 || procesando}
-                  onClick={() => confirmarVenta({
-                    metodo:   m.key,
-                    efectivo: m.key === 'EFECTIVO' ? totalFinal : 0,
-                    tarjeta:  m.key === 'TARJETA'  ? totalFinal : 0,
-                    cambio:   0,
-                  })}
-                  className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-white text-xs font-semibold disabled:opacity-30 hover:opacity-90 transition-opacity ${m.color}`}>
-                  <Icon size={14}/>
-                  {m.label} (exacto)
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Botón principal cobrar */}
+          {/* Todo cobro pasa por la cotización monetaria para conservar
+              moneda, tasa y equivalencias históricas de la operación. */}
           <div className="px-4 pb-4">
             <button
               disabled={carrito.length === 0 || procesando}
