@@ -13,6 +13,7 @@ const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
 // ── Config de estatus ──────────────────────────────────────────────────────
 const STATUS_CFG = {
+  ESPERANDO_PAGO: { label: 'Validando pago', color: 'bg-amber-100 text-amber-700', icon: Clock, dot: 'bg-amber-500' },
   NUEVO:      { label: 'Nuevo',       color: 'bg-blue-100 text-blue-700',   icon: ShoppingBag, dot: 'bg-blue-500' },
   PREPARANDO: { label: 'Preparando',  color: 'bg-yellow-100 text-yellow-700', icon: Clock,      dot: 'bg-yellow-500' },
   LISTO:      { label: 'Listo',       color: 'bg-green-100 text-green-700', icon: CheckCircle, dot: 'bg-green-500' },

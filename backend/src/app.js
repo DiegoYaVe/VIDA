@@ -38,6 +38,7 @@ import { marcarInactivos }  from './controllers/heartbeat.controller.js';
 import { expirarPedidosVencidos } from './controllers/pedidos.controller.js';
 import { expirarPuntosInactivosJob } from './controllers/premios.controller.js';
 import { procesarBusquedas } from './services/dispatch.service.js';
+import { vencerPagosMovilesImpagos } from './services/pagoMovil.service.js';
 import { wsRoutes } from './ws/ws.routes.js';
 import multipart from '@fastify/multipart';
 import staticFiles from '@fastify/static';
@@ -233,6 +234,15 @@ setInterval(async () => {
 setInterval(async () => {
   try {
     await procesarBusquedas(fastify.log);
+  } catch {}
+}, 60_000);
+
+// Job: plazo de Pago Móvil — cancela los pedidos ESPERANDO_PAGO sin
+// comprobante en revisión cuyo plazo (PlazoPagoMovilMin, 60 por defecto)
+// venció, y les devuelve los puntos canjeados (cada 60 segundos)
+setInterval(async () => {
+  try {
+    await vencerPagosMovilesImpagos(fastify.log);
   } catch {}
 }, 60_000);
 

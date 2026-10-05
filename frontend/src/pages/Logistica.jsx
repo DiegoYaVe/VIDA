@@ -173,7 +173,10 @@ function TabRepartidores({ puedeEscribir }) {
   useEffect(() => { cargar(); }, [cargar]);
 
   async function liquidar(rep) {
-    if (!window.confirm(`Liquidar a ${rep.Nombre}? Se registrará el saldo de ${USD(rep.SaldoPendiente)} y se pondrá en cero.`)) return;
+    const partes = [];
+    if (Number(rep.SaldoPendiente) > 0) partes.push(USD(rep.SaldoPendiente));
+    if (Number(rep.SaldoPendienteVES) > 0) partes.push(`${Number(rep.SaldoPendienteVES).toFixed(2)} VES`);
+    if (!window.confirm(`Liquidar a ${rep.Nombre}? Se registrará ${partes.join(' y ')} y los saldos se pondrán en cero.`)) return;
     setLiq(rep.idRepartidor);
     try {
       await api.post(`/delivery/admin/liquidar/${rep.idRepartidor}`, {});
@@ -236,14 +239,15 @@ function TabRepartidores({ puedeEscribir }) {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`font-bold ${Number(r.SaldoPendiente) > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-                        {USD(r.SaldoPendiente)}
-                      </span>
+                      <div className={`font-bold ${(Number(r.SaldoPendiente) > 0 || Number(r.SaldoPendienteVES) > 0) ? 'text-amber-600' : 'text-gray-400'}`}>
+                        <div>{USD(r.SaldoPendiente)}</div>
+                        {Number(r.SaldoPendienteVES) > 0 && <div className="text-xs">{Number(r.SaldoPendienteVES).toFixed(2)} VES</div>}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {puedeEscribir && (
                         <div className="flex items-center gap-1 justify-end">
-                          {Number(r.SaldoPendiente) > 0 && (
+                          {(Number(r.SaldoPendiente) > 0 || Number(r.SaldoPendienteVES) > 0) && (
                             <button onClick={() => liquidar(r)} disabled={liquidando === r.idRepartidor}
                               className="flex items-center gap-1 bg-emerald-600 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-50">
                               <Wallet size={12} /> Liquidar

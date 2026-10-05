@@ -40,6 +40,7 @@ import {
   actualizarPerfilRepartidor,
   aceptarPedido,
   actualizarStatusPedido,
+  liberarPedido,
   pedidosActivos,
   pedidosDisponibles,
   historialRepartidor,
@@ -177,6 +178,11 @@ export async function deliveryRoutes(fastify) {
   fastify.post('/delivery/repartidor/status-pedido',
     { preHandler: [authenticateRepartidor] },
     actualizarStatusPedido);
+
+  // Devolver el pedido al pool para que lo tome otro (solo antes de recogerlo)
+  fastify.post('/delivery/repartidor/liberar',
+    { preHandler: [authenticateRepartidor] },
+    liberarPedido);
 
   fastify.post('/delivery/repartidor/pedido/:idPedido/evidencia',
     { preHandler: [authenticateRepartidor] },

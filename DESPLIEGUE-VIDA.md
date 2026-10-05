@@ -16,7 +16,7 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
 - [ ] Flujo E2E verde (auditoría + día-en-la-tienda) — ver `AUDITORIA-VIDA.md`.
 - [ ] **Backup de la BD de producción** tomado y verificado (restaurable). Las migraciones no tienen rollback automático.
 - [ ] Ventana de mantenimiento acordada si habrá downtime.
-- [ ] El migrador **sí lleva tabla de control** (`VIDA_SCHEMA_MIGRATIONS`); `npm run migrate:status` te dice qué falta. Aun así, revisa el rango de migraciones nuevas (hoy el repo llega a **47**, 48 archivos — hay dos con prefijo `12`).
+- [ ] El migrador **sí lleva tabla de control** (`VIDA_SCHEMA_MIGRATIONS`); `npm run migrate:status` te dice qué falta. Aun así, revisa el rango de migraciones nuevas (hoy el repo llega a **48**, 49 archivos — hay dos con prefijo `12`).
 - [ ] `cd backend && npm install` y `cd frontend && npm install` — esta versión suma deps nuevas (frontend: `exceljs`, `xlsx`, `jspdf`, `jspdf-autotable`, `quill`, `dompurify`, `qrcode`; backend: `qrcode`). Un deploy que solo copia archivos sin `npm install` romperá exportaciones PDF/Excel y el editor de Academia.
 
 ---
@@ -61,6 +61,7 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
   PUNTOS_EXPIRACION_INTERVALO_MS=86400000   # vencimiento de puntos (1 día). 0 lo desactiva.
   ```
 - [ ] Completar SMTP y credenciales de Google Sign-In en el `.env` si aplican (ver `.env.example`).
+- [ ] Pago Móvil: el plazo para enviar el comprobante se configura en BD con la clave `PlazoPagoMovilMin` de `VIDA_CONFIG_DELIVERY` (por defecto 60 min; `0` lo desactiva). Verifica también `PagoMovilBanco`/`PagoMovilTelefono`/`PagoMovilCedula`/`PagoMovilTitular` de producción.
 - [ ] **Salida a internet (egress) permitida hacia `https://bcv.today`** — el servicio de tasa automática (BCV) la consulta bajo demanda al cotizar. Sin salida, el backend no fabrica una tasa (por diseño) y las ventas en VES fallarán al no tener cotización vigente.
 - [ ] Confirmar que `web.config` (IIS + iisnode) está presente en `backend/`.
 - [ ] Subir el backend por FTP/panel de SmarterASP (incluye `node_modules` si el hosting no corre `npm install`, o instálalos allá).
@@ -124,4 +125,4 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
 - Integración **real de telco/pagos**: validar credenciales propias de prod.
 - **Google Maps key de producción** (`VITE_GOOGLE_MAPS_KEY`): validar la key propia de prod, restringida a Maps JavaScript API y a los dominios del panel.
 - **Factura fiscal:** decisión de negocio pendiente (qué formato/impresión fiscal se requiere en Venezuela).
-- `INSTALACION.md` puede mencionar un rango viejo de migraciones — el rango real hoy es **01..47** (48 archivos).
+- `INSTALACION.md` puede mencionar un rango viejo de migraciones — el rango real hoy es **01..48** (49 archivos).

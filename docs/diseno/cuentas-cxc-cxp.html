@@ -1,0 +1,681 @@
+<title>Cuentas por Cobrar y por Pagar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root {
+  --navy:      #0A1E3F;
+  --ground:    #F2F6F9;
+  --surface:   #FFFFFF;
+  --surface-2: #E9EFF4;
+  --line:      #D3DEE7;
+  --line-soft: #E4ECF2;
+  --text:      #10243F;
+  --text-2:    #4A6076;
+  --text-3:    #7C90A3;
+
+  --aqua:   #2C9CBC;
+  --green:  #3E9E52;
+  --orange: #C4691A;
+  --red:    #C63B3B;
+
+  --aqua-bg:   #E4F4F9;
+  --green-bg:  #E6F4E9;
+  --orange-bg: #FBEEE1;
+  --red-bg:    #FAE9E9;
+  --navy-bg:   #E7ECF3;
+
+  --shadow: 0 1px 2px rgba(10,30,63,.05), 0 8px 24px -12px rgba(10,30,63,.14);
+
+  --f-display: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+  --f-body: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+  --f-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --navy:      #C9DBF0;
+    --ground:    #0A121D;
+    --surface:   #121C2A;
+    --surface-2: #1A2637;
+    --line:      #2A3A50;
+    --line-soft: #1E2B3D;
+    --text:      #E6EDF5;
+    --text-2:    #A2B4C7;
+    --text-3:    #74889D;
+    --aqua:   #6FD0E8;
+    --green:  #74CF87;
+    --orange: #E9A15C;
+    --red:    #F08585;
+    --aqua-bg:   #12313C;
+    --green-bg:  #14311D;
+    --orange-bg: #33240F;
+    --red-bg:    #351A1A;
+    --navy-bg:   #1A2739;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"] {
+  --navy:      #C9DBF0;
+  --ground:    #0A121D;
+  --surface:   #121C2A;
+  --surface-2: #1A2637;
+  --line:      #2A3A50;
+  --line-soft: #1E2B3D;
+  --text:      #E6EDF5;
+  --text-2:    #A2B4C7;
+  --text-3:    #74889D;
+  --aqua:   #6FD0E8;
+  --green:  #74CF87;
+  --orange: #E9A15C;
+  --red:    #F08585;
+  --aqua-bg:   #12313C;
+  --green-bg:  #14311D;
+  --orange-bg: #33240F;
+  --red-bg:    #351A1A;
+  --navy-bg:   #1A2739;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ground); color: var(--text);
+  font-family: var(--f-body); font-size: 15.5px; line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.22; }
+code, .mono { font-family: var(--f-mono); font-size: .86em; }
+p { margin: 0; }
+
+.shell { max-width: 960px; margin: 0 auto; padding: 0 22px 90px; }
+
+.eyebrow {
+  font-family: var(--f-display); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--text-3);
+}
+
+.masthead { padding: 38px 0 24px; border-bottom: 2px solid var(--navy); }
+.masthead h1 { font-size: 34px; font-weight: 700; letter-spacing: -.022em; color: var(--navy); margin-top: 6px; }
+.masthead .sub { color: var(--text-2); max-width: 66ch; margin-top: 12px; }
+
+.sect { margin-top: 46px; }
+.sect > .eyebrow { display: block; margin-bottom: 7px; }
+.sect > h2 { font-size: 24px; font-weight: 700; color: var(--navy); letter-spacing: -.015em; }
+.sect > p, .sect > .body > p { max-width: 70ch; color: var(--text-2); margin-top: 13px; }
+.sect h3 { font-size: 16.5px; font-weight: 600; margin-top: 26px; }
+
+b, strong { color: var(--text); font-weight: 600; }
+
+/* Figuras */
+figure { margin: 26px 0 0; }
+figure svg { display: block; width: 100%; height: auto; color: var(--text-2); }
+figcaption { font-size: 13.5px; color: var(--text-3); margin-top: 11px; max-width: 72ch; }
+figcaption b { color: var(--text-2); }
+.figwrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 11px; padding: 20px; }
+
+/* Tablas */
+.tablewrap { overflow-x: auto; margin-top: 20px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 520px; }
+th, td { text-align: left; padding: 9px 14px 9px 0; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+th { font-family: var(--f-display); font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+td.mono { font-family: var(--f-mono); font-size: 12.5px; }
+
+/* Bloques destacados */
+.callout {
+  display: grid; grid-template-columns: auto minmax(0,1fr); gap: 14px;
+  margin-top: 24px; padding: 16px 18px; border-radius: 0 10px 10px 0;
+  background: var(--surface); border: 1px solid var(--line-soft); border-left: 3px solid var(--aqua);
+}
+.callout.warn { background: var(--orange-bg); border-color: transparent; border-left-color: var(--orange); }
+.callout.stop { background: var(--red-bg); border-color: transparent; border-left-color: var(--red); }
+.callout .lbl {
+  font-family: var(--f-display); font-size: 10px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--aqua); padding-top: 4px; white-space: nowrap;
+}
+.callout.warn .lbl { color: var(--orange); }
+.callout.stop .lbl { color: var(--red); }
+.callout p + p { margin-top: 10px; }
+
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.pill { font-size: 12.5px; padding: 4px 11px; border-radius: 20px; border: 1px solid var(--line); color: var(--text-2); font-family: var(--f-mono); }
+.pill.on  { background: var(--green-bg); border-color: transparent; color: var(--green); }
+.pill.off { background: var(--red-bg);   border-color: transparent; color: var(--red); }
+
+/* Decisiones */
+.decision { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 11px; padding: 20px 22px; margin-top: 18px; }
+.decision h3 { margin: 0 0 4px; font-size: 16px; color: var(--navy); }
+.decision .q { font-size: 13px; color: var(--text-3); font-family: var(--f-mono); }
+.decision p { margin-top: 11px; color: var(--text-2); max-width: 72ch; }
+.decision .rec { margin-top: 13px; padding-top: 13px; border-top: 1px solid var(--line-soft); font-size: 14.5px; }
+.decision .rec b { color: var(--green); }
+
+.footer { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--line); font-size: 13px; color: var(--text-3); max-width: 76ch; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="shell">
+
+<header class="masthead">
+  <p class="eyebrow">Comercializadora VIDA · Diseño de operación</p>
+  <h1>Cuentas por Cobrar y por Pagar</h1>
+  <p class="sub">Cómo cierra hoy cada operación del sistema, dónde está el hueco de dinero, y
+    cómo quedaría con la Matriz comprando a proveedores y dispersando a las sucursales.
+    Escrito antes de tocar código, para acordar el modelo primero.</p>
+</header>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sect">
+  <span class="eyebrow">El punto de partida</span>
+  <h2>Hoy el sistema no sabe que alguien debe dinero</h2>
+  <p>Busqué tablas de pagos, abonos, saldos o cuentas en las 36 migraciones. <b>No existe
+    ninguna.</b> Las dos operaciones que mueven mercancía entre empresas — la orden de compra al
+    proveedor y el reabasto de la Matriz a la sucursal — guardan un total en dólares, pero ese
+    número es decorativo: nunca se cobra, nunca se abona, nunca vence.</p>
+  <p>El único adeudo que el sistema sí lleva hoy es el del repartidor: cuando entrega un pedido
+    en efectivo, el monto menos su comisión se le carga en
+    <code>VIDA_REPARTIDORES.SaldoPendiente</code>. Es un campo suelto, sin historial de abonos y
+    sin vencimiento — pero conceptualmente ya es una cuenta por cobrar, y confirma que el
+    problema es real y ya apareció una vez.</p>
+
+  <div class="figwrap">
+  <figure>
+    <svg viewBox="0 0 920 400" role="img" aria-label="Los cuatro flujos del sistema: la orden de compra y el reabasto de la Matriz terminan solo en mercancía, mientras que la venta POS y el pedido de delivery sí terminan en dinero.">
+      <defs>
+        <marker id="fa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1 L 9 5 L 0 9 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- Encabezados de columna -->
+      <text x="0" y="22" font-size="10.5" font-weight="600" letter-spacing="1.4" fill="currentColor" opacity=".55">FLUJO</text>
+      <text x="152" y="22" font-size="10.5" font-weight="600" letter-spacing="1.4" fill="currentColor" opacity=".55">CADENA DE ESTADOS</text>
+      <text x="660" y="22" font-size="10.5" font-weight="600" letter-spacing="1.4" fill="currentColor" opacity=".55">EN QUÉ CIERRA</text>
+      <line x1="0" y1="32" x2="920" y2="32" stroke="currentColor" opacity=".18"/>
+
+      <!-- ── Fila 1 · Orden de compra ── -->
+      <text x="0" y="66" font-size="13" font-weight="600" fill="currentColor">Compra a</text>
+      <text x="0" y="82" font-size="13" font-weight="600" fill="currentColor">proveedor</text>
+      <text x="0" y="99" font-size="10.5" fill="currentColor" opacity=".55">/proveedores</text>
+
+      <rect x="152" y="60" width="104" height="27" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="204" y="78" font-size="10.5" text-anchor="middle" fill="currentColor" font-family="monospace">BORRADOR</text>
+      <line x1="258" y1="73" x2="276" y2="73" stroke="currentColor" opacity=".45" marker-end="url(#fa)"/>
+      <rect x="278" y="60" width="104" height="27" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="330" y="78" font-size="10.5" text-anchor="middle" fill="currentColor" font-family="monospace">ENVIADA</text>
+      <line x1="384" y1="73" x2="402" y2="73" stroke="currentColor" opacity=".45" marker-end="url(#fa)"/>
+      <rect x="404" y="60" width="118" height="27" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="463" y="78" font-size="10" text-anchor="middle" fill="currentColor" font-family="monospace">RECIB_PARCIAL</text>
+      <line x1="524" y1="73" x2="542" y2="73" stroke="currentColor" opacity=".45" marker-end="url(#fa)"/>
+      <rect x="544" y="60" width="90" height="27" rx="4" fill="#C4691A" stroke="none"/>
+      <text x="589" y="78" font-size="10" text-anchor="middle" fill="#fff" font-family="monospace">RECIB_COMPL</text>
+
+      <rect x="660" y="54" width="260" height="40" rx="6" fill="#C4691A" opacity=".13"/>
+      <text x="674" y="71" font-size="12.5" font-weight="600" fill="#C4691A">Solo mercancía</text>
+      <text x="674" y="87" font-size="11" fill="currentColor" opacity=".75">sube el stock · el dinero no se registra</text>
+
+      <!-- ── Fila 2 · Reabasto Matriz ── -->
+      <text x="0" y="146" font-size="13" font-weight="600" fill="currentColor">Reabasto</text>
+      <text x="0" y="162" font-size="13" font-weight="600" fill="currentColor">Matriz→tienda</text>
+      <text x="0" y="179" font-size="10.5" fill="currentColor" opacity=".55">/matriz</text>
+
+      <rect x="152" y="140" width="104" height="27" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="204" y="158" font-size="10.5" text-anchor="middle" fill="currentColor" font-family="monospace">SOLICITADO</text>
+      <line x1="258" y1="153" x2="276" y2="153" stroke="currentColor" opacity=".45" marker-end="url(#fa)"/>
+      <rect x="278" y="140" width="104" height="27" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="330" y="158" font-size="10.5" text-anchor="middle" fill="currentColor" font-family="monospace">PREPARANDO</text>
+      <line x1="384" y1="153" x2="402" y2="153" stroke="currentColor" opacity=".45" marker-end="url(#fa)"/>
+      <rect x="404" y="140" width="118" height="27" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="463" y="158" font-size="10.5" text-anchor="middle" fill="currentColor" font-family="monospace">ENVIADO</text>
+      <line x1="524" y1="153" x2="542" y2="153" stroke="currentColor" opacity=".45" marker-end="url(#fa)"/>
+      <rect x="544" y="140" width="90" height="27" rx="4" fill="#C4691A" stroke="none"/>
+      <text x="589" y="158" font-size="10.5" text-anchor="middle" fill="#fff" font-family="monospace">RECIBIDO</text>
+
+      <rect x="660" y="134" width="260" height="40" rx="6" fill="#C4691A" opacity=".13"/>
+      <text x="674" y="151" font-size="12.5" font-weight="600" fill="#C4691A">Solo mercancía</text>
+      <text x="674" y="167" font-size="11" fill="currentColor" opacity=".75">traspaso real de stock · nadie queda debiendo</text>
+
+      <!-- ── Fila 3 · Venta POS ── -->
+      <text x="0" y="226" font-size="13" font-weight="600" fill="currentColor">Venta en</text>
+      <text x="0" y="242" font-size="13" font-weight="600" fill="currentColor">mostrador</text>
+      <text x="0" y="259" font-size="10.5" fill="currentColor" opacity=".55">/pos</text>
+
+      <rect x="152" y="220" width="104" height="27" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="204" y="238" font-size="10.5" text-anchor="middle" fill="currentColor" font-family="monospace">carrito</text>
+      <line x1="258" y1="233" x2="276" y2="233" stroke="currentColor" opacity=".45" marker-end="url(#fa)"/>
+      <rect x="278" y="220" width="104" height="27" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="330" y="238" font-size="10.5" text-anchor="middle" fill="currentColor" font-family="monospace">cobro</text>
+      <line x1="384" y1="233" x2="402" y2="233" stroke="currentColor" opacity=".45" marker-end="url(#fa)"/>
+      <rect x="404" y="220" width="230" height="27" rx="4" fill="#3E9E52" stroke="none"/>
+      <text x="519" y="238" font-size="10.5" text-anchor="middle" fill="#fff" font-family="monospace">ENTREGADO + PAGADO</text>
+
+      <rect x="660" y="214" width="260" height="40" rx="6" fill="#3E9E52" opacity=".14"/>
+      <text x="674" y="231" font-size="12.5" font-weight="600" fill="#3E9E52">Dinero, el mismo día</text>
+      <text x="674" y="247" font-size="11" fill="currentColor" opacity=".75">cuadra contra el arqueo del turno</text>
+
+      <!-- ── Fila 4 · Delivery ── -->
+      <text x="0" y="306" font-size="13" font-weight="600" fill="currentColor">Pedido de</text>
+      <text x="0" y="322" font-size="13" font-weight="600" fill="currentColor">delivery</text>
+      <text x="0" y="339" font-size="10.5" fill="currentColor" opacity=".55">app cliente</text>
+
+      <rect x="152" y="300" width="104" height="27" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="204" y="318" font-size="9.5" text-anchor="middle" fill="currentColor" font-family="monospace">BUSCANDO_REP</text>
+      <line x1="258" y1="313" x2="276" y2="313" stroke="currentColor" opacity=".45" marker-end="url(#fa)"/>
+      <rect x="278" y="300" width="104" height="27" rx="4" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="330" y="318" font-size="10.5" text-anchor="middle" fill="currentColor" font-family="monospace">…4 pasos…</text>
+      <line x1="384" y1="313" x2="402" y2="313" stroke="currentColor" opacity=".45" marker-end="url(#fa)"/>
+      <rect x="404" y="300" width="230" height="27" rx="4" fill="#3E9E52" stroke="none"/>
+      <text x="519" y="318" font-size="10.5" text-anchor="middle" fill="#fff" font-family="monospace">ENTREGADO</text>
+
+      <rect x="660" y="294" width="260" height="40" rx="6" fill="#3E9E52" opacity=".14"/>
+      <text x="674" y="311" font-size="12.5" font-weight="600" fill="#3E9E52">Dinero, diferido</text>
+      <text x="674" y="327" font-size="11" fill="currentColor" opacity=".75">SaldoPendiente del repartidor</text>
+
+      <!-- Llave del hueco -->
+      <line x1="646" y1="50" x2="646" y2="178" stroke="#C4691A" stroke-width="2.5"/>
+      <text x="636" y="118" font-size="11" text-anchor="end" font-weight="600" fill="#C4691A">el hueco</text>
+
+      <text x="0" y="386" font-size="11.5" fill="currentColor" opacity=".7">Los dos flujos entre empresas son justamente los que nunca cierran en dinero.</text>
+    </svg>
+    <figcaption><b>Hoy, cuatro flujos y dos finales distintos.</b> Lo que se le vende al
+      consumidor termina cobrado; lo que se mueve entre proveedor, Matriz y sucursal termina en
+      el almacén y ahí se pierde el rastro del dinero.</figcaption>
+  </figure>
+  </div>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Concepto</th><th>¿Existe hoy?</th><th>Dónde</th></tr></thead>
+    <tbody>
+      <tr><td>Orden de compra a proveedor</td><td><span class="pill on">sí</span></td><td class="mono">VIDA_ORDENES_COMPRA</td></tr>
+      <tr><td>Traspaso Matriz → sucursal</td><td><span class="pill on">sí</span></td><td class="mono">VIDA_PEDIDOS_MATRIZ</td></tr>
+      <tr><td>Designación de la Matriz</td><td><span class="pill on">sí</span></td><td class="mono">VIDA_CUENTA_PUNTOS_VENTA.EsMatriz</td></tr>
+      <tr><td>Cuenta por pagar a proveedor</td><td><span class="pill off">no</span></td><td>—</td></tr>
+      <tr><td>Cuenta por cobrar a sucursal</td><td><span class="pill off">no</span></td><td>—</td></tr>
+      <tr><td>Abonos / pagos parciales</td><td><span class="pill off">no</span></td><td>—</td></tr>
+      <tr><td>Plazo y vencimiento</td><td><span class="pill off">no</span></td><td>—</td></tr>
+      <tr><td>Saldo pendiente de repartidor</td><td><span class="pill on">sí</span></td><td class="mono">VIDA_REPARTIDORES.SaldoPendiente</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sect">
+  <span class="eyebrow">Hallazgo</span>
+  <h2>Un bug que decide cómo hay que construir esto</h2>
+  <p>Al revisar la recepción de órdenes de compra encontré algo que hay que arreglar
+    <em>antes</em> de colgarle dinero encima, porque si no, la cuenta por pagar va a nacer con
+    el monto equivocado.</p>
+
+  <div class="callout stop">
+    <span class="lbl">El bug</span>
+    <div>
+      <p>En <code>proveedores.controller.js:576</code> la recepción hace
+        <code>SET CantidadRecibida = @CantidadRecibida</code> — <b>asigna, no acumula</b>. El
+        stock sí se suma bien (<code>cantAntes + recibida</code>), pero el detalle de la orden se
+        sobrescribe.</p>
+      <p>Pedís 10 cajas. Llegan 5 → el detalle dice 5, el stock sube 5. Llegan las otras 3 → el
+        stock sube a 8, correcto, pero el detalle ahora dice <b>3</b>. La orden aparenta 30%
+        recibida cuando va en 80%. En el momento en que la cuenta por pagar se calcule como
+        <code>CantidadRecibida × PrecioUnitario</code>, le vas a pagar al proveedor por 3 cajas
+        en vez de 8.</p>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <span class="lbl">Además</span>
+    <p>Toda la recepción corre <b>fuera de transacción</b>: cada producto es su propio
+      <code>pool.request()</code>. Si falla a la mitad, unos productos entraron al stock y otros
+      no, y el estado de la orden puede quedar desalineado. Con dinero de por medio eso deja de
+      ser un inconveniente y pasa a ser un descuadre contable.</p>
+  </div>
+
+  <p>Los dos problemas tienen la misma raíz y la misma solución, que además es justo lo que
+    pediste cuando dijiste «atomizar la orden de compra»: <b>la recepción tiene que ser un
+    documento propio</b>, no un campo que se pisa.</p>
+
+  <div class="figwrap">
+  <figure>
+    <svg viewBox="0 0 900 290" role="img" aria-label="Comparación: hoy la orden de compra guarda la cantidad recibida en un campo que se sobrescribe en cada entrega; con recepciones como documentos propios cada entrega se registra aparte y el total acumula.">
+      <defs>
+        <marker id="fb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1 L 9 5 L 0 9 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- HOY -->
+      <text x="0" y="16" font-size="11" font-weight="600" letter-spacing="1.3" fill="#C63B3B">HOY</text>
+      <rect x="0" y="30" width="150" height="46" rx="6" fill="none" stroke="currentColor" opacity=".5"/>
+      <text x="75" y="50" font-size="12" text-anchor="middle" fill="currentColor" font-weight="600">Orden #12</text>
+      <text x="75" y="66" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".65">10 cajas pedidas</text>
+
+      <line x1="152" y1="53" x2="196" y2="53" stroke="currentColor" opacity=".5" marker-end="url(#fb)"/>
+      <rect x="198" y="30" width="182" height="46" rx="6" fill="none" stroke="#C63B3B" stroke-width="1.5"/>
+      <text x="289" y="49" font-size="11" text-anchor="middle" fill="currentColor" font-family="monospace">CantidadRecibida</text>
+      <text x="289" y="65" font-size="10.5" text-anchor="middle" fill="#C63B3B" font-weight="600">un solo campo</text>
+
+      <line x1="300" y1="92" x2="300" y2="116" stroke="currentColor" opacity=".5" marker-end="url(#fb)"/>
+      <text x="312" y="108" font-size="11" fill="currentColor" opacity=".75">entrega 1: llegan 5</text>
+      <rect x="198" y="120" width="182" height="26" rx="4" fill="currentColor" opacity=".08"/>
+      <text x="289" y="138" font-size="11" text-anchor="middle" fill="currentColor" font-family="monospace">= 5</text>
+
+      <line x1="300" y1="150" x2="300" y2="174" stroke="currentColor" opacity=".5" marker-end="url(#fb)"/>
+      <text x="312" y="166" font-size="11" fill="currentColor" opacity=".75">entrega 2: llegan 3</text>
+      <rect x="198" y="178" width="182" height="26" rx="4" fill="#C63B3B" opacity=".18"/>
+      <text x="289" y="196" font-size="11" text-anchor="middle" fill="#C63B3B" font-family="monospace" font-weight="600">= 3  ← se pisó el 5</text>
+
+      <text x="0" y="238" font-size="11.5" fill="#C63B3B" font-weight="600">La orden dice 3 de 10.</text>
+      <text x="0" y="256" font-size="11.5" fill="currentColor" opacity=".7">El stock dice 8. Uno de los dos miente.</text>
+
+      <!-- divisor -->
+      <line x1="450" y1="20" x2="450" y2="270" stroke="currentColor" opacity=".18" stroke-dasharray="4 5"/>
+
+      <!-- PROPUESTA -->
+      <text x="490" y="16" font-size="11" font-weight="600" letter-spacing="1.3" fill="#3E9E52">ATOMIZADA</text>
+      <rect x="490" y="30" width="150" height="46" rx="6" fill="none" stroke="currentColor" opacity=".5"/>
+      <text x="565" y="50" font-size="12" text-anchor="middle" fill="currentColor" font-weight="600">Orden #12</text>
+      <text x="565" y="66" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".65">10 cajas pedidas</text>
+
+      <line x1="642" y1="53" x2="686" y2="53" stroke="currentColor" opacity=".5" marker-end="url(#fb)"/>
+      <text x="700" y="44" font-size="10.5" fill="currentColor" opacity=".7">una fila por entrega</text>
+      <rect x="688" y="52" width="200" height="26" rx="4" fill="#3E9E52" opacity=".16"/>
+      <text x="788" y="70" font-size="11" text-anchor="middle" fill="#3E9E52" font-family="monospace" font-weight="600">Recepción 1 · 5 cajas</text>
+
+      <rect x="688" y="88" width="200" height="26" rx="4" fill="#3E9E52" opacity=".16"/>
+      <text x="788" y="106" font-size="11" text-anchor="middle" fill="#3E9E52" font-family="monospace" font-weight="600">Recepción 2 · 3 cajas</text>
+
+      <line x1="788" y1="120" x2="788" y2="146" stroke="currentColor" opacity=".5" marker-end="url(#fb)"/>
+      <rect x="688" y="150" width="200" height="30" rx="4" fill="none" stroke="currentColor" opacity=".5"/>
+      <text x="788" y="170" font-size="11" text-anchor="middle" fill="currentColor" font-family="monospace">SUM = 8 de 10</text>
+
+      <line x1="788" y1="184" x2="788" y2="208" stroke="#3E9E52" stroke-width="1.5" marker-end="url(#fb)"/>
+      <rect x="688" y="212" width="200" height="30" rx="4" fill="#3E9E52"/>
+      <text x="788" y="232" font-size="11" text-anchor="middle" fill="#fff" font-weight="600">Cuenta por pagar</text>
+
+      <text x="490" y="268" font-size="11.5" fill="currentColor" opacity=".7">Cada entrega es un hecho con fecha. El saldo se deriva.</text>
+    </svg>
+    <figcaption><b>Atomizar no es partir archivos, es dejar de pisar hechos.</b> Cuando cada
+      entrega es una fila con su fecha, el «recibido» se calcula sumando y la cuenta por pagar
+      puede nacer de cada recepción en vez de adivinarse del total.</figcaption>
+  </figure>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sect">
+  <span class="eyebrow">El modelo nuevo</span>
+  <h2>La Matriz como centro, y el dinero colgando de cada movimiento</h2>
+  <p>Lo que describiste tiene una simetría muy útil: <b>las dos cuentas son el mismo objeto
+    visto desde lados opuestos.</b> En las dos hay un documento con monto y vencimiento, abonos
+    que lo van bajando, y un saldo que llega a cero. Cambia quién es la contraparte y de qué
+    operación nace — nada más.</p>
+
+  <div class="figwrap">
+  <figure>
+    <svg viewBox="0 0 920 430" role="img" aria-label="La Matriz compra al proveedor generando una cuenta por pagar, y despacha a la sucursal generando una cuenta por cobrar; ambas cuentas usan el mismo motor de abonos.">
+      <defs>
+        <marker id="fc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 1 L 9 5 L 0 9 z" fill="currentColor"/>
+        </marker>
+        <marker id="fcg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 1 L 9 5 L 0 9 z" fill="#2C9CBC"/>
+        </marker>
+      </defs>
+
+      <!-- Actores -->
+      <rect x="0" y="60" width="160" height="62" rx="8" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".6"/>
+      <text x="80" y="87" font-size="14" text-anchor="middle" font-weight="600" fill="currentColor">Proveedor</text>
+      <text x="80" y="105" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".6">externo</text>
+
+      <rect x="380" y="52" width="160" height="78" rx="8" fill="#0A1E3F" />
+      <text x="460" y="82" font-size="15" text-anchor="middle" font-weight="700" fill="#fff">MATRIZ</text>
+      <text x="460" y="101" font-size="10.5" text-anchor="middle" fill="#fff" opacity=".75">compra y dispersa</text>
+      <text x="460" y="117" font-size="9.5" text-anchor="middle" fill="#fff" opacity=".55" font-family="monospace">EsMatriz = 1</text>
+
+      <rect x="760" y="60" width="160" height="62" rx="8" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".6"/>
+      <text x="840" y="87" font-size="14" text-anchor="middle" font-weight="600" fill="currentColor">Sucursal</text>
+      <text x="840" y="105" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".6">de la red</text>
+
+      <!-- Flechas de mercancía -->
+      <line x1="162" y1="91" x2="376" y2="91" stroke="currentColor" opacity=".6" stroke-width="1.5" marker-end="url(#fc)"/>
+      <text x="269" y="82" font-size="11.5" text-anchor="middle" fill="currentColor" font-weight="600">orden de compra</text>
+      <text x="269" y="110" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".6">mercancía →</text>
+
+      <line x1="542" y1="91" x2="756" y2="91" stroke="currentColor" opacity=".6" stroke-width="1.5" marker-end="url(#fc)"/>
+      <text x="649" y="82" font-size="11.5" text-anchor="middle" fill="currentColor" font-weight="600">traspaso</text>
+      <text x="649" y="110" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".6">mercancía →</text>
+
+      <!-- Documentos de dinero -->
+      <line x1="200" y1="134" x2="200" y2="176" stroke="#2C9CBC" stroke-width="1.5" marker-end="url(#fcg)"/>
+      <text x="212" y="160" font-size="10.5" fill="#2C9CBC">genera</text>
+      <rect x="60" y="180" width="280" height="64" rx="8" fill="#2C9CBC" opacity=".14"/>
+      <rect x="60" y="180" width="280" height="64" rx="8" fill="none" stroke="#2C9CBC" stroke-width="1.5"/>
+      <text x="200" y="206" font-size="14" text-anchor="middle" font-weight="700" fill="#2C9CBC">CUENTA POR PAGAR</text>
+      <text x="200" y="226" font-size="11" text-anchor="middle" fill="currentColor" opacity=".8">la Matriz le debe al proveedor</text>
+      <text x="200" y="240" font-size="10" text-anchor="middle" fill="currentColor" opacity=".55" font-family="monospace">contraparte: idProveedor</text>
+
+      <line x1="720" y1="134" x2="720" y2="176" stroke="#2C9CBC" stroke-width="1.5" marker-end="url(#fcg)"/>
+      <text x="732" y="160" font-size="10.5" fill="#2C9CBC">genera</text>
+      <rect x="580" y="180" width="280" height="64" rx="8" fill="#2C9CBC" opacity=".14"/>
+      <rect x="580" y="180" width="280" height="64" rx="8" fill="none" stroke="#2C9CBC" stroke-width="1.5"/>
+      <text x="720" y="206" font-size="14" text-anchor="middle" font-weight="700" fill="#2C9CBC">CUENTA POR COBRAR</text>
+      <text x="720" y="226" font-size="11" text-anchor="middle" fill="currentColor" opacity=".8">la sucursal le debe a la Matriz</text>
+      <text x="720" y="240" font-size="10" text-anchor="middle" fill="currentColor" opacity=".55" font-family="monospace">contraparte: idPuntoVenta</text>
+
+      <!-- Motor compartido -->
+      <line x1="200" y1="248" x2="200" y2="300" stroke="currentColor" opacity=".5" marker-end="url(#fc)"/>
+      <line x1="720" y1="248" x2="720" y2="300" stroke="currentColor" opacity=".5" marker-end="url(#fc)"/>
+      <line x1="200" y1="300" x2="720" y2="300" stroke="currentColor" opacity=".5"/>
+      <line x1="460" y1="300" x2="460" y2="326" stroke="currentColor" opacity=".5" marker-end="url(#fc)"/>
+
+      <rect x="280" y="330" width="360" height="66" rx="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="6 4" opacity=".75"/>
+      <text x="460" y="356" font-size="14" text-anchor="middle" font-weight="700" fill="currentColor">Un solo motor de abonos</text>
+      <text x="460" y="375" font-size="11" text-anchor="middle" fill="currentColor" opacity=".7">abonar · liquidar · vencer · recalcular saldo</text>
+      <text x="460" y="390" font-size="10" text-anchor="middle" fill="currentColor" opacity=".55">las dos cuentas comparten tabla y reglas</text>
+
+      <text x="0" y="424" font-size="11.5" fill="currentColor" opacity=".7">La mercancía va de izquierda a derecha. El dinero vuelve por abajo, en sentido contrario.</text>
+    </svg>
+    <figcaption><b>La simetría es el punto.</b> Si CxP y CxC comparten tabla y motor, el
+      vencimiento, los abonos parciales y la liquidación se escriben una vez y funcionan para
+      las dos. Lo único que cambia es la contraparte y el documento que les dio origen.</figcaption>
+  </figure>
+  </div>
+
+  <h3>Ciclo de vida de una cuenta</h3>
+  <p>Igual para las dos. El vencimiento no es un estado más: es una condición de fecha que
+    puede caer sobre cualquier cuenta que todavía deba algo.</p>
+
+  <div class="figwrap">
+  <figure>
+    <svg viewBox="0 0 800 250" role="img" aria-label="Una cuenta nace abierta, los abonos la llevan a parcial y de ahí a liquidada; mientras tenga saldo y pase su fecha de vencimiento queda marcada como vencida.">
+      <defs>
+        <marker id="fd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 1 L 9 5 L 0 9 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <rect x="0" y="60" width="150" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".65"/>
+      <text x="75" y="80" font-size="12.5" text-anchor="middle" font-weight="600" fill="currentColor" font-family="monospace">ABIERTA</text>
+      <text x="75" y="97" font-size="10" text-anchor="middle" fill="currentColor" opacity=".6">saldo = total</text>
+
+      <line x1="152" y1="83" x2="222" y2="83" stroke="currentColor" opacity=".6" marker-end="url(#fd)"/>
+      <text x="187" y="74" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".75">abono</text>
+
+      <rect x="224" y="60" width="150" height="46" rx="6" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".65"/>
+      <text x="299" y="80" font-size="12.5" text-anchor="middle" font-weight="600" fill="currentColor" font-family="monospace">PARCIAL</text>
+      <text x="299" y="97" font-size="10" text-anchor="middle" fill="currentColor" opacity=".6">0 &lt; saldo &lt; total</text>
+
+      <line x1="376" y1="83" x2="446" y2="83" stroke="currentColor" opacity=".6" marker-end="url(#fd)"/>
+      <text x="411" y="74" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".75">abona todo</text>
+
+      <rect x="448" y="60" width="150" height="46" rx="6" fill="#3E9E52"/>
+      <text x="523" y="80" font-size="12.5" text-anchor="middle" font-weight="700" fill="#fff" font-family="monospace">LIQUIDADA</text>
+      <text x="523" y="97" font-size="10" text-anchor="middle" fill="#fff" opacity=".8">saldo = 0</text>
+
+      <!-- abono repetido -->
+      <path d="M 299 108 C 260 142, 338 142, 299 108" fill="none" stroke="currentColor" opacity=".5" marker-end="url(#fd)"/>
+      <text x="299" y="156" font-size="10.5" text-anchor="middle" fill="currentColor" opacity=".7">más abonos</text>
+
+      <!-- liquidación en una exhibición -->
+      <path d="M 75 110 C 75 190, 523 190, 523 112" fill="none" stroke="currentColor" opacity=".55" stroke-width="1.5" marker-end="url(#fd)"/>
+      <text x="299" y="203" font-size="11" text-anchor="middle" fill="currentColor" opacity=".8" font-weight="600">liquidar en una sola exhibición</text>
+
+      <!-- vencida -->
+      <rect x="648" y="60" width="150" height="46" rx="6" fill="#C63B3B" opacity=".16"/>
+      <rect x="648" y="60" width="150" height="46" rx="6" fill="none" stroke="#C63B3B" stroke-width="1.5" stroke-dasharray="5 3"/>
+      <text x="723" y="80" font-size="12.5" text-anchor="middle" font-weight="700" fill="#C63B3B" font-family="monospace">VENCIDA</text>
+      <text x="723" y="97" font-size="10" text-anchor="middle" fill="currentColor" opacity=".7">hoy &gt; vencimiento</text>
+
+      <path d="M 150 40 C 400 14, 560 14, 700 54" fill="none" stroke="#C63B3B" opacity=".65" stroke-dasharray="5 3" marker-end="url(#fd)"/>
+      <text x="420" y="14" font-size="10.5" text-anchor="middle" fill="#C63B3B">cae sobre cualquier cuenta con saldo</text>
+
+      <text x="0" y="238" font-size="11.5" fill="currentColor" opacity=".7">El saldo nunca se guarda a mano: se deriva de los abonos.</text>
+    </svg>
+    <figcaption><b>Un solo ciclo para las dos cuentas.</b> «Vencida» no reemplaza a
+      abierta ni a parcial: es una marca derivada de la fecha, que desaparece sola cuando la
+      cuenta se liquida.</figcaption>
+  </figure>
+  </div>
+
+  <div class="callout">
+    <span class="lbl">Regla</span>
+    <p>El saldo debe <b>derivarse</b> de los abonos (<code>Total − SUM(abonos)</code>), no
+      guardarse en una columna que se va actualizando. Es la misma lección que ya te costó dos
+      veces en este sistema: <code>SaldoPendiente</code> del repartidor y <code>PuntosSaldo</code>
+      del cliente son columnas sumadas a mano, y el hallazgo #3 del review es exactamente un
+      saldo que se va a negativo por dos procesos escribiendo esa columna a la vez.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sect">
+  <span class="eyebrow">Modelo de datos</span>
+  <h2>Dos tablas, no cuatro</h2>
+  <p>Una tabla de cuentas y una de abonos, con un discriminador <code>Tipo</code>. Así el motor
+    de pagos, el vencimiento y la pantalla se escriben una sola vez.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Columna</th><th>Para qué</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">Tipo</td><td><code>CXP</code> o <code>CXC</code> — lo único que distingue una de otra</td></tr>
+      <tr><td class="mono">idProveedor / idPuntoVenta</td><td>La contraparte. En CxP el proveedor; en CxC la sucursal que debe</td></tr>
+      <tr><td class="mono">idOrden / idPedidoMatriz</td><td>De qué operación nació, para poder volver al origen desde la pantalla</td></tr>
+      <tr><td class="mono">TotalUSD</td><td>Monto del documento, congelado al emitirlo</td></tr>
+      <tr><td class="mono">FechaEmision · DiasPlazo · FechaVencimiento</td><td>El plazo. Se guarda el vencimiento calculado para poder filtrar e indexar</td></tr>
+      <tr><td class="mono">Status</td><td><code>ABIERTA</code> · <code>PARCIAL</code> · <code>LIQUIDADA</code> · <code>CANCELADA</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p style="margin-top:18px">Y la de abonos: la cuenta a la que aplica, el monto, la fecha, el
+    método de pago, una referencia (número de transferencia) y quién lo registró. Cada abono es
+    un hecho inmutable; la cancelación de un abono es otro abono en negativo, nunca un
+    <code>DELETE</code>. Eso mantiene la auditoría intacta, igual que
+    <code>VIDA_CLIENTE_PUNTOS</code>.</p>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sect">
+  <span class="eyebrow">Lo que falta decidir</span>
+  <h2>Seis decisiones antes de escribir código</h2>
+  <p>Ninguna de estas la puedo sacar del código: son de negocio. Te dejo mi recomendación en
+    cada una, pero la última palabra es tuya.</p>
+
+  <div class="decision">
+    <h3>1 · ¿Cuándo nace la cuenta por pagar?</h3>
+    <p class="q">al enviar la orden · al recibir la mercancía · una por recepción</p>
+    <p>Dijiste «se genera la orden de compra y la cuenta por pagar», que suena a que nace junto
+      con la orden. El problema son las entregas parciales: si pediste 10 cajas y llegaron 5,
+      ¿le debés al proveedor 10 o 5?</p>
+    <p class="rec"><b>Recomiendo:</b> una cuenta por cada recepción, por lo que realmente llegó.
+      Es lo que hace que el bug de arriba deje de importar, y es como factura el proveedor en la
+      vida real: te factura lo que entregó.</p>
+  </div>
+
+  <div class="decision">
+    <h3>2 · ¿El traspaso a la sucursal se cobra a precio de costo?</h3>
+    <p class="q">costo · costo + margen de la Matriz · precio de lista</p>
+    <p>Hoy <code>VIDA_PEDIDOS_MATRIZ.TotalCostoUSD</code> guarda el costo. Si la Matriz le cobra
+      a la sucursal exactamente el costo, no gana nada por dispersar; si le carga un margen, ese
+      margen es el negocio de la Matriz y hay que poder configurarlo.</p>
+    <p class="rec"><b>Recomiendo:</b> un porcentaje configurable por cuenta, arrancando en 0.
+      Así el modelo lo soporta desde el día uno sin obligarte a decidirlo ahora.</p>
+  </div>
+
+  <div class="decision">
+    <h3>3 · ¿Quién opera la Matriz?</h3>
+    <p class="q">era tu duda explícita</p>
+    <p>Hoy la Matriz no es una entidad: es un punto de venta con <code>EsMatriz = 1</code>. No
+      tiene usuarios propios — quien la maneja es el <code>ADMIN</code> de ese punto de venta, y
+      por la regla de alcance solo ve su propia tienda. Eso alcanza para el traspaso, pero no
+      para comprarle a proveedores en nombre de toda la red.</p>
+    <p class="rec"><b>Recomiendo:</b> no inventar un rol nuevo. Que la Matriz la operen los roles
+      de red que ya existen (<code>SUPER_ADMIN</code>, <code>ADMIN_PAIS</code>,
+      <code>ADMIN_ESTADO</code>), más el <code>ADMIN</code> del punto de venta marcado como
+      Matriz, al que se le ensancha el alcance solo para las pantallas de compras y cuentas. Un
+      rol nuevo obliga a revisar las tres variantes de control de alcance que ya divergen en el
+      sistema.</p>
+  </div>
+
+  <div class="decision">
+    <h3>4 · ¿Las sucursales pueden seguir comprando directo a proveedores?</h3>
+    <p class="q">hoy sí pueden</p>
+    <p><code>VIDA_ORDENES_COMPRA</code> tiene <code>idPuntoVenta</code> y el rol
+      <code>ADMIN</code> puede crear órdenes: cualquier tienda le compra directo a un proveedor.
+      Si la regla nueva es que «la Matriz compra y dispersa», esto la contradice.</p>
+    <p class="rec"><b>Recomiendo:</b> restringir la orden de compra a la Matriz, pero con una
+      bandera de configuración para permitir la compra directa, porque una tienda lejana que
+      necesita algo urgente es un caso real. Si lo cerrás del todo, avisame y lo dejo cerrado.</p>
+  </div>
+
+  <div class="decision">
+    <h3>5 · ¿El plazo es por documento o por contraparte?</h3>
+    <p class="q">lo planteaste como duda</p>
+    <p>Preguntaste si los días de vencimiento aplican también a las cuentas por pagar. Sí, y es
+      donde más se usan: el proveedor te da 30 días. Lo normal es que el plazo sea un atributo
+      del <b>proveedor</b> o de la <b>sucursal</b>, y que el documento lo herede pudiendo
+      pisarlo.</p>
+    <p class="rec"><b>Recomiendo:</b> <code>DiasCredito</code> en proveedor y en punto de venta
+      como valor por defecto, editable en cada documento.</p>
+  </div>
+
+  <div class="decision">
+    <h3>6 · ¿Qué pasa si se cancela algo ya cobrado o pagado?</h3>
+    <p class="q">nadie lo mencionó todavía</p>
+    <p>Se cancela un traspaso que ya tenía dos abonos, o se devuelve mercancía al proveedor
+      contra una cuenta ya liquidada. Sin una regla, esto termina en saldos que no cuadran.</p>
+    <p class="rec"><b>Recomiendo:</b> nota de crédito — un documento nuevo que compensa, nunca
+      borrar ni editar el original. Es la misma decisión que ya tomaron bien con los reembolsos
+      de puntos.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<section class="sect">
+  <span class="eyebrow">Si estás de acuerdo</span>
+  <h2>Por dónde empezaría</h2>
+  <p>En este orden, porque cada paso deja el siguiente en terreno firme:</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>#</th><th>Paso</th><th>Por qué va acá</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">1</td><td>Arreglar la recepción: acumular en vez de pisar, y meterla en transacción</td><td>Si no, la cuenta por pagar nace con el monto mal</td></tr>
+      <tr><td class="mono">2</td><td>Recepciones como documento propio</td><td>Es la atomización que pediste, y la base del devengo</td></tr>
+      <tr><td class="mono">3</td><td>Las dos tablas de cuentas y abonos, con el motor de saldo derivado</td><td>El corazón; una sola vez sirve para CxP y CxC</td></tr>
+      <tr><td class="mono">4</td><td>Enganchar el origen: recepción → CxP, traspaso → CxC</td><td>Recién acá el dinero empieza a existir solo</td></tr>
+      <tr><td class="mono">5</td><td>La pantalla de Cuentas, con las dos pestañas y el semáforo de vencimiento</td><td>Lo último: ya tiene de dónde leer</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="margin-top:20px">Los pasos 1 y 2 tienen valor aunque cambies de opinión en todo lo
+    demás: hoy hay órdenes de compra mostrando cantidades equivocadas.</p>
+</section>
+
+<p class="footer">Todo lo que dice este documento sobre el estado actual sale de leer el
+  código y las 36 migraciones: los estados, los nombres de tabla y de columna, y la ausencia de
+  tablas de dinero están verificados, no supuestos. Las propuestas y las recomendaciones son
+  mías y están abiertas a discusión.</p>
+
+</div>

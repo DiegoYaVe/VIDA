@@ -46,6 +46,21 @@ const STATUS_ICONS = {
   ENTREGADO: 'checkmark-circle-outline',
 };
 
+// Espejo de las reglas del backend (TRANSICIONES_DELIVERY y LIBERABLES en
+// delivery.controller.js): antes de recoger en sucursal el pedido se libera
+// para que lo tome otro; una vez recogido ya no se le puede pasar a nadie y
+// la única salida es cancelarlo con motivo.
+const LIBERABLES  = ['REPARTIDOR_ASIGNADO', 'IR_A_SUCURSAL'];
+const CANCELABLES = ['EN_SUCURSAL', 'EN_CAMINO'];
+
+const MOTIVOS_CANCELACION = [
+  'Cliente ausente',
+  'Dirección incorrecta o no existe',
+  'Cliente no responde el teléfono',
+  'Cliente rechazó el pedido',
+  'Problema con el vehículo',
+];
+
 const ACTION_BUTTONS = [
   { fromStatus: 'REPARTIDOR_ASIGNADO', label: 'Voy a la sucursal',                nextStatus: 'IR_A_SUCURSAL', color: '#1A6A9A' },
   { fromStatus: null,                  label: 'Voy a la sucursal',                nextStatus: 'IR_A_SUCURSAL', color: '#1A6A9A' },
@@ -170,6 +185,56 @@ function NuevoPedidoModal({ pedido, pedidosActivos, onAceptar, onRechazar }) {
   );
 }
 
+// ---------- MotivoCancelacionModal ----------
+// Se usa un modal propio en vez de Alert porque el AlertDialog de Android
+// solo admite 3 botones y acá hay 5 motivos.
+function MotivoCancelacionModal({ pedido, loading, onConfirmar, onCerrar }) {
+  const [sel, setSel] = useState(null);
+
+  return (
+    <View style={modalStyles.overlay}>
+      <View style={motivoStyles.sheet}>
+        <Text style={motivoStyles.title}>Cancelar pedido #{pedido.idPedido}</Text>
+        <Text style={motivoStyles.sub}>
+          Ya recogiste este pedido, así que no se le puede pasar a otro repartidor.
+          Indicá por qué no se puede entregar — queda registrado.
+        </Text>
+
+        {MOTIVOS_CANCELACION.map((m) => (
+          <TouchableOpacity
+            key={m}
+            style={[motivoStyles.opcion, sel === m && motivoStyles.opcionSel]}
+            onPress={() => setSel(m)}
+            disabled={loading}
+          >
+            <Ionicons
+              name={sel === m ? 'radio-button-on' : 'radio-button-off'}
+              size={20}
+              color={sel === m ? '#E53E3E' : '#A0AEC0'}
+            />
+            <Text style={[motivoStyles.opcionText, sel === m && motivoStyles.opcionTextSel]}>{m}</Text>
+          </TouchableOpacity>
+        ))}
+
+        <View style={motivoStyles.actions}>
+          <TouchableOpacity style={motivoStyles.btnVolver} onPress={onCerrar} disabled={loading}>
+            <Text style={motivoStyles.btnVolverText}>Volver</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[motivoStyles.btnConfirmar, (!sel || loading) && styles.btnDisabled]}
+            onPress={() => sel && onConfirmar(sel)}
+            disabled={!sel || loading}
+          >
+            {loading
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={motivoStyles.btnConfirmarText}>Cancelar pedido</Text>}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // ---------- StatusBar del pedido ----------
 function PedidoStatusBar({ currentStatus }) {
   return (
@@ -217,6 +282,8 @@ export default function IndexScreen() {
   const [actionLoading, setActionLoading] = useState(false);
   const [toggling,      setToggling]      = useState(false);
   const [idPedidoSel,   setIdPedidoSel]   = useState(null);
+  // Pedido esperando que el repartidor elija motivo de cancelación
+  const [pedidoACancelar, setPedidoACancelar] = useState(null);
 
   const { ubicacion } = useLocation(disponible);
 
@@ -400,11 +467,11 @@ export default function IndexScreen() {
     }
   };
 
-  const doCambiarStatus = async (pedido, nuevoStatus) => {
+  const doCambiarStatus = async (pedido, nuevoStatus, motivo) => {
     setActionLoading(true);
     const idPedido = pedido.idPedido || pedido.id;
     try {
-      await api.post('/delivery/repartidor/status-pedido', { idPedido, nuevoStatus });
+      await api.post('/delivery/repartidor/status-pedido', { idPedido, nuevoStatus, motivo });
       if (nuevoStatus === 'ENTREGADO' || nuevoStatus === 'CANCELADO') {
         quitarPedido(idPedido);
         setIdPedidoSel(null);
@@ -413,19 +480,60 @@ export default function IndexScreen() {
       } else {
         actualizarPedido(idPedido, { Status: nuevoStatus });
       }
+      return true;
     } catch (e) {
       Alert.alert('Error', e.response?.data?.error || e.message);
+      return false;
     } finally {
       setActionLoading(false);
     }
   };
 
-  const handleCancelar = (pedido) => {
-    Alert.alert('Cancelar pedido', `¿Seguro que quieres cancelar el pedido #${pedido.idPedido}?`, [
-      { text: 'No', style: 'cancel' },
-      { text: 'Sí, cancelar', style: 'destructive', onPress: () => doCambiarStatus(pedido, 'CANCELADO') },
-    ]);
+  // Cancelar solo está disponible con el pedido ya recogido, y exige motivo
+  const handleCancelar = (pedido) => setPedidoACancelar(pedido);
+
+  const doCancelarConMotivo = async (motivo) => {
+    const pedido = pedidoACancelar;
+    if (!pedido) return;
+    // Si falla se deja el modal abierto con el motivo elegido para reintentar
+    const ok = await doCambiarStatus(pedido, 'CANCELADO', motivo);
+    if (ok) setPedidoACancelar(null);
   };
+
+  // Liberar: el pedido vuelve al pool y lo toma otro repartidor. El backend
+  // no se lo vuelve a ofrecer a quien lo soltó.
+  const handleLiberar = (pedido) => {
+    Alert.alert(
+      'Liberar pedido',
+      `El pedido #${pedido.idPedido} vuelve a la búsqueda para que lo tome otro repartidor. ` +
+      'A ti no se te va a volver a ofrecer.',
+      [
+        { text: 'No', style: 'cancel' },
+        { text: 'Sí, liberar', style: 'destructive', onPress: () => doLiberar(pedido) },
+      ],
+    );
+  };
+
+  const doLiberar = async (pedido) => {
+    setActionLoading(true);
+    const idPedido = pedido.idPedido || pedido.id;
+    try {
+      await api.post('/delivery/repartidor/liberar', { idPedido });
+      quitarPedido(idPedido);
+      setIdPedidoSel(null);
+      // Refrescar la ruta con los pedidos que le quedan
+      cargarActivos();
+    } catch (e) {
+      Alert.alert('No se pudo liberar', e.response?.data?.error || e.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Un pedido recién aceptado llega sin Status o como REPARTIDOR_ASIGNADO
+  const statusSel     = pedidoSel?.Status || 'REPARTIDOR_ASIGNADO';
+  const puedeLiberar  = !!pedidoSel && LIBERABLES.includes(statusSel);
+  const puedeCancelar = !!pedidoSel && CANCELABLES.includes(statusSel);
 
   const currentStatus = pedidoSel?.Status === 'REPARTIDOR_ASIGNADO' ? null : (pedidoSel?.Status || null);
   const actionBtn = pedidoSel
@@ -510,7 +618,10 @@ export default function IndexScreen() {
 
         <View style={styles.bottomPanel}>
           {pedidosActivos.length > 0 ? (
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <>
+            {/* Solo el detalle scrollea: los botones viven en el footer fijo
+                de abajo, para que nunca queden fuera de alcance */}
+            <ScrollView style={styles.panelScroll} contentContainerStyle={styles.panelScrollContent}>
 
               {/* Selector horizontal de pedidos (orden de la ruta) */}
               {pedidosActivos.length > 1 && (
@@ -606,6 +717,9 @@ export default function IndexScreen() {
                 </View>
               </View>
 
+            </ScrollView>
+
+            <View style={styles.panelFooter}>
               {actionBtn && (
                 <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: actionBtn.color }, actionLoading && styles.btnDisabled]}
@@ -623,12 +737,29 @@ export default function IndexScreen() {
                 </TouchableOpacity>
               )}
 
-              {pedidoSel && pedidoSel.Status !== 'ENTREGADO' && (
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelar(pedidoSel)}>
-                  <Text style={styles.cancelBtnText}>Cancelar pedido</Text>
+              {/* Antes de recoger: liberar. Después: cancelar con motivo. */}
+              {puedeLiberar && (
+                <TouchableOpacity
+                  style={[styles.liberarBtn, actionLoading && styles.btnDisabled]}
+                  onPress={() => handleLiberar(pedidoSel)}
+                  disabled={actionLoading}
+                >
+                  <Ionicons name="swap-horizontal-outline" size={18} color="#E67E22" />
+                  <Text style={styles.liberarBtnText}>Liberar — que lo tome otro</Text>
                 </TouchableOpacity>
               )}
-            </ScrollView>
+
+              {puedeCancelar && (
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={() => handleCancelar(pedidoSel)}
+                  disabled={actionLoading}
+                >
+                  <Text style={styles.cancelBtnText}>No puedo entregarlo — cancelar</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            </>
           ) : (
             <View style={styles.esperandoContainer}>
               <Ionicons name="radio-outline" size={40} color="#27AE60" />
@@ -638,6 +769,15 @@ export default function IndexScreen() {
           )}
         </View>
       </View>
+
+      {pedidoACancelar && (
+        <MotivoCancelacionModal
+          pedido={pedidoACancelar}
+          loading={actionLoading}
+          onConfirmar={doCancelarConMotivo}
+          onCerrar={() => setPedidoACancelar(null)}
+        />
+      )}
 
       {nuevoPedido && (
         <NuevoPedidoModal
@@ -701,13 +841,27 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.6 },
 
   onlineContainer: { flex: 1 },
-  mapPlaceholder: { flex: 1, backgroundColor: '#E8EDF2', minHeight: SCREEN_HEIGHT * 0.3, overflow: 'hidden' },
+  // El minHeight iba en SCREEN_HEIGHT * 0.3 y el panel en 0.55: 0.85 de la
+  // pantalla COMPLETA, cuando el espacio real es la pantalla menos el header
+  // y la tab bar. El panel no podía encogerse y su parte de abajo (los
+  // botones) terminaba detrás de la tab bar, inalcanzable.
+  mapPlaceholder: { flex: 1, backgroundColor: '#E8EDF2', minHeight: 140, overflow: 'hidden' },
 
   bottomPanel: {
     backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    padding: 20, maxHeight: SCREEN_HEIGHT * 0.55,
+    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12,
+    // El % se resuelve contra el alto disponible del contenedor, no contra la
+    // pantalla, y flexShrink deja que ceda si el contenido no cabe
+    maxHeight: '68%', flexShrink: 1,
     shadowColor: '#000', shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.1, shadowRadius: 12, elevation: 8,
+  },
+  // flexShrink sin flexGrow: el scroll cede espacio al footer, nunca lo tapa
+  panelScroll:        { flexShrink: 1 },
+  panelScrollContent: { paddingBottom: 4 },
+  panelFooter: {
+    paddingTop: 12, gap: 4,
+    borderTopWidth: 1, borderTopColor: '#EDF2F7',
   },
   esperandoContainer: { alignItems: 'center', paddingVertical: 32 },
   esperandoTitle: { fontSize: 20, fontWeight: '700', color: '#1A202C', marginTop: 12 },
@@ -772,8 +926,43 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
   },
   actionBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  cancelBtn: { alignItems: 'center', paddingVertical: 12, marginBottom: 8 },
+  liberarBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 13, borderRadius: 14,
+    borderWidth: 1.5, borderColor: '#F0C29A', backgroundColor: '#FFF7ED',
+  },
+  liberarBtnText: { color: '#C05621', fontSize: 14, fontWeight: '700' },
+  cancelBtn: { alignItems: 'center', paddingVertical: 12 },
   cancelBtnText: { color: '#E53E3E', fontSize: 14, fontWeight: '600' },
+});
+
+const motivoStyles = StyleSheet.create({
+  sheet: {
+    backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 20, paddingTop: 24,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+  },
+  title: { fontSize: 20, fontWeight: '800', color: '#1A202C' },
+  sub:   { fontSize: 14, color: '#718096', marginTop: 6, marginBottom: 18, lineHeight: 20 },
+  opcion: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 14, paddingHorizontal: 14, marginBottom: 8,
+    borderRadius: 14, borderWidth: 1.5, borderColor: '#E2E8F0', backgroundColor: '#F7FAFC',
+  },
+  opcionSel:      { borderColor: '#E53E3E', backgroundColor: '#FFF5F5' },
+  opcionText:     { flex: 1, fontSize: 15, color: '#2D3748', fontWeight: '600' },
+  opcionTextSel:  { color: '#C53030' },
+  actions:        { flexDirection: 'row', gap: 12, marginTop: 12 },
+  btnVolver: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 16, borderRadius: 16, backgroundColor: '#EDF2F7',
+  },
+  btnVolverText: { color: '#4A5568', fontSize: 16, fontWeight: '700' },
+  btnConfirmar: {
+    flex: 1.4, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 16, borderRadius: 16, backgroundColor: '#E53E3E',
+  },
+  btnConfirmarText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });
 
 const pedidoStyles = StyleSheet.create({

@@ -146,7 +146,7 @@ export async function toggleCategoria(request, reply) {
 // GET /api/inventario/productos
 export async function listarProductos(request, reply) {
   const { idBranch, idCuenta, TipoUsuario, idPuntoVenta: pvUsuario } = request.user;
-  const { page = 1, limit = 20, search = '', idCategoria = '', status = 'ACTIVO' } = request.query;
+  const { page = 1, limit = 20, search = '', idCategoria = '', status = 'ACTIVO', idPuntoVenta = '' } = request.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   // Cajeros y cashiers solo ven productos con stock en su punto de venta
@@ -200,8 +200,12 @@ export async function listarProductos(request, reply) {
       //  - red (SUPER_ADMIN/ADMIN_PAIS/ADMIN_ESTADO): suma de toda la red
       //  - ADMIN de tienda: solo el de su propio punto de venta
       let filtroStockPv = '';
-      if (!esRed && pvUsuario) {
-        req.input('pvStock', sql.BigInt, pvUsuario);
+      // Los roles de red pueden consultar el agregado (sin parámetro) o el
+      // stock de una tienda concreta (POS / selector de tienda). Los roles de
+      // tienda siempre quedan limitados a la tienda incluida en su JWT.
+      const pvStock = esRed ? idPuntoVenta : pvUsuario;
+      if (pvStock) {
+        req.input('pvStock', sql.BigInt, pvStock);
         filtroStockPv = ' AND s2.idPuntoVenta = @pvStock';
       }
       query = `

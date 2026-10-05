@@ -67,6 +67,7 @@ export default function Perfil() {
     .split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
   const saldo = Number(stats?.SaldoPendiente ?? repartidor?.SaldoPendiente ?? 0);
+  const saldoVES = Number(stats?.SaldoPendienteVES ?? repartidor?.SaldoPendienteVES ?? 0);
   const fotoURL = stats?.FotoURL ?? repartidor?.FotoURL;
 
   const handleLogout = () => {
@@ -246,12 +247,13 @@ export default function Perfil() {
         </View>
 
         {/* Saldo pendiente */}
-        {saldo > 0 && (
+        {(saldo > 0 || saldoVES > 0) && (
           <View style={[styles.card, styles.saldoCard]}>
             <Ionicons name="wallet-outline" size={24} color={COLORS.red} />
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.saldoLabel}>Efectivo pendiente de entregar</Text>
-              <Text style={styles.saldoMonto}>${saldo.toFixed(2)}</Text>
+              {saldo > 0 && <Text style={styles.saldoMonto}>${saldo.toFixed(2)} USD</Text>}
+              {saldoVES > 0 && <Text style={styles.saldoMonto}>{saldoVES.toFixed(2)} VES</Text>}
             </View>
           </View>
         )}

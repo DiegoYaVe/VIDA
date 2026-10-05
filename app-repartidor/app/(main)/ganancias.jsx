@@ -71,9 +71,8 @@ export default function GananciasScreen() {
 
       // Efectivo pendiente de entregar (saldo de pedidos de hoy en efectivo no ENTREGADO aún)
       // Lo aproximamos con los del día en efectivo — el backend ideal lo daría exacto
-      const saldoEfectivo = listHoy
-        .filter(d => (d.MetodoPago || '').toLowerCase().includes('efectivo'))
-        .reduce((acc, d) => acc + Number(d.TotalUSD || 0), 0);
+      const saldoEfectivo = Number(perfil.SaldoPendiente || 0);
+      const saldoEfectivoVES = Number(perfil.SaldoPendienteVES || 0);
 
       setStats({
         hoy:     { ganancia: sumar(listHoy),    pedidos: contar(listHoy)    },
@@ -81,6 +80,7 @@ export default function GananciasScreen() {
         mes:     { ganancia: sumar(listMes),     pedidos: contar(listMes)    },
         total:   { ganancia: sumar(todos),       pedidos: contar(todos)      },
         saldoEfectivo,
+        saldoEfectivoVES,
         calificacion: perfil.Calificacion ?? null,
       });
 
@@ -144,9 +144,9 @@ export default function GananciasScreen() {
           <ResumenCard
             icon="cash-outline"
             label="Efectivo a entregar"
-            value={`$${(stats?.saldoEfectivo || 0).toFixed(2)}`}
+            value={`$${(stats?.saldoEfectivo || 0).toFixed(2)}${stats?.saldoEfectivoVES ? ` · ${stats.saldoEfectivoVES.toFixed(2)} VES` : ''}`}
             color={C.orange}
-            sub="Cobrado hoy en efectivo"
+            sub="Saldo exacto pendiente"
           />
           <ResumenCard
             icon="star"
@@ -186,6 +186,8 @@ export default function GananciasScreen() {
             {pedidos.map((p, i) => {
               const comision = Number(p.ComisionRepartidor || 0);
               const esEfectivo = (p.MetodoPago || '').toLowerCase().includes('efectivo');
+              let liq = null;
+              try { liq = typeof p.LiquidacionRepartidorJSON === 'string' ? JSON.parse(p.LiquidacionRepartidorJSON) : p.LiquidacionRepartidorJSON; } catch {}
               const fecha = new Date(p.FechaAlta).toLocaleDateString('es-VE', {
                 day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
               });
@@ -204,7 +206,7 @@ export default function GananciasScreen() {
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.movComision}>+${comision.toFixed(2)}</Text>
-                    <Text style={styles.movTotal}>${Number(p.TotalUSD || 0).toFixed(2)}</Text>
+                    <Text style={styles.movTotal}>{liq?.Moneda === 'VES' ? `${Number(liq.EfectivoCobradoOriginal).toFixed(2)} VES` : `$${Number(p.TotalUSD || 0).toFixed(2)}`}</Text>
                   </View>
                 </View>
               );

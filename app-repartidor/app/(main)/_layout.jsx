@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Tabs, useRouter, usePathname } from 'expo-router';
+import { Tabs, useRouter, useSegments } from 'expo-router';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +13,9 @@ const STATUS_LABELS = {
   ENTREGADO: 'Entregado',
 };
 
+// Tabs distintas de Inicio: son las que muestran el banner del pedido activo
+const TABS_SECUNDARIAS = ['ganancias', 'historial', 'perfil'];
+
 const STATUS_COLORS = {
   IR_A_SUCURSAL: '#1A6A9A',
   EN_SUCURSAL: '#7B3FBE',
@@ -22,7 +25,7 @@ const STATUS_COLORS = {
 
 export default function MainLayout() {
   const router = useRouter();
-  const pathname = usePathname();
+  const segments = useSegments();
   const pedidosActivos = usePedidoStore((s) => s.pedidosActivos);
   // El banner resume la parada más próxima de la ruta
   const pedidoActivo = pedidosActivos.length > 0 ? pedidosActivos[0] : null;
@@ -36,8 +39,17 @@ export default function MainLayout() {
     });
   }, []);
 
-  // Banner visible en todas las tabs excepto Inicio cuando hay pedido activo
-  const isInicio = pathname === '/(main)' || pathname === '/(main)/index';
+  // Banner visible en todas las tabs excepto Inicio cuando hay pedido activo.
+  //
+  // Antes esto comparaba usePathname() contra '/(main)', que nunca coincide:
+  // el pathname no lleva los segmentos de grupo (para esta ruta es '/'), asi
+  // que el banner se colaba tambien en Inicio y duplicaba el header — y los
+  // ~60dp que robaba empujaban los botones de accion detras de la tab bar.
+  //
+  // Se identifica la tab por las hermanas en vez de por Inicio, para no
+  // depender de si el grupo '(main)' o el 'index' aparecen en los segmentos.
+  // Al agregar una tab nueva hay que sumarla aqui (igual que su Tabs.Screen).
+  const isInicio = !segments.some((seg) => TABS_SECUNDARIAS.includes(seg));
   const showBanner = !!pedidoActivo && !isInicio;
   const bannerColor = STATUS_COLORS[pedidoActivo?.Status] || '#1A6A9A';
 

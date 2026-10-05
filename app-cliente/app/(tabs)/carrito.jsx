@@ -49,6 +49,7 @@ export default function CarritoScreen() {
   const [direcciones, setDirecciones] = useState([]);     // guardadas del cliente
   const [notas, setNotas] = useState('');
   const [metodoPago, setMetodoPago] = useState('EFECTIVO');
+  const [monedaEfectivo, setMonedaEfectivo] = useState('USD');
   const [loading, setLoading] = useState(false);
 
   // Pago Móvil
@@ -121,10 +122,15 @@ export default function CarritoScreen() {
   }, [metodoPago]);
 
   useEffect(()=>{
-    if(!token||metodoPago!=='PAGO_MOVIL') return;
+    if(!token||!['PAGO_MOVIL','EFECTIVO'].includes(metodoPago)) return;
     setErrorTasa('');
     api.get('/delivery/cliente/cotizacion-moneda').then(r=>setCotizacion(r.data)).catch(e=>{setCotizacion(null);setErrorTasa(e.response?.data?.error||'No se pudo consultar la tasa');});
   },[token,metodoPago]);
+
+  useEffect(()=>{
+    if (cotizacion?.Modo === 'VES') setMonedaEfectivo('VES');
+    if (cotizacion?.Modo === 'USD') setMonedaEfectivo('USD');
+  },[cotizacion?.Modo]);
 
   const tasaVES=Number(cotizacion?.tasa?.VESporUSD)||0;
   const totalVES=Math.round(totalFinal*tasaVES*100)/100;
@@ -212,6 +218,10 @@ export default function CarritoScreen() {
         return;
       }
     }
+    if (metodoPago === 'EFECTIVO' && (!cotizacion || !['USD','VES','AMBAS'].includes(cotizacion.Modo))) {
+      Alert.alert('Efectivo no disponible', errorTasa || 'No se pudo obtener la configuración monetaria.');
+      return;
+    }
     if (items.length === 0) return;
 
     setLoading(true);
@@ -230,7 +240,11 @@ export default function CarritoScreen() {
         MetodoPago: metodoPago,
         PuntosUsar: puntosUsar,
         CuponCodigo: cuponCodigo,
-        ...(metodoPago==='PAGO_MOVIL'?{PagoMoneda:{idTasa:cotizacion.tasa.idTasa,Moneda:'VES',MontoOriginal:totalVES}}:{}),
+        ...(['PAGO_MOVIL','EFECTIVO'].includes(metodoPago)?{PagoMoneda:{
+          idTasa:cotizacion.tasa.idTasa,
+          Moneda:metodoPago==='PAGO_MOVIL'?'VES':monedaEfectivo,
+          MontoOriginal:(metodoPago==='PAGO_MOVIL'||monedaEfectivo==='VES')?totalVES:totalFinal,
+        }}:{}),
       };
       const res = await api.post('/delivery/pedido', payload);
       const idPedido = res.data?.idPedido ?? res.data?.pedido?.idPedido;
@@ -399,6 +413,21 @@ export default function CarritoScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          {metodoPago === 'EFECTIVO' && cotizacion && (
+            <View style={styles.pmCard}>
+              <Text style={styles.pmTitulo}>¿En qué moneda pagarás al repartidor?</Text>
+              <View style={styles.metodoRow}>
+                {['USD','VES'].filter(m => cotizacion.Modo === 'AMBAS' || cotizacion.Modo === m).map(m => (
+                  <TouchableOpacity key={m} style={[styles.metodoBtn, monedaEfectivo === m && styles.metodoBtnActive]} onPress={() => setMonedaEfectivo(m)}>
+                    <Text style={[styles.metodoBtnText, monedaEfectivo === m && styles.metodoBtnTextActive]}>{m}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <PMRow label="Total a entregar" valor={monedaEfectivo === 'VES' ? `${totalVES.toFixed(2)} VES` : `$${totalFinal.toFixed(2)} USD`} destacado />
+              {monedaEfectivo === 'VES' && <PMRow label="Tasa" valor={`1 USD = ${tasaVES} VES · ${String(cotizacion.tasa.FechaValor).slice(0,10)}`} />}
+            </View>
+          )}
 
           {/* Pago Móvil: datos + referencia + comprobante */}
           {metodoPago === 'PAGO_MOVIL' && (

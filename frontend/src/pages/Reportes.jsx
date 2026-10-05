@@ -6,23 +6,23 @@ import {
   Filter, RefreshCw, AlertTriangle,
   DollarSign, ShoppingCart, CreditCard, Banknote,
   MapPin, Store, Globe, ChevronDown, Truck, Star, XCircle, Building2, Award,
-  Calculator, Target, Save, Wallet,
+  Calculator, Target, Save, Wallet, Smartphone, CheckCircle2,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, LineChart, Line,
   PieChart, Pie, Cell,
 } from 'recharts';
-import api from '../services/api.js';
+import api, { API_ORIGIN } from '../services/api.js';
 import {
   exportarVentasExcel, exportarProductosExcel,
   exportarInventarioExcel, exportarMovimientosExcel,
-  exportarDeliveryExcel, exportarRedExcel, exportarCajaExcel,
+  exportarDeliveryExcel, exportarRedExcel, exportarCajaExcel, exportarPagoMovilExcel,
 } from '../utils/exportExcel.js';
 import {
   exportarVentasPDF, exportarProductosPDF,
   exportarInventarioPDF, exportarMovimientosPDF,
-  exportarDeliveryPDF, exportarRedPDF, exportarCajaPDF,
+  exportarDeliveryPDF, exportarRedPDF, exportarCajaPDF, exportarPagoMovilPDF,
 } from '../utils/exportPDF.js';
 import { useAuthStore } from '../store/authStore.js';
 
@@ -572,6 +572,250 @@ function TabCaja({ filtros }) {
               </div>
             </>
           )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── TAB: Pago Móvil (conciliación) ─────────────────────────────────────────
+
+const PM_ESTADOS = [
+  { id: 'POR_REVISAR',        label: 'Por revisar',           cls: 'bg-amber-100 text-amber-800' },
+  { id: 'SIN_COMPROBANTE',    label: 'Esperando comprobante', cls: 'bg-gray-100 text-gray-700' },
+  { id: 'APROBADO',           label: 'Aprobado',              cls: 'bg-green-100 text-green-700' },
+  { id: 'DEVOLUCION',         label: 'Devolver dinero',       cls: 'bg-red-100 text-red-700' },
+  { id: 'ENTREGADO_SIN_PAGO', label: 'Entregado sin pago',    cls: 'bg-red-100 text-red-700' },
+  { id: 'CANCELADO',          label: 'Cancelado sin pago',    cls: 'bg-gray-100 text-gray-500' },
+];
+const PM_CLS = Object.fromEntries(PM_ESTADOS.map(e => [e.id, e.cls]));
+// Igual que la ruta PATCH /pedidos/:id/comprobante/:id/revision.
+const ROLES_REVISAN_PAGO = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN'];
+const urlArchivo = (u) => (u?.startsWith('http') ? u : `${API_ORIGIN}${u}`);
+const fechaCorta = (f) => new Date(f).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' });
+
+function TabPagoMovil({ filtros }) {
+  const { usuario } = useAuthStore();
+  const puedeRevisar = ROLES_REVISAN_PAGO.includes(usuario?.TipoUsuario);
+  const [rango, setRango]     = useState({ ini: HACE7(), fin: HOY() });
+  const [geo, setGeo]         = useState({});
+  const [datos, setDatos]     = useState(null);
+  const [cargando, setCarg]   = useState(false);
+  const [error, setError]     = useState(null);
+  const [filtroEstado, setFiltroEstado] = useState('');
+  const [revisando, setRevisando] = useState(null);
+
+  const cargar = useCallback(async () => {
+    setCarg(true); setError(null);
+    try {
+      const params = new URLSearchParams({
+        fechaInicio: rango.ini, fechaFin: rango.fin,
+        ...(geo.filtroPais          && { filtroPais: geo.filtroPais }),
+        ...(geo.filtroEstado        && { filtroEstado: geo.filtroEstado }),
+        ...(geo.filtroIdPuntoVenta  && { filtroIdPuntoVenta: geo.filtroIdPuntoVenta }),
+      });
+      const r = await api.get(`/reportes/pago-movil?${params}`);
+      setDatos(r.data);
+    } catch (e) {
+      setError(e.response?.data?.error || 'Error al cargar la conciliación');
+    } finally { setCarg(false); }
+  }, [rango, geo]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  async function revisar(fila, aprobar) {
+    const comp = fila.ComprobantePendiente;
+    let Notas = null;
+    if (aprobar) {
+      const monto = fila.MontoVES != null ? `${FMT(fila.MontoVES)} VES` : USD(fila.TotalUSD);
+      if (!window.confirm(`¿Aprobar el pago del pedido #${fila.idPedido} por ${monto}${comp.Referencia ? ` (ref. ${comp.Referencia})` : ''}? El pedido empezará a buscar repartidor.`)) return;
+    } else {
+      Notas = window.prompt(`Motivo del rechazo del pedido #${fila.idPedido}:`, 'El monto o la referencia no coinciden');
+      if (Notas === null) return;
+    }
+    setRevisando(fila.idPedido);
+    try {
+      await api.patch(`/pedidos/${fila.idPedido}/comprobante/${comp.idComprobante}/revision`, {
+        StatusRevision: aprobar ? 'APROBADO' : 'RECHAZADO', Notas: Notas || null,
+      });
+      await cargar();
+    } catch (e) {
+      setError(e.response?.data?.error || 'No se pudo registrar la revisión');
+    } finally { setRevisando(null); }
+  }
+
+  const exportar = { ...datos, fechaInicio: rango.ini, fechaFin: rango.fin };
+  const filas = datos?.filas || [];
+  const porRevisar = filas.filter(f => f.Estado === 'POR_REVISAR');
+  const devoluciones = filas.filter(f => f.Estado === 'DEVOLUCION');
+  const sinPago = filas.filter(f => f.Estado === 'ENTREGADO_SIN_PAGO');
+  const visibles = filas.filter(f => !filtroEstado || f.Estado === filtroEstado);
+  const monto = (f) => (f.MontoVES != null ? `${FMT(f.MontoVES)} VES` : '—');
+  const plural = (n, s) => `${n} ${s}${n === 1 ? '' : 's'}`;
+
+  return (
+    <div className="space-y-5">
+      {/* Filtros */}
+      <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Pedidos desde</label>
+            <input type="date" value={rango.ini}
+              onChange={e => setRango(r => ({ ...r, ini: e.target.value }))}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-vida-blue/30" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Hasta</label>
+            <input type="date" value={rango.fin}
+              onChange={e => setRango(r => ({ ...r, fin: e.target.value }))}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-vida-blue/30" />
+          </div>
+          <FiltroGeografia usuario={usuario} filtros={filtros} geo={geo} setGeo={setGeo} />
+          <button onClick={cargar} disabled={cargando}
+            className="flex items-center gap-2 px-4 py-2 bg-vida-blue hover:bg-vida-blue/90 text-white text-sm font-semibold rounded-xl transition-all">
+            <RefreshCw size={14} className={cargando ? 'animate-spin' : ''} />
+            {cargando ? 'Cargando…' : 'Actualizar'}
+          </button>
+          {datos && (
+            <BotonesExport
+              onExcel={() => exportarPagoMovilExcel(exportar)}
+              onPDF={()   => exportarPagoMovilPDF(exportar)}
+              cargando={cargando} />
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm flex items-center gap-2">
+          <AlertTriangle size={16} /> {error}
+        </div>
+      )}
+
+      {cargando && !datos && <Spinner />}
+
+      {datos && (
+        <>
+          {/* Tarjetas */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <CardResumen icon={Smartphone}    label="Por revisar"        valor={datos.totales.POR_REVISAR.Pedidos} color="amber"
+              sub={`${FMT(datos.totales.POR_REVISAR.VES)} VES`} />
+            <CardResumen icon={CheckCircle2}  label="Pagos aprobados"    valor={`${FMT(datos.totales.APROBADO.VES)} VES`} color="green"
+              sub={`${plural(datos.totales.APROBADO.Pedidos, 'pedido')} · debe verse en el banco`} />
+            <CardResumen icon={XCircle}       label="Devolver dinero"    valor={`${FMT(datos.totales.DEVOLUCION.VES)} VES`} color="red"
+              sub={`${plural(datos.totales.DEVOLUCION.Pedidos, 'pedido')} pagados y cancelados`} />
+            <CardResumen icon={AlertTriangle} label="Requieren atención" valor={datos.atencion} color="purple"
+              sub={`${datos.totales.SIN_COMPROBANTE.Pedidos} esperando comprobante`} />
+          </div>
+
+          {/* Alertas */}
+          {(devoluciones.length > 0 || sinPago.length > 0 || datos.referenciasRepetidas.length > 0) && (
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-4 space-y-2 text-sm text-red-800">
+              {devoluciones.length > 0 && (
+                <p className="flex gap-2"><AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  <span><b>{plural(devoluciones.length, 'pedido')} pagados y luego cancelados</b> (por ejemplo, sin repartidor): hay que devolver {FMT(datos.totales.DEVOLUCION.VES)} VES. Pedidos: {devoluciones.map(f => `#${f.idPedido}`).join(', ')}.</span></p>
+              )}
+              {sinPago.length > 0 && (
+                <p className="flex gap-2"><AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  <span><b>{plural(sinPago.length, 'pedido')} entregados sin validar el pago</b> (flujo anterior a la aprobación previa). Confirma el cobro en el banco: {sinPago.map(f => `#${f.idPedido}`).join(', ')}.</span></p>
+              )}
+              {datos.referenciasRepetidas.map(r => (
+                <p key={r.Referencia} className="flex gap-2"><AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  <span>La referencia <b>{r.Referencia}</b> se presentó en varios pedidos ({r.Pedidos.map(id => `#${id}`).join(', ')}): revisa si es un pago reutilizado.</span></p>
+              ))}
+            </div>
+          )}
+
+          {/* Cola de revisión */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-gray-800">Comprobantes por revisar</h3>
+              <span className="text-xs text-gray-400">{plural(porRevisar.length, 'pendiente')}{!puedeRevisar && ' · solo administradores aprueban'}</span>
+            </div>
+            {porRevisar.length === 0 ? (
+              <p className="px-5 py-8 text-center text-sm text-gray-400">No hay comprobantes esperando revisión.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      {['Pedido', 'Sucursal', 'Cliente', 'Monto esperado', 'Referencia', 'Comprobante', ''].map(h => (
+                        <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap ${h === 'Monto esperado' ? 'text-right' : 'text-left'}`}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {porRevisar.map(f => (
+                      <tr key={f.idPedido} className="hover:bg-gray-50/50">
+                        <td className="px-4 py-3 font-semibold">#{f.idPedido}<span className="block text-xs font-normal text-gray-400">{fechaCorta(f.Fecha)}</span></td>
+                        <td className="px-4 py-3 text-gray-700">{f.Tienda}</td>
+                        <td className="px-4 py-3 text-gray-700">{f.Cliente || '—'}{f.Telefono && <span className="block text-xs text-gray-400">{f.Telefono}</span>}</td>
+                        <td className="px-4 py-3 text-right font-bold">{monto(f)}{f.Tasa && <span className="block text-xs font-normal text-gray-400">TC {FMT(f.Tasa)} · {USD(f.TotalUSD)}</span>}</td>
+                        <td className="px-4 py-3 font-mono">{f.ComprobantePendiente?.Referencia || '—'}{f.Comprobantes > 1 && <span className="block text-xs font-sans text-gray-400">{f.Comprobantes} enviados</span>}</td>
+                        <td className="px-4 py-3">
+                          <a href={urlArchivo(f.ComprobantePendiente?.ImagenURL)} target="_blank" rel="noreferrer" className="text-vida-blue font-semibold hover:underline">Ver imagen</a>
+                        </td>
+                        <td className="px-4 py-3">
+                          {puedeRevisar && (
+                            <div className="flex gap-2 justify-end">
+                              <button disabled={revisando === f.idPedido} onClick={() => revisar(f, true)}
+                                className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold disabled:opacity-50">Aprobar</button>
+                              <button disabled={revisando === f.idPedido} onClick={() => revisar(f, false)}
+                                className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs font-semibold disabled:opacity-50">Rechazar</button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Todos los pedidos */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+              <h3 className="font-bold text-gray-800">Pedidos con Pago Móvil</h3>
+              <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}
+                className="text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-vida-blue/30">
+                <option value="">Todos los estados ({filas.length})</option>
+                {PM_ESTADOS.map(e => <option key={e.id} value={e.id}>{e.label} ({datos.totales[e.id].Pedidos})</option>)}
+              </select>
+            </div>
+            {visibles.length === 0 ? (
+              <p className="px-5 py-8 text-center text-sm text-gray-400">No hay pedidos con Pago Móvil en este período.</p>
+            ) : (
+              <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0">
+                    <tr className="bg-gray-50">
+                      {['Pedido', 'Sucursal', 'Cliente', 'Estado', 'Monto VES', 'Total USD', 'Referencia'].map(h => (
+                        <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap ${['Monto VES', 'Total USD'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {visibles.map(f => (
+                      <tr key={f.idPedido} className="hover:bg-gray-50/50">
+                        <td className="px-4 py-2.5 font-semibold">#{f.idPedido}<span className="block text-xs font-normal text-gray-400">{fechaCorta(f.Fecha)}</span></td>
+                        <td className="px-4 py-2.5 text-gray-700">{f.Tienda}</td>
+                        <td className="px-4 py-2.5 text-gray-700">{f.Cliente || '—'}</td>
+                        <td className="px-4 py-2.5"><span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${PM_CLS[f.Estado]}`}>{f.EstadoLabel}</span></td>
+                        <td className="px-4 py-2.5 text-right">{monto(f)}</td>
+                        <td className="px-4 py-2.5 text-right">{USD(f.TotalUSD)}</td>
+                        <td className="px-4 py-2.5 font-mono text-gray-600">{f.Referencia || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {datos.sinTasa > 0 && (
+              <p className="px-5 py-3 border-t border-gray-100 text-xs text-gray-500">
+                {plural(datos.sinTasa, 'pedido')} sin tasa registrada (flujo anterior): se muestran solo en USD, sin inventar un monto en bolívares.
+              </p>
+            )}
+          </div>
         </>
       )}
     </div>
@@ -1679,6 +1923,7 @@ function TabRentabilidad({ filtros, puedeVerRed }) {
 const TABS = [
   { id: 'ventas',       label: 'Ventas',       icon: BarChart2    },
   { id: 'caja',         label: 'Caja',         icon: Wallet       },
+  { id: 'pagomovil',    label: 'Pago Móvil',   icon: Smartphone   },
   { id: 'red',          label: 'Red',          icon: Building2, soloRed: true },
   { id: 'delivery',     label: 'Delivery',      icon: Truck        },
   { id: 'productos',    label: 'Productos',     icon: TrendingUp   },
@@ -1739,6 +1984,7 @@ export default function Reportes() {
       <div className="p-6">
         {tab === 'ventas'      && <TabVentas      filtros={filtros} />}
         {tab === 'caja'        && <TabCaja        filtros={filtros} />}
+        {tab === 'pagomovil'   && <TabPagoMovil   filtros={filtros} />}
         {tab === 'red'         && puedeVerRed && <TabRed filtros={filtros} />}
         {tab === 'delivery'    && <TabDelivery    filtros={filtros} />}
         {tab === 'productos'   && <TabProductos   filtros={filtros} />}

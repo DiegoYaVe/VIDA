@@ -26,6 +26,10 @@ async function nextIdTx(tx, tabla, campo, idBranch, idCuenta) {
   return r.recordset[0].nextId;
 }
 
+function folioOrden(idOrden, fecha = new Date()) {
+  return `OC-${fecha.getUTCFullYear()}-${String(idOrden).padStart(6, '0')}`;
+}
+
 // Transiciones válidas de estado
 // RECIBIDA_PARCIAL admite quedarse en si misma: con la recepcion atomizada una
 // orden puede recibir tres o mas entregas, y antes la segunda parcial no era
@@ -471,28 +475,67 @@ export async function obtenerOrden(request, reply) {
   }
 }
 
+// GET /api/ordenes-compra/siguiente-folio
+// Es una vista previa para el formulario. La asignacion definitiva se vuelve a
+// calcular dentro de la transaccion de crearOrden, porque otro usuario podria
+// guardar una orden entre esta consulta y el clic en Guardar.
+export async function siguienteFolioOrden(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  try {
+    const pool = await getPool();
+    const siguiente = await nextId(pool, 'VIDA_ORDENES_COMPRA', 'idOrden', idBranch, idCuenta);
+    return reply.send({ folio: folioOrden(siguiente) });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al generar la vista previa del folio' });
+  }
+}
+
 // POST /api/ordenes-compra
 export async function crearOrden(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
-  const { idProveedor, idPuntoVenta, Folio, Notas, FechaEstimada, items } = request.body;
+  const { idProveedor, Notas, FechaEstimada, items } = request.body;
+  // Una compra a proveedor siempre entra a la Matriz/CEDIS. El destino no se
+  // confía al cliente para impedir compras directas proveedor → sucursal.
+  const idPuntoVenta = request.matriz?.idPuntoVentaMatriz;
 
-  if (!idProveedor || !idPuntoVenta || !items?.length)
-    return reply.code(400).send({ error: 'idProveedor, idPuntoVenta e items son requeridos' });
+  if (!idPuntoVenta)
+    return reply.code(409).send({ error: 'La red todavía no tiene una Matriz designada' });
+  if (!idProveedor || !items?.length)
+    return reply.code(400).send({ error: 'idProveedor e items son requeridos' });
 
+  let tx;
   try {
     const pool = await getPool();
-    const nuevoId = await nextId(pool, 'VIDA_ORDENES_COMPRA', 'idOrden', idBranch, idCuenta);
+    tx = new sql.Transaction(pool);
+    await tx.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    const nuevoId = await nextIdTx(tx, 'VIDA_ORDENES_COMPRA', 'idOrden', idBranch, idCuenta);
+    const folio = folioOrden(nuevoId);
+
+    // Comprobacion explicita dentro de la misma transaccion. El indice unico de
+    // la migracion 46 es la ultima barrera frente a concurrencia o escrituras
+    // realizadas fuera de esta API.
+    const repetido = await new sql.Request(tx)
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('Folio', sql.VarChar(50), folio)
+      .query(`SELECT TOP 1 idOrden FROM VIDA_ORDENES_COMPRA WITH (UPDLOCK, HOLDLOCK)
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Folio=@Folio`);
+    if (repetido.recordset.length) {
+      await tx.rollback(); tx = null;
+      return reply.code(409).send({ error: 'El folio propuesto ya fue utilizado. Vuelve a abrir la orden para generar uno nuevo.' });
+    }
 
     // Calcular total
     const totalUSD = items.reduce((sum, i) => sum + (i.CantidadOrdenada * i.PrecioUnitario), 0);
 
-    await pool.request()
+    await new sql.Request(tx)
       .input('idBranch',      sql.BigInt,       idBranch)
       .input('idCuenta',      sql.BigInt,       idCuenta)
       .input('idOrden',       sql.BigInt,       nuevoId)
       .input('idProveedor',   sql.BigInt,       idProveedor)
       .input('idPuntoVenta',  sql.BigInt,       idPuntoVenta)
-      .input('Folio',         sql.VarChar(50),  Folio || null)
+      .input('Folio',         sql.VarChar(50),  folio)
       .input('Notas',         sql.VarChar(500), Notas || null)
       .input('FechaEstimada', sql.Date,         FechaEstimada || null)
       .input('TotalUSD',      sql.Decimal(18,4), totalUSD)
@@ -507,7 +550,7 @@ export async function crearOrden(request, reply) {
     // Insertar items
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      await pool.request()
+      await new sql.Request(tx)
         .input('idBranch',         sql.BigInt,       idBranch)
         .input('idCuenta',         sql.BigInt,       idCuenta)
         .input('idOrden',          sql.BigInt,       nuevoId)
@@ -525,8 +568,8 @@ export async function crearOrden(request, reply) {
     }
 
     // Registrar en historial
-    const nuevoHistId = await nextId(pool, 'VIDA_ORDENES_COMPRA_HISTORIAL', 'idHistorial', idBranch, idCuenta);
-    await pool.request()
+    const nuevoHistId = await nextIdTx(tx, 'VIDA_ORDENES_COMPRA_HISTORIAL', 'idHistorial', idBranch, idCuenta);
+    await new sql.Request(tx)
       .input('idBranch',       sql.BigInt,     idBranch)
       .input('idCuenta',       sql.BigInt,     idCuenta)
       .input('idHistorial',    sql.BigInt,     nuevoHistId)
@@ -538,9 +581,13 @@ export async function crearOrden(request, reply) {
               VALUES
                 (@idBranch, @idCuenta, @idHistorial, @idOrden, @StatusNuevo, @UsuAlta)`);
 
-    return reply.code(201).send({ message: 'Orden creada', idOrden: nuevoId });
+    await tx.commit(); tx = null;
+    return reply.code(201).send({ message: 'Orden creada', idOrden: nuevoId, Folio: folio });
   } catch (err) {
+    if (tx) { try { await tx.rollback(); } catch {} }
     request.log.error(err);
+    if (err?.number === 2601 || err?.number === 2627)
+      return reply.code(409).send({ error: 'El folio acaba de ser utilizado por otra orden. Intenta guardar nuevamente.' });
     return reply.code(500).send({ error: 'Error al crear orden: ' + err.message });
   }
 }

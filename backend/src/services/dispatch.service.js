@@ -13,10 +13,9 @@ import { broadcast } from '../ws/ws.manager.js';
 import { reembolsarPuntosPedido } from '../controllers/delivery.controller.js';
 import { enviarPush } from './push.service.js';
 import { STATUS_ACTIVOS_REPARTIDOR } from './rutas.service.js';
-
-// Memoria por pedido: a quién ya se le ofreció y el último radio usado.
-// Si el backend se reinicia solo se re-notifica una vez — sin consecuencias.
-const memoria = new Map(); // idPedido → { radio, notificados:Set<string> }
+// La memoria del despacho vive en su propio módulo para que el controller de
+// delivery pueda olvidar un pedido al liberarlo sin import circular
+import { recordarPedido, guardarPedido, olvidarPedido, purgarSalvo } from './dispatchMemoria.js';
 
 async function getCfgNum(pool, idBranch, idCuenta, clave, def) {
   const r = await pool.request()
@@ -41,10 +40,16 @@ async function candidatos(pool, p, radioKm, maxPedidos) {
        .input('lon', sql.Float, parseFloat(p.LonSucursal))
        .input('radioKm', sql.Float, radioKm);
   }
+  req.input('idPedido', sql.BigInt, p.idPedido);
   const r = await req.query(`
     SELECT r.idRepartidor, r.FcmToken
     FROM VIDA_REPARTIDORES r
     WHERE r.idBranch=@idBranch AND r.idCuenta=@idCuenta AND r.Status='ACTIVO'
+      -- Quien liberó este pedido queda fuera de la re-oferta
+      AND NOT EXISTS (
+        SELECT 1 FROM VIDA_PEDIDOS_LIBERADOS l
+        WHERE l.idBranch=r.idBranch AND l.idCuenta=r.idCuenta
+          AND l.idPedido=@idPedido AND l.idRepartidor=r.idRepartidor)
       AND ISNULL(r.StatusAprobacion,'APROBADO') NOT IN ('PENDIENTE','RECHAZADO')
       AND r.StatusRepartidor IN ('DISPONIBLE','OCUPADO')
       AND (SELECT COUNT(*) FROM VIDA_PEDIDOS pa
@@ -114,9 +119,9 @@ export async function procesarBusquedas(log) {
 
   const r = await pool.request().query(`
     SELECT p.idBranch, p.idCuenta, p.idPedido, p.idCliente, p.idPuntoVenta,
-           p.FechaAlta, p.FechaLimiteBusqueda, p.AvisoSinRepartidor,
+           p.FechaAlta, p.FechaInicioBusqueda, p.FechaLimiteBusqueda, p.AvisoSinRepartidor,
            p.TotalUSD, p.DireccionEntrega,
-           DATEDIFF(SECOND, p.FechaAlta, GETDATE()) / 60.0 AS MinutosBuscando,
+           DATEDIFF(SECOND, COALESCE(p.FechaInicioBusqueda,p.FechaAlta), GETDATE()) / 60.0 AS MinutosBuscando,
            CASE WHEN p.FechaLimiteBusqueda IS NOT NULL AND GETDATE() > p.FechaLimiteBusqueda
                 THEN 1 ELSE 0 END AS Vencido,
            pv.NomComercial AS NombreSucursal,
@@ -151,7 +156,7 @@ export async function procesarBusquedas(log) {
           .input('idCuenta', sql.BigInt, p.idCuenta)
           .input('idPedido', sql.BigInt, p.idPedido)
           .input('min', sql.Int, Math.round(cancelMin))
-          .query(`UPDATE VIDA_PEDIDOS SET FechaLimiteBusqueda = DATEADD(MINUTE, @min, FechaAlta)
+          .query(`UPDATE VIDA_PEDIDOS SET FechaLimiteBusqueda = DATEADD(MINUTE, @min, COALESCE(FechaInicioBusqueda,FechaAlta))
                   WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
                     AND FechaLimiteBusqueda IS NULL`);
       }
@@ -160,7 +165,7 @@ export async function procesarBusquedas(log) {
       if (p.Vencido) {
         const cancelado = await cancelarPorTimeout(pool, p, log);
         if (cancelado) {
-          memoria.delete(String(p.idPedido));
+          olvidarPedido(p.idPedido);
           if (p.FcmCliente) {
             enviarPush(p.FcmCliente, {
               title: '😞 No encontramos repartidor',
@@ -206,7 +211,7 @@ export async function procesarBusquedas(log) {
         radioBase + Math.floor(p.MinutosBuscando / intervaloMin) * incRadio,
         radioMax,
       );
-      const mem = memoria.get(String(p.idPedido)) ?? { radio: 0, notificados: new Set() };
+      const mem = recordarPedido(p.idPedido);
       if (radio > mem.radio) {
         const reps = await candidatos(pool, p, radio, maxPedidos);
         const nuevos = reps.filter(rep => !mem.notificados.has(String(rep.idRepartidor)));
@@ -232,7 +237,7 @@ export async function procesarBusquedas(log) {
           nuevos.forEach(x => mem.notificados.add(String(x.idRepartidor)));
         }
         mem.radio = radio;
-        memoria.set(String(p.idPedido), mem);
+        guardarPedido(p.idPedido, mem);
       }
     } catch (err) {
       log?.error?.(`procesarBusquedas pedido ${p.idPedido}: ${err.message}`);
@@ -240,7 +245,5 @@ export async function procesarBusquedas(log) {
   }
 
   // Limpiar memoria de pedidos que ya no están en búsqueda
-  for (const key of memoria.keys()) {
-    if (!activos.has(key)) memoria.delete(key);
-  }
+  purgarSalvo(activos);
 }

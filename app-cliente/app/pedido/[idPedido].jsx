@@ -12,7 +12,9 @@ import {
   Easing,
   Image,
   Alert,
+  TextInput,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -62,6 +64,8 @@ export default function SeguimientoScreen() {
   const [calificacion, setCalificacion] = useState(0);
   const [calificado, setCalificado] = useState(false);
   const [enviandoCalif, setEnviandoCalif] = useState(false);
+  const [referenciaPago, setReferenciaPago] = useState('');
+  const [reenviandoPago, setReenviandoPago] = useState(false);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const wsRef = useRef(null);
@@ -70,9 +74,15 @@ export default function SeguimientoScreen() {
 
   const rawStatus = String(estado?.Status ?? estado?.EstadoPedido ?? estado?.estado ?? '').toUpperCase();
   const isCancelado = rawStatus === 'CANCELADO';
+  const esperandoPago = rawStatus === 'ESPERANDO_PAGO';
+  const pagoRechazado = esperandoPago && estado?.StatusPago === 'RECHAZADO';
+  // Un backend anterior no envía ComprobantesPendientes: se asume en revisión
+  // (comportamiento previo) para no pedir un comprobante que ya se mandó.
+  const comprobanteEnRevision = esperandoPago && !pagoRechazado
+    && (estado?.ComprobantesPendientes == null || Number(estado.ComprobantesPendientes) > 0);
   const stepIndex = estado ? PASOS.findIndex((p) => p.key === normalizeStatus(estado.Status ?? estado.EstadoPedido ?? estado.estado)) : 0;
   const isDelivered = stepIndex === PASOS.length - 1;
-  const isBuscando = stepIndex === 0 && !isCancelado;
+  const isBuscando = stepIndex === 0 && !isCancelado && !esperandoPago;
 
   // Pulse animation for "buscando"
   useEffect(() => {
@@ -130,6 +140,11 @@ export default function SeguimientoScreen() {
             setEstado((prev) => ({ ...prev, Status: msg.estado, EstadoPedido: msg.estado }));
           }
           if (msg.tipo === 'pedido_asignado' && String(msg.idPedido) === String(idPedido)) {
+            fetchEstado();
+          }
+          // El repartidor liberó el pedido: volvió a la búsqueda y ya no hay
+          // nadie asignado, así que hay que refrescar (no basta con el status)
+          if (msg.tipo === 'pedido_liberado' && String(msg.idPedido) === String(idPedido)) {
             fetchEstado();
           }
           // Repartidor moviéndose: actualizar su posición en el mapa en vivo
@@ -233,6 +248,25 @@ export default function SeguimientoScreen() {
     }
   };
 
+  const reenviarComprobante = async () => {
+    if (!referenciaPago.trim()) return Alert.alert('Referencia requerida','Escribe el número de referencia del nuevo pago.');
+    const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes:['images'], quality:0.75 });
+    if (pick.canceled || !pick.assets?.[0]) return;
+    const asset = pick.assets[0];
+    setReenviandoPago(true);
+    try {
+      const fd = new FormData();
+      fd.append('Referencia',referenciaPago.trim());
+      fd.append('file',{uri:asset.uri,name:asset.fileName||`comprobante_${idPedido}.jpg`,type:asset.mimeType||'image/jpeg'});
+      await api.post(`/delivery/pedido/${idPedido}/comprobante`,fd,{headers:{'Content-Type':'multipart/form-data'}});
+      setReferenciaPago('');
+      await fetchEstado();
+      Alert.alert('Comprobante enviado','Lo revisaremos antes de buscar repartidor.');
+    } catch(e) {
+      Alert.alert('No se pudo enviar',e.response?.data?.error||e.message);
+    } finally { setReenviandoPago(false); }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
@@ -264,6 +298,34 @@ export default function SeguimientoScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+
+          {esperandoPago && (
+            <View style={{backgroundColor:pagoRechazado?'#FFF5F5':'#FFFBEB',borderColor:pagoRechazado?'#FEB2B2':'#FBD38D',borderWidth:1,borderRadius:18,padding:18,marginBottom:16}}>
+              <Ionicons name={pagoRechazado?'alert-circle':comprobanteEnRevision?'time-outline':'cloud-upload-outline'} size={34} color={pagoRechazado?'#C53030':'#B7791F'} />
+              <Text style={{fontSize:18,fontWeight:'800',color:'#1A202C',marginTop:8}}>
+                {pagoRechazado?'Comprobante rechazado':comprobanteEnRevision?'Estamos revisando tu pago':'Envía tu comprobante de pago'}
+              </Text>
+              <Text style={{color:'#718096',marginTop:5,lineHeight:20}}>
+                {pagoRechazado?'Envía un nuevo comprobante. El pedido todavía no fue asignado a un repartidor.'
+                  :comprobanteEnRevision?'Cuando aprobemos el comprobante comenzará automáticamente la búsqueda de repartidor.'
+                  :'Haz el Pago Móvil y sube la captura con su referencia. Cuando lo aprobemos empezará la búsqueda de repartidor.'}
+              </Text>
+              {estado?.SegundosPagoRestantes != null && (
+                <Text style={{color:'#B7791F',fontWeight:'700',marginTop:8,lineHeight:20}}>
+                  Tienes hasta las {new Date(Date.now() + estado.SegundosPagoRestantes * 1000).toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit' })} para enviarlo; si no, el pedido se cancelará automáticamente.
+                </Text>
+              )}
+              {!comprobanteEnRevision && <>
+                <TextInput value={referenciaPago} onChangeText={setReferenciaPago} placeholder={pagoRechazado?'Nueva referencia':'Referencia del pago'} keyboardType="number-pad" style={{backgroundColor:'#fff',borderWidth:1,borderColor:'#E2E8F0',borderRadius:12,padding:12,marginTop:14}} />
+                <TouchableOpacity disabled={reenviandoPago} onPress={reenviarComprobante} style={{backgroundColor:'#1A6A9A',borderRadius:12,padding:13,alignItems:'center',marginTop:10,opacity:reenviandoPago?0.6:1}}>
+                  <Text style={{color:'#fff',fontWeight:'800'}}>{reenviandoPago?'Enviando…':pagoRechazado?'Elegir foto y reenviar':'Elegir foto y enviar'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={cancelarPedido} style={{alignItems:'center',marginTop:12}}>
+                  <Text style={{color:'#C53030',fontWeight:'700'}}>Cancelar pedido</Text>
+                </TouchableOpacity>
+              </>}
+            </View>
+          )}
 
           {/* Delivered celebration */}
           {isDelivered && (

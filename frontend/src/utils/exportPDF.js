@@ -1,5 +1,6 @@
 import {tablasMonedas} from './filasMonedas.mjs';
 import {tablasCaja} from './filasCaja.mjs';
+import {tablasPagoMovil} from './filasPagoMovil.mjs';
 // src/utils/exportPDF.js
 // Exportación a PDF usando jsPDF + jspdf-autotable
 // npm install jspdf jspdf-autotable
@@ -452,23 +453,13 @@ export function exportarDeliveryPDF({ porRepartidor, totales, fechaInicio, fecha
   doc.save(`delivery_${fechaInicio}_${fechaFin}.pdf`);
 }
 
-// ─── REPORTE DE CAJA (arqueos por moneda) ────────────────────────────────────
-export function exportarCajaPDF(datos) {
-  const { totales, monedas, fechaInicio, fechaFin, turnosAbiertos = 0 } = datos;
-  const periodo = `Período (fecha de cierre): ${fechaInicio} al ${fechaFin}`;
-  const N2 = (v) => Number(v || 0).toFixed(2);
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
-  agregarEncabezado(doc, 'Arqueos de Caja por Moneda', periodo);
+// ─── Reportes basados en tablas compartidas (filasCaja / filasPagoMovil) ─────
+const N2 = (v) => Number(v || 0).toFixed(2);
 
-  let y = tarjetasResumen(doc, [
-    { label: 'Turnos cerrados',    valor: totales.NumTurnos,                 color: AZUL2 },
-    { label: 'Con diferencia',     valor: totales.TurnosConDiferencia,       color: [231, 76, 60] },
-    { label: 'Diferencia USD',     valor: `${N2(monedas.USD.Diferencia)} USD`, color: VERDE },
-    { label: 'Diferencia VES',     valor: `${N2(monedas.VES.Diferencia)} VES`, color: [52, 152, 219] },
-    { label: 'Abiertos sin cerrar', valor: turnosAbiertos,                   color: [243, 156, 18] },
-  ], 33);
-
-  tablasCaja(datos).forEach((t, i) => {
+// Una página por tabla (la primera comparte página con las tarjetas).
+function paginasDeTablas(doc, tablas, periodo, startY) {
+  let y = startY;
+  tablas.forEach((t, i) => {
     if (i > 0) { doc.addPage(); agregarEncabezado(doc, t.nombre, periodo); y = 33; }
     if (t.nota) {
       doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(80, 80, 80);
@@ -478,8 +469,10 @@ export function exportarCajaPDF(datos) {
     }
     autoTable(doc, {
       head: [t.encabezado],
-      body: t.filas.map(f => f.map((v, c) =>
-        v == null ? '' : typeof v === 'number' ? (t.conteos.includes(c) ? String(v) : N2(v)) : v)),
+      body: t.filas.length
+        ? t.filas.map(f => f.map((v, c) =>
+            v == null ? '' : typeof v === 'number' ? (t.conteos.includes(c) ? String(v) : N2(v)) : v))
+        : [[{ content: 'Sin registros', colSpan: t.encabezado.length, styles: { halign: 'center', textColor: [150, 150, 150] } }]],
       startY: y,
       theme: 'grid',
       margin: { top: 32, bottom: 18, left: 10, right: 10 },
@@ -488,7 +481,40 @@ export function exportarCajaPDF(datos) {
       alternateRowStyles: { fillColor: GRIS1 },
     });
   });
+}
 
+// ─── REPORTE DE CAJA (arqueos por moneda) ────────────────────────────────────
+export function exportarCajaPDF(datos) {
+  const { totales, monedas, fechaInicio, fechaFin, turnosAbiertos = 0 } = datos;
+  const periodo = `Período (fecha de cierre): ${fechaInicio} al ${fechaFin}`;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
+  agregarEncabezado(doc, 'Arqueos de Caja por Moneda', periodo);
+  const y = tarjetasResumen(doc, [
+    { label: 'Turnos cerrados',     valor: totales.NumTurnos,                   color: AZUL2 },
+    { label: 'Con diferencia',      valor: totales.TurnosConDiferencia,         color: [231, 76, 60] },
+    { label: 'Diferencia USD',      valor: `${N2(monedas.USD.Diferencia)} USD`, color: VERDE },
+    { label: 'Diferencia VES',      valor: `${N2(monedas.VES.Diferencia)} VES`, color: [52, 152, 219] },
+    { label: 'Abiertos sin cerrar', valor: turnosAbiertos,                      color: [243, 156, 18] },
+  ], 33);
+  paginasDeTablas(doc, tablasCaja(datos), periodo, y);
   agregarPiePagina(doc);
   doc.save(`caja_${fechaInicio}_${fechaFin}.pdf`);
+}
+
+// ─── CONCILIACIÓN DE PAGO MÓVIL ──────────────────────────────────────────────
+export function exportarPagoMovilPDF(datos) {
+  const { totales, referenciasRepetidas = [], fechaInicio, fechaFin } = datos;
+  const periodo = `Período (alta del pedido): ${fechaInicio} al ${fechaFin}`;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
+  agregarEncabezado(doc, 'Conciliación de Pago Móvil', periodo);
+  const y = tarjetasResumen(doc, [
+    { label: 'Por revisar',        valor: totales.POR_REVISAR.Pedidos,              color: [243, 156, 18] },
+    { label: 'Aprobado (VES)',     valor: `${N2(totales.APROBADO.VES)} VES`,        color: VERDE },
+    { label: 'Devolver (VES)',     valor: `${N2(totales.DEVOLUCION.VES)} VES`,      color: [231, 76, 60] },
+    { label: 'Entregado sin pago', valor: totales.ENTREGADO_SIN_PAGO.Pedidos,       color: [231, 76, 60] },
+    { label: 'Ref. repetidas',     valor: referenciasRepetidas.length,              color: AZUL2 },
+  ], 33);
+  paginasDeTablas(doc, tablasPagoMovil(datos), periodo, y);
+  agregarPiePagina(doc);
+  doc.save(`pago_movil_${fechaInicio}_${fechaFin}.pdf`);
 }

@@ -1,9 +1,10 @@
 // src/routes/proveedores.routes.js
 import { authenticate, requireRole } from '../middlewares/auth.js';
+import { requireMatriz } from '../services/alcance.service.js';
 import {
   listarProveedores, obtenerProveedor, crearProveedor, editarProveedor, toggleProveedor,
   listarProductosProveedor, agregarProductoProveedor, quitarProductoProveedor,
-  listarOrdenes, obtenerOrden, crearOrden, cambiarEstadoOrden,
+  listarOrdenes, obtenerOrden, siguienteFolioOrden, crearOrden, cambiarEstadoOrden,
 } from '../controllers/proveedores.controller.js';
 
 const ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
@@ -47,18 +48,22 @@ export async function proveedoresRoutes(fastify) {
 
   // ── Órdenes de compra ─────────────────────────────────────────────────
   fastify.get('/ordenes-compra',
-    { preHandler: [authenticate, requireRole(...LECTURA)] },
+    { preHandler: [authenticate, requireMatriz] },
     listarOrdenes);
 
+  fastify.get('/ordenes-compra/siguiente-folio',
+    { preHandler: [authenticate, requireMatriz] },
+    siguienteFolioOrden);
+
   fastify.get('/ordenes-compra/:idOrden',
-    { preHandler: [authenticate, requireRole(...LECTURA)] },
+    { preHandler: [authenticate, requireMatriz] },
     obtenerOrden);
 
   fastify.post('/ordenes-compra',
-    { preHandler: [authenticate, requireRole(...ESCRITURA)] },
+    { preHandler: [authenticate, requireMatriz] },
     crearOrden);
 
   fastify.post('/ordenes-compra/:idOrden/estado',
-    { preHandler: [authenticate, requireRole(...ESCRITURA)] },
+    { preHandler: [authenticate, requireMatriz] },
     cambiarEstadoOrden);
 }

@@ -3,11 +3,14 @@ import { getPool, sql } from '../db/sqlserver.js';
 import { broadcast } from '../ws/ws.manager.js';
 import { enviarPush } from '../services/push.service.js';
 import { registrarAuditoria } from '../services/audit.service.js';
+import { olvidarPedido } from '../services/dispatchMemoria.js';
 import { recalcularRuta, recalcularRutaThrottled, STATUS_ACTIVOS_REPARTIDOR } from '../services/rutas.service.js';
 import { promocionesVigentes, mejorPromoUnitaria, calcularLinea } from './promociones.controller.js';
 import { evaluarCupon } from './cupones.controller.js';
 import { prepararMoneda,leerMoneda } from '../services/moneda.service.js';
 import { calcularPagoDelivery } from '../services/pagoDelivery.service.js';
+import { calcularCobroEfectivoRepartidor } from '../services/liquidacionRepartidor.service.js';
+import { plazoPagoMinutos, SQL_SEGUNDOS_SIN_PAGO } from '../services/pagoMovil.service.js';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import path from 'path';
@@ -543,6 +546,7 @@ export async function datosPagoMovil(request, reply) {
 export async function subirComprobanteCliente(request, reply) {
   const { idBranch, idCuenta, idCliente } = request.cliente;
   const { idPedido } = request.params;
+  let transaction = null, rutaArchivo = null;
 
   try {
     const pool = await getPool();
@@ -553,11 +557,15 @@ export async function subirComprobanteCliente(request, reply) {
       .input('idCuenta',  sql.BigInt, idCuenta)
       .input('idPedido',  sql.BigInt, idPedido)
       .input('idCliente', sql.BigInt, idCliente)
-      .query(`SELECT idPedido FROM VIDA_PEDIDOS
+      .query(`SELECT idPedido, MetodoPago, Status, StatusPago FROM VIDA_PEDIDOS
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta
                 AND idPedido=@idPedido AND idCliente=@idCliente`);
     if (!pedR.recordset.length) {
       return reply.code(404).send({ error: 'Pedido no encontrado' });
+    }
+    const pedido = pedR.recordset[0];
+    if (pedido.MetodoPago !== 'PAGO_MOVIL' || pedido.Status !== 'ESPERANDO_PAGO') {
+      return reply.code(409).send({ error: 'Este pedido no admite comprobantes de Pago Móvil' });
     }
 
     const data = await request.file();
@@ -575,32 +583,57 @@ export async function subirComprobanteCliente(request, reply) {
 
     const ext = (data.filename.split('.').pop() || 'jpg').toLowerCase();
     const filename = `comp_${idBranch}_${idCuenta}_${idPedido}_${Date.now()}.${ext}`;
-    fs.writeFileSync(path.join(uploadDir, filename), await data.toBuffer());
+    rutaArchivo = path.join(uploadDir, filename);
+    fs.writeFileSync(rutaArchivo, await data.toBuffer());
     const urlImagen = `/uploads/comprobantes/${filename}`;
 
-    const idR = await pool.request()
-      .input('idBranch', sql.BigInt, idBranch)
-      .input('idCuenta', sql.BigInt, idCuenta)
-      .query(`SELECT ISNULL(MAX(idComprobante),0)+1 AS next FROM VIDA_PEDIDOS_COMPROBANTES
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
-    const idComprobante = idR.recordset[0].next;
+    // Alta del comprobante y paso a PENDIENTE en una sola transacción. El
+    // pedido se vuelve a leer con bloqueo: pudo aprobarse, cancelarse o vencer
+    // su plazo de pago mientras se subía la imagen.
+    transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    const vigente = await new sql.Request(transaction)
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idPedido', sql.BigInt, idPedido)
+      .query(`SELECT Status FROM VIDA_PEDIDOS WITH (UPDLOCK, HOLDLOCK)
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
+    if (vigente.recordset[0]?.Status !== 'ESPERANDO_PAGO') {
+      throw Object.assign(new Error('Este pedido ya no admite comprobantes de Pago Móvil'), { statusCode: 409 });
+    }
 
-    await pool.request()
-      .input('idBranch',      sql.BigInt,       idBranch)
-      .input('idCuenta',      sql.BigInt,       idCuenta)
-      .input('idComprobante', sql.BigInt,       idComprobante)
-      .input('idPedido',      sql.BigInt,       idPedido)
-      .input('ImagenURL',     sql.VarChar(500), urlImagen)
-      .input('Referencia',    sql.VarChar(100), referencia)
-      .input('UsuAlta',       sql.VarChar(20),  `CLI:${idCliente}`)
+    // ID en la misma sentencia del INSERT (MAX+1 con bloqueo de rango).
+    const ins = await new sql.Request(transaction)
+      .input('idBranch',   sql.BigInt,       idBranch)
+      .input('idCuenta',   sql.BigInt,       idCuenta)
+      .input('idPedido',   sql.BigInt,       idPedido)
+      .input('ImagenURL',  sql.VarChar(500), urlImagen)
+      .input('Referencia', sql.VarChar(100), referencia)
+      .input('UsuAlta',    sql.VarChar(20),  `CLI:${idCliente}`)
       .query(`INSERT INTO VIDA_PEDIDOS_COMPROBANTES
                 (idBranch, idCuenta, idComprobante, idPedido, ImagenURL, Referencia, StatusRevision, UsuAlta)
-              VALUES (@idBranch, @idCuenta, @idComprobante, @idPedido, @ImagenURL, @Referencia, 'PENDIENTE', @UsuAlta)`);
+              OUTPUT inserted.idComprobante
+              SELECT @idBranch, @idCuenta, ISNULL(MAX(idComprobante),0)+1, @idPedido, @ImagenURL, @Referencia, 'PENDIENTE', @UsuAlta
+              FROM VIDA_PEDIDOS_COMPROBANTES WITH (UPDLOCK, HOLDLOCK)
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+    const idComprobante = ins.recordset[0].idComprobante;
 
+    await new sql.Request(transaction)
+      .input('idBranch',sql.BigInt,idBranch).input('idCuenta',sql.BigInt,idCuenta).input('idPedido',sql.BigInt,idPedido)
+      .query(`UPDATE VIDA_PEDIDOS SET StatusPago='PENDIENTE', FechaMod=GETDATE()
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido AND Status='ESPERANDO_PAGO'`);
+    await transaction.commit();
+    transaction = null;
+
+    // El panel se entera de que hay un comprobante esperando revisión.
+    broadcast(idBranch, idCuenta, {
+      tipo: 'pedido:actualizado', idPedido: Number(idPedido), StatusNuevo: 'ESPERANDO_PAGO', StatusPago: 'PENDIENTE',
+    });
     return reply.code(201).send({ idComprobante, url: urlImagen });
   } catch (err) {
+    if (transaction) { try { await transaction.rollback(); } catch {} }
+    // Sin fila en BD, la imagen queda huérfana: se borra.
+    if (rutaArchivo) { try { fs.unlinkSync(rutaArchivo); } catch {} }
     request.log.error(err);
-    return reply.code(500).send({ error: 'Error al subir comprobante' });
+    return reply.code(err.statusCode || 500).send({ error: err.statusCode ? err.message : 'Error al subir comprobante' });
   }
 }
 
@@ -873,6 +906,8 @@ export async function crearPedidoApp(request, reply) {
   if (!idPuntoVenta || !items?.length) {
     return reply.code(400).send({ error: 'idPuntoVenta e items son requeridos' });
   }
+  const requiereAprobacionPago = MetodoPago === 'PAGO_MOVIL';
+  const statusInicial = requiereAprobacionPago ? 'ESPERANDO_PAGO' : 'BUSCANDO_REPARTIDOR';
   for (const item of items) {
     const cant = parseFloat(item.Cantidad);
     if (!item.idProducto || !(cant > 0)) {
@@ -1015,7 +1050,7 @@ export async function crearPedidoApp(request, reply) {
         .input('idPuntoVenta',        sql.BigInt,      idPuntoVenta)
         .input('idCliente',           sql.BigInt,      idCliente)
         .input('Canal',               sql.VarChar(10), 'APP')
-        .input('Status',              sql.VarChar(40), 'BUSCANDO_REPARTIDOR')
+        .input('Status',              sql.VarChar(40), statusInicial)
         .input('MetodoPago',          sql.VarChar(20), MetodoPago)
         .input('StatusPago',          sql.VarChar(20), 'PENDIENTE')
         .input('TotalUSD',            sql.Decimal(18,4), TotalUSD)
@@ -1096,6 +1131,16 @@ export async function crearPedidoApp(request, reply) {
     } catch (txErr) {
       try { await transaction.rollback(); } catch (rbErr) { request.log.error('Rollback falló: ' + rbErr.message); }
       throw txErr;
+    }
+
+    // Pago Móvil se queda retenido hasta que un administrador apruebe el
+    // comprobante. No inicia reloj, radio ni notificaciones de reparto antes.
+    if (requiereAprobacionPago) {
+      return reply.code(201).send({
+        idPedido, status: statusInicial, StatusPago: 'PENDIENTE',
+        TotalUSD, subtotal, descuentoPuntos, puntosUsados, descuentoCupon,
+        PagoMoneda: pagoSnapshot,
+      });
     }
 
     // Deadline de búsqueda: pasado este tiempo sin repartidor el job de
@@ -1192,7 +1237,7 @@ export async function crearPedidoApp(request, reply) {
     );
 
     return reply.code(201).send({
-      idPedido, status: 'BUSCANDO_REPARTIDOR',
+      idPedido, status: statusInicial,
       TotalUSD, subtotal, descuentoPuntos, puntosUsados, descuentoCupon, PagoMoneda:pagoSnapshot,
     });
   } catch (err) {
@@ -1229,6 +1274,10 @@ export async function estadoPedidoCliente(request, reply) {
                DATEDIFF(MINUTE, GETUTCDATE(), p.ETAEntrega) AS MinutosRestantes,
                p.FechaLimiteBusqueda, p.AvisoSinRepartidor,
                DATEDIFF(SECOND, GETDATE(), p.FechaLimiteBusqueda) AS SegundosBusquedaRestantes,
+               ${SQL_SEGUNDOS_SIN_PAGO} AS SegundosSinPago,
+               (SELECT COUNT(*) FROM VIDA_PEDIDOS_COMPROBANTES c
+                WHERE c.idBranch=p.idBranch AND c.idCuenta=p.idCuenta AND c.idPedido=p.idPedido
+                  AND c.StatusRevision='PENDIENTE') AS ComprobantesPendientes,
                rep.Nombre AS NombreRepartidor,
                rep.Telefono AS TelefonoRepartidor,
                rep.Vehiculo AS VehiculoRepartidor,
@@ -1253,7 +1302,15 @@ export async function estadoPedidoCliente(request, reply) {
       return reply.code(404).send({ error: 'Pedido no encontrado' });
     }
 
-    return reply.send(r.recordset[0]);
+    // Tiempo para mandar el comprobante de Pago Móvil antes de que el pedido
+    // se cancele solo. Sin plazo mientras hay un comprobante en revisión.
+    const { SegundosSinPago, ...estado } = r.recordset[0];
+    let SegundosPagoRestantes = null;
+    if (estado.Status === 'ESPERANDO_PAGO' && estado.MetodoPago === 'PAGO_MOVIL' && !estado.ComprobantesPendientes) {
+      const plazo = plazoPagoMinutos(await getConfigVal(pool, idBranch, idCuenta, 'PlazoPagoMovilMin', ''));
+      if (plazo) SegundosPagoRestantes = Math.max(0, plazo * 60 - Number(SegundosSinPago));
+    }
+    return reply.send({ ...estado, SegundosPagoRestantes });
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener estado del pedido' });
@@ -1839,6 +1896,20 @@ export async function aceptarPedido(request, reply) {
       return reply.code(409).send({ error: `Pedido ya no está disponible (status: ${pedido.Status})` });
     }
 
+    // Ya lo soltó antes: no puede volver a tomarlo (el filtro de
+    // pedidos-disponibles ya lo esconde, esto cierra la puerta del endpoint)
+    const libR = await pool.request()
+      .input('idBranch',     sql.BigInt, idBranch)
+      .input('idCuenta',     sql.BigInt, idCuenta)
+      .input('idPedido',     sql.BigInt, idPedido)
+      .input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`SELECT TOP 1 1 AS libero FROM VIDA_PEDIDOS_LIBERADOS
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                AND idPedido=@idPedido AND idRepartidor=@idRepartidor`);
+    if (libR.recordset.length) {
+      return reply.code(409).send({ error: 'Ya liberaste este pedido: lo tomará otro repartidor' });
+    }
+
     // Límite de pedidos simultáneos por repartidor (config MaxPedidosPorRepartidor)
     const maxPedidos = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'MaxPedidosPorRepartidor', '3')) || 3;
     const activosR = await pool.request()
@@ -1960,16 +2031,24 @@ export async function aceptarPedido(request, reply) {
 // REPARTIDOR — ACTUALIZAR STATUS DEL PEDIDO
 // POST /delivery/repartidor/status-pedido
 // ══════════════════════════════════════════════════════════════════════════
+// Antes de recoger en sucursal el repartidor NO puede cancelar el pedido del
+// cliente: su salida es liberarlo (liberarPedido) para que lo tome otro.
+// Una vez que tiene la mercancia encima ya no puede pasarsela a nadie, asi
+// que ahi si se le permite cancelar — pero con motivo obligatorio.
 const TRANSICIONES_DELIVERY = {
-  REPARTIDOR_ASIGNADO: ['IR_A_SUCURSAL', 'CANCELADO'],
-  IR_A_SUCURSAL:       ['EN_SUCURSAL',   'CANCELADO'],
-  EN_SUCURSAL:         ['EN_CAMINO',     'CANCELADO'],
-  EN_CAMINO:           ['ENTREGADO',     'CANCELADO'],
+  REPARTIDOR_ASIGNADO: ['IR_A_SUCURSAL'],
+  IR_A_SUCURSAL:       ['EN_SUCURSAL'],
+  EN_SUCURSAL:         ['EN_CAMINO',  'CANCELADO'],
+  EN_CAMINO:           ['ENTREGADO',  'CANCELADO'],
 };
+
+// Estados en los que el pedido todavia esta en la sucursal: se puede liberar
+const LIBERABLES = ['REPARTIDOR_ASIGNADO', 'IR_A_SUCURSAL'];
 
 export async function actualizarStatusPedido(request, reply) {
   const { idBranch, idCuenta, idRepartidor } = request.repartidor;
   const { idPedido, nuevoStatus } = request.body;
+  const motivo = (request.body?.motivo || '').trim().slice(0, 200);
 
   const pool = await getPool();
   const transaction = new sql.Transaction(pool);
@@ -1981,7 +2060,8 @@ export async function actualizarStatusPedido(request, reply) {
       .input('idCuenta',     sql.BigInt, idCuenta)
       .input('idPedido',     sql.BigInt, idPedido)
       .input('idRepartidor', sql.BigInt, idRepartidor)
-      .query(`SELECT p.Status, p.MetodoPago, p.TotalUSD, p.idPuntoVenta, p.idCliente, r.ComisionPct
+      .query(`SELECT p.Status, p.MetodoPago, p.TotalUSD, p.PagoMonedaJSON,
+                     p.idPuntoVenta, p.idCliente, r.ComisionPct
               FROM VIDA_PEDIDOS p
               LEFT JOIN VIDA_REPARTIDORES r
                 ON r.idBranch=p.idBranch AND r.idCuenta=p.idCuenta AND r.idRepartidor=p.idRepartidor
@@ -1997,23 +2077,43 @@ export async function actualizarStatusPedido(request, reply) {
     const permitidos = TRANSICIONES_DELIVERY[statusActual] ?? [];
 
     if (!permitidos.includes(nuevoStatus)) {
+      // Cancelar antes de recoger ya no es transición válida: se libera
+      if (nuevoStatus === 'CANCELADO' && LIBERABLES.includes(statusActual)) {
+        return reply.code(422).send({
+          error: 'Todavía no recogiste el pedido: liberalo para que lo tome otro repartidor en vez de cancelarlo.',
+          liberable: true,
+          permitidos,
+        });
+      }
       return reply.code(422).send({
         error: `Transición inválida: ${statusActual} → ${nuevoStatus}`,
         permitidos,
       });
     }
 
+    // Cancelar un pedido ya recogido deja al cliente sin su compra: exigimos
+    // motivo para que quede en el historial y la auditoría
+    if (nuevoStatus === 'CANCELADO' && motivo.length < 3) {
+      return reply.code(400).send({ error: 'Indicá el motivo de la cancelación' });
+    }
+
     // Comisión: del repartidor o de la config global (fuera de la transacción).
     // Se registra en TODA entrega; el efectivo a rendir solo aplica a EFECTIVO.
     const esEntrega = nuevoStatus === 'ENTREGADO';
     const esEntregaEfectivo = esEntrega && pedido.MetodoPago === 'EFECTIVO';
-    let comision = 0, efectivoARendir = 0;
+    let comision = 0, efectivoARendir = 0, liquidacionMoneda = null;
     if (esEntrega) {
       const pctComision = pedido.ComisionPct != null
         ? parseFloat(pedido.ComisionPct)
         : parseFloat(await getConfigVal(pool, idBranch, idCuenta, 'ComisionRepartidorPct', '0'));
       comision = parseFloat(pedido.TotalUSD) * pctComision / 100;
-      if (esEntregaEfectivo) efectivoARendir = parseFloat(pedido.TotalUSD) - comision;
+      if (esEntregaEfectivo) {
+        liquidacionMoneda = calcularCobroEfectivoRepartidor({
+          totalUSD: pedido.TotalUSD, comisionUSD: comision,
+          pagoMonedaJSON: pedido.PagoMonedaJSON,
+        });
+        efectivoARendir = liquidacionMoneda.MontoARendirUSD;
+      }
     }
 
     await transaction.begin();
@@ -2028,14 +2128,17 @@ export async function actualizarStatusPedido(request, reply) {
       .input('nuevoStatus',  sql.VarChar(40),  nuevoStatus)
       .input('statusActual', sql.VarChar(40),  statusActual)
       .input('comision',     sql.Decimal(18,4), comision)
-      .input('efectivo',     sql.Decimal(18,4), efectivoARendir);
+      .input('efectivo',     sql.Decimal(18,4), efectivoARendir)
+      .input('liquidacionJSON', sql.NVarChar(sql.MAX), liquidacionMoneda ? JSON.stringify(liquidacionMoneda) : null)
+      .input('motivo',       sql.VarChar(200), motivo || null);
 
     const setComision = esEntrega
-      ? `, ComisionRepartidor=@comision${esEntregaEfectivo ? ', MontoEfectivoRepartidor=@efectivo' : ''}`
+      ? `, ComisionRepartidor=@comision${esEntregaEfectivo ? ', MontoEfectivoRepartidor=@efectivo, LiquidacionRepartidorJSON=@liquidacionJSON' : ''}`
       : '';
+    const setMotivo = nuevoStatus === 'CANCELADO' ? ', MotivoCancelacion=@motivo' : '';
 
     const updR = await updReq.query(`UPDATE VIDA_PEDIDOS
-            SET Status=@nuevoStatus, FechaMod=GETDATE() ${setComision}
+            SET Status=@nuevoStatus, FechaMod=GETDATE() ${setComision}${setMotivo}
             WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
               AND Status=@statusActual`);
 
@@ -2102,8 +2205,10 @@ export async function actualizarStatusPedido(request, reply) {
           .input('idCuenta',     sql.BigInt,       idCuenta)
           .input('idRepartidor', sql.BigInt,       idRepartidor)
           .input('efectivo',     sql.Decimal(18,4), efectivoARendir)
+          .input('efectivoVES',  sql.Decimal(18,4), liquidacionMoneda?.Moneda === 'VES' ? liquidacionMoneda.MontoARendirOriginal : 0)
           .query(`UPDATE VIDA_REPARTIDORES
-                  SET SaldoPendiente = ISNULL(SaldoPendiente,0) + @efectivo
+                  SET SaldoPendiente = ISNULL(SaldoPendiente,0) + CASE WHEN @efectivoVES=0 THEN @efectivo ELSE 0 END,
+                      SaldoPendienteVES = ISNULL(SaldoPendienteVES,0) + @efectivoVES
                   WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
       }
 
@@ -2173,10 +2278,11 @@ export async function actualizarStatusPedido(request, reply) {
       .input('idPedido',      sql.BigInt,      idPedido)
       .input('StatusAnterior',sql.VarChar(40), statusActual)
       .input('StatusNuevo',   sql.VarChar(40), nuevoStatus)
+      .input('Notas',         sql.VarChar(500), motivo || null)
       .input('UsuAlta',       sql.VarChar(20), `REP:${idRepartidor}`)
       .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL
-                (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, UsuAlta)
-              VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, @StatusAnterior, @StatusNuevo, @UsuAlta)`);
+                (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, Notas, UsuAlta)
+              VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, @StatusAnterior, @StatusNuevo, @Notas, @UsuAlta)`);
 
     if (['ENTREGADO', 'CANCELADO'].includes(nuevoStatus)) {
       await registrarAuditoria(transaction, {
@@ -2186,8 +2292,9 @@ export async function actualizarStatusPedido(request, reply) {
         data: {
           StatusAnterior: statusActual, TotalUSD: parseFloat(pedido.TotalUSD),
           MetodoPago: pedido.MetodoPago,
+          ...(nuevoStatus === 'CANCELADO' ? { Motivo: motivo } : {}),
           ...(esEntrega ? { ComisionRepartidor: comision } : {}),
-          ...(esEntregaEfectivo ? { EfectivoARendir: efectivoARendir } : {}),
+          ...(esEntregaEfectivo ? { EfectivoARendir: efectivoARendir, LiquidacionMoneda: liquidacionMoneda } : {}),
         },
       }, request.log);
     }
@@ -2229,6 +2336,182 @@ export async function actualizarStatusPedido(request, reply) {
     }
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al actualizar status del pedido' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// REPARTIDOR — LIBERAR PEDIDO (devolverlo al pool)
+// POST /delivery/repartidor/liberar
+//
+// Solo antes de recoger en sucursal (LIBERABLES). El pedido vuelve a
+// BUSCANDO_REPARTIDOR y el job procesarBusquedas lo re-ofrece solo, con el
+// radio escalonado de siempre. Tres cosas que no son obvias:
+//   1. Se repone FechaLimiteBusqueda: se calcula desde FechaAlta, así que un
+//      pedido viejo liberado se auto-cancelaría en el siguiente tick.
+//      AvisoSinRepartidor se deja como estaba a propósito: resetearlo hace
+//      que procesarBusquedas le mande al cliente el aviso de 'seguimos
+//      buscando' en el tick siguiente, pisando el push de la liberación.
+//   2. Se registra en VIDA_PEDIDOS_LIBERADOS para NO volver a ofrecérselo al
+//      que lo soltó (ni por polling ni por el despacho escalonado).
+//   3. Se limpian OrdenRuta/ETA/DistanciaKm: ya no es parada de nadie.
+// ══════════════════════════════════════════════════════════════════════════
+export async function liberarPedido(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  const { idPedido } = request.body;
+  const motivo = (request.body?.motivo || '').trim().slice(0, 200);
+
+  if (!idPedido) return reply.code(400).send({ error: 'Falta idPedido' });
+
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  let enTransaccion = false;
+
+  try {
+    const pedR = await pool.request()
+      .input('idBranch',     sql.BigInt, idBranch)
+      .input('idCuenta',     sql.BigInt, idCuenta)
+      .input('idPedido',     sql.BigInt, idPedido)
+      .input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`SELECT Status, idCliente, idPuntoVenta, TotalUSD
+              FROM VIDA_PEDIDOS
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                AND idPedido=@idPedido AND idRepartidor=@idRepartidor`);
+
+    if (!pedR.recordset.length) {
+      return reply.code(404).send({ error: 'Pedido no encontrado o no asignado a este repartidor' });
+    }
+
+    const pedido = pedR.recordset[0];
+    const statusActual = pedido.Status;
+
+    if (!LIBERABLES.includes(statusActual)) {
+      return reply.code(422).send({
+        error: 'Ya recogiste este pedido en la sucursal: no se puede pasar a otro repartidor. Si no podés entregarlo, cancelalo indicando el motivo.',
+        status: statusActual,
+        cancelable: TRANSICIONES_DELIVERY[statusActual]?.includes('CANCELADO') ?? false,
+      });
+    }
+
+    const prorrogaMin = parseInt(
+      await getConfigVal(pool, idBranch, idCuenta, 'ProrrogaLiberacionMin', '15')) || 15;
+
+    await transaction.begin();
+    enTransaccion = true;
+
+    // La guarda Status=@statusActual AND idRepartidor=@idRepartidor hace que
+    // dos peticiones simultáneas (doble tap) no liberen el pedido dos veces
+    // ni pisen una reasignación hecha desde el panel
+    const updR = await new sql.Request(transaction)
+      .input('idBranch',     sql.BigInt,      idBranch)
+      .input('idCuenta',     sql.BigInt,      idCuenta)
+      .input('idPedido',     sql.BigInt,      idPedido)
+      .input('idRepartidor', sql.BigInt,      idRepartidor)
+      .input('statusActual', sql.VarChar(40), statusActual)
+      .input('prorroga',     sql.Int,         prorrogaMin)
+      .query(`UPDATE VIDA_PEDIDOS
+              SET Status='BUSCANDO_REPARTIDOR',
+                  idRepartidor=NULL,
+                  FechaLimiteBusqueda=DATEADD(MINUTE, @prorroga, GETDATE()),
+                  VecesLiberado=ISNULL(VecesLiberado,0)+1,
+                  OrdenRuta=NULL, DistanciaKm=NULL, ETAEntrega=NULL,
+                  FechaMod=GETDATE()
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
+                AND Status=@statusActual AND idRepartidor=@idRepartidor`);
+
+    if (updR.rowsAffected[0] === 0) {
+      await transaction.rollback();
+      enTransaccion = false;
+      return reply.code(409).send({ error: 'El pedido fue modificado por otra operación' });
+    }
+
+    // Idempotente por la PK compuesta: si ya estaba registrado, no reinserta
+    await new sql.Request(transaction)
+      .input('idBranch',     sql.BigInt,       idBranch)
+      .input('idCuenta',     sql.BigInt,       idCuenta)
+      .input('idPedido',     sql.BigInt,       idPedido)
+      .input('idRepartidor', sql.BigInt,       idRepartidor)
+      .input('statusActual', sql.VarChar(20),  statusActual)
+      .input('motivo',       sql.VarChar(200), motivo || null)
+      .query(`INSERT INTO VIDA_PEDIDOS_LIBERADOS
+                (idBranch, idCuenta, idPedido, idRepartidor, StatusAlLiberar, Motivo)
+              SELECT @idBranch, @idCuenta, @idPedido, @idRepartidor, @statusActual, @motivo
+              WHERE NOT EXISTS (
+                SELECT 1 FROM VIDA_PEDIDOS_LIBERADOS
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta
+                  AND idPedido=@idPedido AND idRepartidor=@idRepartidor)`);
+
+    // Queda DISPONIBLE solo si no le sobra ningún otro pedido activo
+    await new sql.Request(transaction)
+      .input('idBranch',     sql.BigInt, idBranch)
+      .input('idCuenta',     sql.BigInt, idCuenta)
+      .input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`UPDATE VIDA_REPARTIDORES SET StatusRepartidor='DISPONIBLE'
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor
+                AND NOT EXISTS (
+                  SELECT 1 FROM VIDA_PEDIDOS p
+                  WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
+                    AND p.idRepartidor=@idRepartidor
+                    AND p.Status IN ('${STATUS_ACTIVOS_REPARTIDOR.join("','")}'))`);
+
+    const histId = await nextIdTx(transaction, 'VIDA_PEDIDOS_HISTORIAL', 'idHistorial', idBranch, idCuenta);
+    await new sql.Request(transaction)
+      .input('idBranch',      sql.BigInt,       idBranch)
+      .input('idCuenta',      sql.BigInt,       idCuenta)
+      .input('idHistorial',   sql.BigInt,       histId)
+      .input('idPedido',      sql.BigInt,       idPedido)
+      .input('StatusAnterior',sql.VarChar(40),  statusActual)
+      .input('StatusNuevo',   sql.VarChar(40),  'BUSCANDO_REPARTIDOR')
+      .input('Notas',         sql.VarChar(500), `Liberado por el repartidor${motivo ? `: ${motivo}` : ''}`)
+      .input('UsuAlta',       sql.VarChar(20),  `REP:${idRepartidor}`)
+      .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL
+                (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, Notas, UsuAlta)
+              VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, @StatusAnterior, @StatusNuevo, @Notas, @UsuAlta)`);
+
+    await registrarAuditoria(transaction, {
+      idBranch, idCuenta,
+      entityType: 'PEDIDO', entityId: idPedido,
+      accion: 'LIBERADO', actor: `REP:${idRepartidor}`,
+      data: {
+        StatusAnterior: statusActual,
+        TotalUSD: parseFloat(pedido.TotalUSD),
+        Motivo: motivo || null,
+        ProrrogaMin: prorrogaMin,
+      },
+    }, request.log);
+
+    await transaction.commit();
+    enTransaccion = false;
+
+    // Que el proximo tick del despacho lo trate como pedido nuevo y vuelva a
+    // notificar (con el que lo solto ya excluido por VIDA_PEDIDOS_LIBERADOS)
+    olvidarPedido(idPedido);
+
+    // La ruta del que lo soltó cambió: reordenar sus paradas restantes
+    recalcularRuta(idBranch, idCuenta, idRepartidor, request.log)
+      .catch(errRuta => request.log.error('recalcularRuta post-liberar falló: ' + errRuta.message));
+
+    // Panel admin (Logística y Pedidos escuchan eventos distintos)
+    broadcast(idBranch, idCuenta, { tipo: 'pedido_status', idPedido, idRepartidor: null, nuevoStatus: 'BUSCANDO_REPARTIDOR' });
+    broadcast(idBranch, idCuenta, { tipo: 'pedido:actualizado', idPedido, StatusNuevo: 'BUSCANDO_REPARTIDOR' });
+    // App del cliente: el badge y el refetch (ya no tiene repartidor asignado)
+    broadcast(idBranch, idCuenta, { tipo: 'status_pedido',   idPedido, idCliente: pedido.idCliente, estado: 'BUSCANDO_REPARTIDOR' });
+    broadcast(idBranch, idCuenta, { tipo: 'pedido_liberado', idPedido, idCliente: pedido.idCliente });
+
+    tokenClientePedido(pool, idBranch, idCuenta, pedido.idCliente)
+      .then(token => token && enviarPush(token, {
+        title: '🔄 Buscando otro repartidor',
+        body: `El repartidor no pudo seguir con tu pedido #${idPedido}. Ya lo estamos ofreciendo a otro.`,
+        data: { tipo: 'status_pedido', idPedido, status: 'BUSCANDO_REPARTIDOR' },
+      }, request.log))
+      .catch(() => {});
+
+    return reply.send({ ok: true, idPedido, nuevoStatus: 'BUSCANDO_REPARTIDOR', prorrogaMin });
+  } catch (err) {
+    if (enTransaccion) {
+      try { await transaction.rollback(); } catch (rbErr) { request.log.error('Rollback falló: ' + rbErr.message); }
+    }
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al liberar el pedido' });
   }
 }
 
@@ -2332,12 +2615,13 @@ export async function pedidosActivos(request, reply) {
 // GET /delivery/repartidor/pedidos-disponibles
 // ══════════════════════════════════════════════════════════════════════════
 export async function pedidosDisponibles(request, reply) {
-  const { idBranch, idCuenta } = request.repartidor;
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
   try {
     const pool = await getPool();
     const r = await pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
+      .input('idRepartidor', sql.BigInt, idRepartidor)
       .query(`
         SELECT p.idPedido, p.Status, p.MetodoPago, p.TotalUSD,
                p.DireccionEntrega, p.UbicacionEntregaLat, p.UbicacionEntregaLon,
@@ -2351,6 +2635,12 @@ export async function pedidosDisponibles(request, reply) {
           ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
         WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
           AND p.Status='BUSCANDO_REPARTIDOR'
+          -- Un pedido que este repartidor liberó no se le vuelve a ofrecer:
+          -- sin esto el polling de su app se lo devolvería a los 10 segundos
+          AND NOT EXISTS (
+            SELECT 1 FROM VIDA_PEDIDOS_LIBERADOS l
+            WHERE l.idBranch=p.idBranch AND l.idCuenta=p.idCuenta
+              AND l.idPedido=p.idPedido AND l.idRepartidor=@idRepartidor)
         ORDER BY p.FechaAlta ASC
       `);
     return reply.send(r.recordset);
@@ -2378,8 +2668,8 @@ export async function historialRepartidor(request, reply) {
       .input('offset',       sql.Int,    offset)
       .input('limit',        sql.Int,    parseInt(limit))
       .query(`
-        SELECT idPedido, Status, MetodoPago, TotalUSD,
-               ComisionRepartidor, MontoEfectivoRepartidor,
+        SELECT idPedido, Status, MetodoPago, TotalUSD, PagoMonedaJSON,
+               ComisionRepartidor, MontoEfectivoRepartidor, LiquidacionRepartidorJSON,
                DireccionEntrega, FechaAlta
         FROM VIDA_PEDIDOS
         WHERE idBranch=@idBranch AND idCuenta=@idCuenta
@@ -2472,7 +2762,7 @@ export async function actualizarPerfilRepartidor(request, reply) {
       .input('idCuenta',     sql.BigInt, idCuenta)
       .input('idRepartidor', sql.BigInt, idRepartidor)
       .query(`SELECT Nombre, Telefono, Vehiculo, PlacaVehiculo, FotoURL,
-                     Calificacion, TotalCalificaciones, SaldoPendiente, ComisionPct
+                     Calificacion, TotalCalificaciones, SaldoPendiente, SaldoPendienteVES, ComisionPct
               FROM VIDA_REPARTIDORES
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
 
@@ -2498,7 +2788,7 @@ export async function perfilRepartidorApp(request, reply) {
       .query(`
         SELECT r.Nombre, r.Telefono, r.Email, r.Vehiculo, r.PlacaVehiculo,
                r.FotoURL, r.Calificacion, r.TotalCalificaciones,
-               r.SaldoPendiente, r.ComisionPct,
+               r.SaldoPendiente, r.SaldoPendienteVES, r.ComisionPct,
                (SELECT COUNT(*) FROM VIDA_PEDIDOS p
                 WHERE p.idBranch=r.idBranch AND p.idCuenta=r.idCuenta
                   AND p.idRepartidor=r.idRepartidor AND p.Status='ENTREGADO') AS TotalPedidosEntregados
@@ -2595,7 +2885,7 @@ export async function listarRepartidores(request, reply) {
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
       .query(`SELECT idRepartidor, Nombre, Telefono, Vehiculo, PlacaVehiculo,
-                     ComisionPct, SaldoPendiente, StatusRepartidor, Status,
+                     ComisionPct, SaldoPendiente, SaldoPendienteVES, StatusRepartidor, Status,
                      UltimaLatitud, UltimaLongitud, UltimaUbicacion, FechaAlta
               FROM VIDA_REPARTIDORES
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta
@@ -2732,93 +3022,107 @@ export async function liquidarRepartidor(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const { idRepartidor } = request.params;
   const { Observaciones } = request.body ?? {};
-
+  let transaction;
   try {
     const pool = await getPool();
-
-    // Obtener saldo pendiente y contar pedidos a liquidar
-    const repR = await pool.request()
+    transaction = new sql.Transaction(pool);
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    const repR = await new sql.Request(transaction)
       .input('idBranch',     sql.BigInt, idBranch)
       .input('idCuenta',     sql.BigInt, idCuenta)
       .input('idRepartidor', sql.BigInt, idRepartidor)
-      .query(`SELECT SaldoPendiente FROM VIDA_REPARTIDORES
+      .query(`SELECT SaldoPendiente, SaldoPendienteVES FROM VIDA_REPARTIDORES WITH (UPDLOCK,HOLDLOCK)
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
 
     if (!repR.recordset.length) {
+      await transaction.rollback(); transaction = null;
       return reply.code(404).send({ error: 'Repartidor no encontrado' });
     }
+    const saldoUSD = Number(repR.recordset[0].SaldoPendiente || 0);
+    const saldoVES = Number(repR.recordset[0].SaldoPendienteVES || 0);
+    if (saldoUSD <= 0 && saldoVES <= 0) {
+      await transaction.rollback(); transaction = null;
+      return reply.code(409).send({ error: 'El repartidor no tiene efectivo pendiente por liquidar' });
+    }
 
-    const saldo = parseFloat(repR.recordset[0].SaldoPendiente);
-
-    // Calcular totales de pedidos entregados no liquidados
-    const pedR = await pool.request()
+    const pedR = await new sql.Request(transaction)
       .input('idBranch',     sql.BigInt, idBranch)
       .input('idCuenta',     sql.BigInt, idCuenta)
       .input('idRepartidor', sql.BigInt, idRepartidor)
-      .query(`SELECT
-                COUNT(*) AS NumPedidos,
-                ISNULL(SUM(MontoEfectivoRepartidor),0) AS MontoEfectivo,
-                ISNULL(SUM(ComisionRepartidor),0) AS Comision
+      .query(`SELECT idPedido, MontoEfectivoRepartidor, ComisionRepartidor, LiquidacionRepartidorJSON
               FROM VIDA_PEDIDOS
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta
                 AND idRepartidor=@idRepartidor
                 AND Status='ENTREGADO'
                 AND MetodoPago='EFECTIVO'
-                AND (MontoEfectivoRepartidor IS NOT NULL)`);
-
-    const stats = pedR.recordset[0];
-
-    const idLiquidacion = await nextId(
-      pool, 'VIDA_REPARTIDOR_LIQUIDACIONES', 'idLiquidacion', idBranch, idCuenta
-    );
-
-    await pool.request()
+                AND MontoEfectivoRepartidor IS NOT NULL
+                AND idLiquidacionRepartidor IS NULL`);
+    const pedidos = pedR.recordset;
+    const comision = pedidos.reduce((s,p)=>s+Number(p.ComisionRepartidor||0),0);
+    const montoEfectivoUSD = pedidos.reduce((s,p)=>s+Number(p.MontoEfectivoRepartidor||0),0);
+    const desglose = {
+      Version:1,
+      USD:{MontoALiquidar:Math.round(saldoUSD*100)/100},
+      VES:{MontoALiquidar:Math.round(saldoVES*100)/100},
+      Pedidos:pedidos.map(p=>p.idPedido),
+    };
+    const idLiquidacion = await nextIdTx(transaction, 'VIDA_REPARTIDOR_LIQUIDACIONES', 'idLiquidacion', idBranch, idCuenta);
+    await new sql.Request(transaction)
       .input('idBranch',        sql.BigInt,      idBranch)
       .input('idCuenta',        sql.BigInt,      idCuenta)
       .input('idLiquidacion',   sql.BigInt,      idLiquidacion)
       .input('idRepartidor',    sql.BigInt,      idRepartidor)
-      .input('MontoEfectivo',   sql.Decimal(18,4), stats.MontoEfectivo)
-      .input('Comision',        sql.Decimal(18,4), stats.Comision)
-      .input('MontoALiquidar',  sql.Decimal(18,4), saldo)
-      .input('NumPedidos',      sql.Int,           stats.NumPedidos)
+      .input('MontoEfectivo',   sql.Decimal(18,4), montoEfectivoUSD)
+      .input('Comision',        sql.Decimal(18,4), comision)
+      .input('MontoALiquidar',  sql.Decimal(18,4), saldoUSD)
+      .input('NumPedidos',      sql.Int,           pedidos.length)
+      .input('Desglose',        sql.NVarChar(sql.MAX), JSON.stringify(desglose))
       .input('Observaciones',   sql.VarChar(500),  Observaciones || null)
       .input('idUsuarioLiquida',sql.BigInt,        idUsuario)
       .input('Status',          sql.VarChar(20),   'LIQUIDADO')
       .query(`INSERT INTO VIDA_REPARTIDOR_LIQUIDACIONES
                 (idBranch,idCuenta,idLiquidacion,idRepartidor,
-                 MontoEfectivo,Comision,MontoALiquidar,NumPedidos,
+                 MontoEfectivo,Comision,MontoALiquidar,NumPedidos,DesgloseMonedasJSON,
                  Observaciones,idUsuarioLiquida,Status)
               VALUES
                 (@idBranch,@idCuenta,@idLiquidacion,@idRepartidor,
-                 @MontoEfectivo,@Comision,@MontoALiquidar,@NumPedidos,
+                 @MontoEfectivo,@Comision,@MontoALiquidar,@NumPedidos,@Desglose,
                  @Observaciones,@idUsuarioLiquida,@Status)`);
-
-    // Resetear saldo pendiente del repartidor
-    await pool.request()
+    await new sql.Request(transaction)
+      .input('idBranch',sql.BigInt,idBranch).input('idCuenta',sql.BigInt,idCuenta)
+      .input('idRepartidor',sql.BigInt,idRepartidor).input('idLiquidacion',sql.BigInt,idLiquidacion)
+      .query(`UPDATE VIDA_PEDIDOS SET idLiquidacionRepartidor=@idLiquidacion
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor
+                AND Status='ENTREGADO' AND MetodoPago='EFECTIVO'
+                AND MontoEfectivoRepartidor IS NOT NULL AND idLiquidacionRepartidor IS NULL`);
+    await new sql.Request(transaction)
       .input('idBranch',     sql.BigInt, idBranch)
       .input('idCuenta',     sql.BigInt, idCuenta)
       .input('idRepartidor', sql.BigInt, idRepartidor)
-      .query(`UPDATE VIDA_REPARTIDORES SET SaldoPendiente=0
+      .query(`UPDATE VIDA_REPARTIDORES SET SaldoPendiente=0, SaldoPendienteVES=0
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+    await transaction.commit(); transaction = null;
 
     await registrarAuditoria(pool, {
       idBranch, idCuenta,
       entityType: 'LIQUIDACION', entityId: idLiquidacion,
       accion: 'LIQUIDACION_REPARTIDOR', actor: idUsuario,
       data: {
-        idRepartidor: parseInt(idRepartidor), MontoLiquidado: saldo,
-        MontoEfectivo: parseFloat(stats.MontoEfectivo), Comision: parseFloat(stats.Comision),
-        NumPedidos: stats.NumPedidos, Observaciones: Observaciones || null,
+        idRepartidor: parseInt(idRepartidor), MontoLiquidadoUSD: saldoUSD, MontoLiquidadoVES: saldoVES,
+        MontoEfectivoUSD: montoEfectivoUSD, ComisionUSD: comision,
+        NumPedidos: pedidos.length, Observaciones: Observaciones || null,
       },
     }, request.log);
 
     return reply.send({
       ok:             true,
       idLiquidacion,
-      MontoLiquidado: saldo,
-      NumPedidos:     stats.NumPedidos,
+      MontoLiquidadoUSD: saldoUSD,
+      MontoLiquidadoVES: saldoVES,
+      NumPedidos: pedidos.length,
     });
   } catch (err) {
+    if (transaction) try { await transaction.rollback(); } catch {}
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al liquidar repartidor' });
   }
@@ -3219,23 +3523,45 @@ export async function cancelarPedidoCliente(request, reply) {
     await transaction.begin();
     enTransaccion = true;
 
-    const upd = await new sql.Request(transaction)
+    // Estado actual con bloqueo (una subida de comprobante concurrente bloquea
+    // la misma fila, así que no se cruzan).
+    const actualR = await new sql.Request(transaction)
       .input('idBranch',  sql.BigInt, idBranch)
       .input('idCuenta',  sql.BigInt, idCuenta)
       .input('idPedido',  sql.BigInt, idPedido)
       .input('idCliente', sql.BigInt, idCliente)
-      .query(`UPDATE VIDA_PEDIDOS SET Status='CANCELADO', FechaMod=GETDATE()
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta
-                AND idPedido=@idPedido AND idCliente=@idCliente
-                AND Status='BUSCANDO_REPARTIDOR'`);
-
-    if (upd.rowsAffected[0] === 0) {
+      .query(`SELECT p.Status,
+                (SELECT COUNT(*) FROM VIDA_PEDIDOS_COMPROBANTES c
+                 WHERE c.idBranch=p.idBranch AND c.idCuenta=p.idCuenta AND c.idPedido=p.idPedido
+                   AND c.StatusRevision='PENDIENTE') AS ComprobantesPendientes
+              FROM VIDA_PEDIDOS p WITH (UPDLOCK, HOLDLOCK)
+              WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
+                AND p.idPedido=@idPedido AND p.idCliente=@idCliente`);
+    const actual = actualR.recordset[0];
+    // Pago Móvil sin pagar (o con el comprobante rechazado) también se puede
+    // cancelar; con un comprobante en revisión no, porque podría haber dinero
+    // de por medio y eso lo resuelve la tienda.
+    const rechazo = !actual ? { code: 404, error: 'Pedido no encontrado' }
+      : actual.Status === 'ESPERANDO_PAGO' && actual.ComprobantesPendientes > 0
+        ? { code: 409, error: 'Tu comprobante de pago está en revisión. Espera la respuesta de la tienda o contáctala para cancelar.' }
+      : !['BUSCANDO_REPARTIDOR', 'ESPERANDO_PAGO'].includes(actual.Status)
+        ? { code: 409, error: 'El pedido ya no se puede cancelar (un repartidor ya lo tomó o ya fue procesado)' }
+      : null;
+    if (rechazo) {
       await transaction.rollback();
       enTransaccion = false;
-      return reply.code(409).send({
-        error: 'El pedido ya no se puede cancelar (un repartidor ya lo tomó o ya fue procesado)',
-      });
+      return reply.code(rechazo.code).send({ error: rechazo.error });
     }
+    const statusAnterior = actual.Status;
+
+    await new sql.Request(transaction)
+      .input('idBranch',  sql.BigInt, idBranch)
+      .input('idCuenta',  sql.BigInt, idCuenta)
+      .input('idPedido',  sql.BigInt, idPedido)
+      .input('StatusAnterior', sql.VarChar(40), statusAnterior)
+      .query(`UPDATE VIDA_PEDIDOS SET Status='CANCELADO', FechaMod=GETDATE()
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
+                AND Status=@StatusAnterior`);
 
     // Devolver los puntos canjeados (si los hubo)
     await reembolsarPuntosPedido(() => new sql.Request(transaction), idBranch, idCuenta, idPedido);
@@ -3246,7 +3572,7 @@ export async function cancelarPedidoCliente(request, reply) {
       .input('idCuenta',      sql.BigInt,      idCuenta)
       .input('idHistorial',   sql.BigInt,      histId)
       .input('idPedido',      sql.BigInt,      idPedido)
-      .input('StatusAnterior',sql.VarChar(40), 'BUSCANDO_REPARTIDOR')
+      .input('StatusAnterior',sql.VarChar(40), statusAnterior)
       .input('StatusNuevo',   sql.VarChar(40), 'CANCELADO')
       .input('UsuAlta',       sql.VarChar(20), `CLI:${idCliente}`)
       .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL

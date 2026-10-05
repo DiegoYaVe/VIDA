@@ -1018,19 +1018,22 @@ export async function subirComprobante(request, reply) {
 
   try {
     const pool = await getPool();
-    const nuevoId = await nextId(pool, 'VIDA_PEDIDOS_COMPROBANTES', 'idComprobante', idBranch, idCuenta);
-
-    await pool.request()
+    // ID en la misma sentencia del INSERT (MAX+1 con bloqueo de rango): dos
+    // altas simultáneas ya no chocan por llave primaria.
+    const ins = await pool.request()
       .input('idBranch',     sql.BigInt,      idBranch)
       .input('idCuenta',     sql.BigInt,      idCuenta)
-      .input('idComprobante',sql.BigInt,      nuevoId)
       .input('idPedido',     sql.BigInt,      idPedido)
       .input('ImagenURL',    sql.VarChar(500), ImagenURL)
       .input('Referencia',   sql.VarChar(100), Referencia || null)
       .input('UsuAlta',      sql.VarChar(20),  String(idUsuario))
       .query(`INSERT INTO VIDA_PEDIDOS_COMPROBANTES
                 (idBranch, idCuenta, idComprobante, idPedido, ImagenURL, Referencia, UsuAlta)
-              VALUES (@idBranch, @idCuenta, @idComprobante, @idPedido, @ImagenURL, @Referencia, @UsuAlta)`);
+              OUTPUT inserted.idComprobante
+              SELECT @idBranch, @idCuenta, ISNULL(MAX(idComprobante),0)+1, @idPedido, @ImagenURL, @Referencia, @UsuAlta
+              FROM VIDA_PEDIDOS_COMPROBANTES WITH (UPDLOCK, HOLDLOCK)
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+    const nuevoId = ins.recordset[0].idComprobante;
 
     return reply.code(201).send({ message: 'Comprobante subido', idComprobante: nuevoId });
   } catch (err) {
@@ -1040,17 +1043,45 @@ export async function subirComprobante(request, reply) {
 }
 
 export async function revisarComprobante(request, reply) {
-  const { idBranch, idCuenta, idUsuario } = request.user;
+  const { idBranch, idCuenta, idUsuario, TipoUsuario, idPuntoVenta: pvUsuario } = request.user;
   const { idPedido, idComprobante } = request.params;
   const { StatusRevision, Notas } = request.body;
 
   if (!['APROBADO', 'RECHAZADO'].includes(StatusRevision))
     return reply.code(400).send({ error: 'StatusRevision debe ser APROBADO o RECHAZADO' });
 
+  let transaction;
   try {
     const pool = await getPool();
+    transaction = new sql.Transaction(pool);
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
 
-    await pool.request()
+    const actual = await new sql.Request(transaction)
+      .input('idBranch',sql.BigInt,idBranch).input('idCuenta',sql.BigInt,idCuenta)
+      .input('idComprobante',sql.BigInt,idComprobante).input('idPedido',sql.BigInt,idPedido)
+      .query(`SELECT c.StatusRevision,p.Status,p.StatusPago,p.idCliente,p.idPuntoVenta,cl.FcmToken
+              FROM VIDA_PEDIDOS_COMPROBANTES c WITH (UPDLOCK,HOLDLOCK)
+              JOIN VIDA_PEDIDOS p ON p.idBranch=c.idBranch AND p.idCuenta=c.idCuenta AND p.idPedido=c.idPedido
+              LEFT JOIN VIDA_APP_CLIENTES cl ON cl.idBranch=p.idBranch AND cl.idCuenta=p.idCuenta AND cl.idCliente=p.idCliente
+              WHERE c.idBranch=@idBranch AND c.idCuenta=@idCuenta AND c.idComprobante=@idComprobante AND c.idPedido=@idPedido`);
+    if (!actual.recordset.length) {
+      await transaction.rollback(); transaction=null;
+      return reply.code(404).send({ error:'Comprobante no encontrado' });
+    }
+    const pedido = actual.recordset[0];
+    // Los roles de tienda solo revisan pagos de su propia tienda; la red, todas.
+    if (!['SUPER_ADMIN','ADMIN_PAIS','ADMIN_ESTADO'].includes(TipoUsuario) && String(pedido.idPuntoVenta) !== String(pvUsuario)) {
+      await transaction.rollback(); transaction=null;
+      return reply.code(403).send({ error:'No puedes revisar pagos de otra tienda' });
+    }
+    if (pedido.StatusRevision !== 'PENDIENTE') {
+      await transaction.rollback(); transaction=null;
+      return reply.code(409).send({ error:'El comprobante ya fue resuelto' });
+    }
+    const flujoRetenido = pedido.Status === 'ESPERANDO_PAGO';
+    let otroPendiente = false;
+
+    await new sql.Request(transaction)
       .input('idBranch',      sql.BigInt,     idBranch)
       .input('idCuenta',      sql.BigInt,     idCuenta)
       .input('idComprobante', sql.BigInt,     idComprobante)
@@ -1063,18 +1094,62 @@ export async function revisarComprobante(request, reply) {
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta
                 AND idComprobante=@idComprobante AND idPedido=@idPedido`);
 
-    // Si se aprueba → marcar pedido como pagado
-    if (StatusRevision === 'APROBADO') {
-      await pool.request()
+    // Al aprobar empieza ahora el reloj de búsqueda; el job de despacho lo
+    // ofrecerá a repartidores en su siguiente ejecución.
+    if (StatusRevision === 'APROBADO' && flujoRetenido) {
+      const cfg = await new sql.Request(transaction)
+        .input('idBranch',sql.BigInt,idBranch).input('idCuenta',sql.BigInt,idCuenta)
+        .query(`SELECT TOP 1 TRY_CONVERT(INT,Valor) AS Minutos FROM VIDA_CONFIG_DELIVERY
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Clave='TiempoCancelacionBusquedaMin'`);
+      const minutos = Number(cfg.recordset[0]?.Minutos) > 0 ? Number(cfg.recordset[0].Minutos) : 25;
+      await new sql.Request(transaction)
         .input('idBranch', sql.BigInt, idBranch)
         .input('idCuenta', sql.BigInt, idCuenta)
         .input('idPedido', sql.BigInt, idPedido)
-        .query(`UPDATE VIDA_PEDIDOS SET StatusPago='PAGADO', FechaMod=GETDATE()
+        .input('minutos',sql.Int,minutos)
+        .query(`UPDATE VIDA_PEDIDOS
+                SET StatusPago='PAGADO',Status='BUSCANDO_REPARTIDOR',
+                    FechaInicioBusqueda=GETDATE(),FechaLimiteBusqueda=DATEADD(MINUTE,@minutos,GETDATE()),
+                    AvisoSinRepartidor=0,FechaMod=GETDATE()
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido AND Status='ESPERANDO_PAGO'`);
+    } else if (flujoRetenido) {
+      // Si el cliente ya mandó otro comprobante que sigue en revisión, el pago
+      // no está rechazado: se conserva PENDIENTE y no se le pide uno nuevo.
+      const rech = await new sql.Request(transaction)
+        .input('idBranch',sql.BigInt,idBranch).input('idCuenta',sql.BigInt,idCuenta).input('idPedido',sql.BigInt,idPedido)
+        .query(`UPDATE VIDA_PEDIDOS SET StatusPago='RECHAZADO',FechaMod=GETDATE()
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido AND Status='ESPERANDO_PAGO'
+                  AND NOT EXISTS (SELECT 1 FROM VIDA_PEDIDOS_COMPROBANTES c
+                                  WHERE c.idBranch=@idBranch AND c.idCuenta=@idCuenta AND c.idPedido=@idPedido
+                                    AND c.StatusRevision='PENDIENTE')`);
+      otroPendiente = rech.rowsAffected[0] === 0;
+    } else if (StatusRevision === 'APROBADO') {
+      // Compatibilidad con comprobantes históricos creados antes del flujo
+      // retenido: se valida el pago sin retroceder ni reiniciar su despacho.
+      await new sql.Request(transaction)
+        .input('idBranch',sql.BigInt,idBranch).input('idCuenta',sql.BigInt,idCuenta).input('idPedido',sql.BigInt,idPedido)
+        .query(`UPDATE VIDA_PEDIDOS SET StatusPago='PAGADO',FechaMod=GETDATE()
                 WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
     }
 
+    await transaction.commit(); transaction=null;
+
+    const estado = flujoRetenido && StatusRevision === 'APROBADO' ? 'BUSCANDO_REPARTIDOR' : pedido.Status;
+    const statusPago = StatusRevision==='APROBADO' ? 'PAGADO' : otroPendiente ? 'PENDIENTE' : 'RECHAZADO';
+    broadcast(idBranch,idCuenta,{tipo:'status_pedido',idPedido:Number(idPedido),idCliente:pedido.idCliente,estado,StatusPago:statusPago});
+    broadcast(idBranch,idCuenta,{tipo:'pedido:actualizado',idPedido:Number(idPedido),StatusNuevo:estado,StatusPago:statusPago});
+    enviarPush(pedido.FcmToken,{
+      title:StatusRevision==='APROBADO'?'✅ Pago aprobado':'⚠️ Comprobante rechazado',
+      body:StatusRevision==='APROBADO'
+        ? (flujoRetenido ? `Tu pedido #${idPedido} ya está buscando repartidor.` : `El pago del pedido #${idPedido} fue aprobado.`)
+        : otroPendiente ? `Rechazamos un comprobante del pedido #${idPedido}; seguimos revisando el más reciente.`
+        : (flujoRetenido ? `Revisa el comprobante del pedido #${idPedido} y envía uno nuevo.` : `El comprobante del pedido #${idPedido} fue rechazado.`),
+      data:{tipo:'status_pedido',idPedido:Number(idPedido),status:estado},
+    },request.log);
+
     return reply.send({ message: `Comprobante ${StatusRevision === 'APROBADO' ? 'aprobado' : 'rechazado'}` });
   } catch (err) {
+    if (transaction) try { await transaction.rollback(); } catch {}
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al revisar comprobante' });
   }

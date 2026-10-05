@@ -1,5 +1,6 @@
 import {tablasMonedas} from './filasMonedas.mjs';
 import {tablasCaja} from './filasCaja.mjs';
+import {tablasPagoMovil} from './filasPagoMovil.mjs';
 // src/utils/exportExcel.js
 // Exportación a Excel usando SheetJS (xlsx)
 // npm install xlsx
@@ -240,14 +241,13 @@ export function exportarMovimientosExcel({ filas, resumen, fechaInicio, fechaFin
   descargar(wb, `movimientos_${fechaInicio}_${fechaFin}.xlsx`);
 }
 
-// ─── REPORTE DE CAJA (arqueos por moneda) ────────────────────────────────────
-export function exportarCajaExcel(datos) {
-  const { fechaInicio, fechaFin } = datos;
-  const hojas = tablasCaja(datos).map(t => ({
+// ─── Reportes basados en tablas compartidas (filasCaja / filasPagoMovil) ─────
+function hojasDeTablas(tablas, titulo, periodo) {
+  return tablas.map(t => ({
     nombre: t.nombre,
     datos: [
-      [`COMERCIALIZADORA VIDA — ARQUEOS DE CAJA · ${t.nombre.toUpperCase()}`],
-      [`Período (fecha de cierre): ${fechaInicio} al ${fechaFin}`, '', '', `Generado: ${new Date().toLocaleString('es-VE')}`],
+      [`COMERCIALIZADORA VIDA — ${titulo} · ${t.nombre.toUpperCase()}`],
+      [periodo, '', '', `Generado: ${new Date().toLocaleString('es-VE')}`],
       ...(t.nota ? [[t.nota]] : []),
       [],
       t.encabezado,
@@ -255,5 +255,18 @@ export function exportarCajaExcel(datos) {
     ],
     anchos: t.encabezado.map((h, i) => (i === 0 ? 22 : Math.max(12, h.length + 2))),
   }));
+}
+
+// ─── REPORTE DE CAJA (arqueos por moneda) ────────────────────────────────────
+export function exportarCajaExcel(datos) {
+  const { fechaInicio, fechaFin } = datos;
+  const hojas = hojasDeTablas(tablasCaja(datos), 'ARQUEOS DE CAJA', `Período (fecha de cierre): ${fechaInicio} al ${fechaFin}`);
   descargar(crearLibro(hojas), `caja_${fechaInicio}_${fechaFin}.xlsx`);
+}
+
+// ─── CONCILIACIÓN DE PAGO MÓVIL ──────────────────────────────────────────────
+export function exportarPagoMovilExcel(datos) {
+  const { fechaInicio, fechaFin } = datos;
+  const hojas = hojasDeTablas(tablasPagoMovil(datos), 'CONCILIACIÓN PAGO MÓVIL', `Período (alta del pedido): ${fechaInicio} al ${fechaFin}`);
+  descargar(crearLibro(hojas), `pago_movil_${fechaInicio}_${fechaFin}.xlsx`);
 }

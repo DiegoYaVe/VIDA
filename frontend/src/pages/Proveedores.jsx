@@ -289,9 +289,38 @@ function ModalCambiarEstado({ orden, onClose, onSaved }) {
     }
   }, [statusNuevo, orden.detalle, necesitaCantidades]);
 
+  function actualizarCantidad(indice, valorCrudo) {
+    const linea = cantidades[indice];
+    if (!linea) return;
+    const valor = Number(valorCrudo);
+    let cantidad = valor;
+    if (valorCrudo === '') cantidad = '';
+    else if (!Number.isFinite(valor)) return;
+    else if (valor > linea.Pendiente) {
+      cantidad = linea.Pendiente;
+      setError(`No puedes recibir más de ${linea.Pendiente} unidades de ${linea.NombreProducto}.`);
+    } else if (valor < 0) {
+      cantidad = 0;
+      setError('La cantidad recibida no puede ser negativa.');
+    } else {
+      setError('');
+    }
+    setCantidades(arr => arr.map((x, j) => j === indice ? { ...x, CantidadRecibida: cantidad } : x));
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!statusNuevo) { setError('Selecciona el nuevo estado'); return; }
+    if (necesitaCantidades) {
+      const invalida = cantidades.find(c => {
+        const n = Number(c.CantidadRecibida);
+        return c.CantidadRecibida === '' || !Number.isFinite(n) || n < 0 || n > c.Pendiente;
+      });
+      if (invalida) {
+        setError(`La cantidad de ${invalida.NombreProducto} debe estar entre 0 y ${invalida.Pendiente}.`);
+        return;
+      }
+    }
     setLoading(true); setError('');
     try {
       await api.post(`/ordenes-compra/${orden.idOrden}/estado`, {
@@ -349,9 +378,8 @@ function ModalCambiarEstado({ orden, onClose, onSaved }) {
                     <input
                       type="number" min="0" max={c.Pendiente} step="0.0001" aria-label={`Cantidad que recibes ahora de ${c.NombreProducto}`}
                       value={c.CantidadRecibida}
-                      onChange={e => setCantidades(arr => arr.map((x, j) =>
-                        j === i ? { ...x, CantidadRecibida: parseFloat(e.target.value) || 0 } : x
-                      ))}
+                      onChange={e => actualizarCantidad(i, e.target.value)}
+                      inputMode="decimal"
                       className="w-24 border border-gray-200 rounded-lg px-2 py-1 text-sm text-right"
                     />
                   </div>
@@ -384,12 +412,11 @@ function ModalCambiarEstado({ orden, onClose, onSaved }) {
 }
 
 // ── Modal Crear Orden ──────────────────────────────────────────────────────
-function ModalCrearOrden({ onClose, onSaved }) {
+function ModalCrearOrden({ matriz, onClose, onSaved }) {
   const [proveedores, setProveedores] = useState([]);
-  const [puntos, setPuntos]           = useState([]);
   const [catalogo, setCatalogo]       = useState([]);
   const [form, setForm] = useState({
-    idProveedor: '', idPuntoVenta: '', Folio: '',
+    idProveedor: '', Folio: 'Generando…',
     Notas: '', FechaEstimada: '',
   });
   const [items, setItems]   = useState([]);
@@ -399,12 +426,12 @@ function ModalCrearOrden({ onClose, onSaved }) {
   useEffect(() => {
     Promise.all([
       api.get('/proveedores?limit=200&page=1'),
-      api.get('/sucursales/puntos-venta'),
       api.get('/inventario/productos?limit=500&page=1'),
-    ]).then(([prov, pv, prod]) => {
+      api.get('/ordenes-compra/siguiente-folio'),
+    ]).then(([prov, prod, folio]) => {
       setProveedores(prov.data.data || []);
-      setPuntos(pv.data);
       setCatalogo(prod.data.data || []);
+      setForm(f => ({ ...f, Folio: folio.data?.folio || 'Se asignará al guardar' }));
     }).catch(() => {});
   }, []);
 
@@ -432,15 +459,15 @@ function ModalCrearOrden({ onClose, onSaved }) {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.idProveedor) { setError('Selecciona un proveedor'); return; }
-    if (!form.idPuntoVenta) { setError('Selecciona la tienda'); return; }
+    if (!matriz?.idPuntoVenta) { setError('La red todavía no tiene una Matriz designada'); return; }
     if (items.length === 0) { setError('Agrega al menos un producto'); return; }
     if (items.some(i => !i.idProducto)) { setError('Todos los items deben tener un producto'); return; }
     setLoading(true); setError('');
     try {
       await api.post('/ordenes-compra', {
-        ...form,
+        Notas: form.Notas,
+        FechaEstimada: form.FechaEstimada,
         idProveedor:  parseInt(form.idProveedor),
-        idPuntoVenta: parseInt(form.idPuntoVenta),
         items: items.map(i => ({
           idProducto:       parseInt(i.idProducto),
           CantidadOrdenada: parseFloat(i.CantidadOrdenada),
@@ -476,17 +503,17 @@ function ModalCrearOrden({ onClose, onSaved }) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Tienda *</label>
-              <select value={form.idPuntoVenta} onChange={e => setForm(f => ({ ...f, idPuntoVenta: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
-                <option value="">Selecciona...</option>
-                {puntos.map(p => <option key={p.idPuntoVenta} value={p.idPuntoVenta}>{p.NomComercial || p.Nombre}</option>)}
-              </select>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Destino de recepción</label>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                <p className="text-sm font-semibold text-emerald-900">{matriz?.NomComercial || matriz?.Nombre || 'Matriz no designada'}</p>
+                <p className="text-xs text-emerald-700">Matriz / CEDIS · destino fijo</p>
+              </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Folio / Referencia</label>
-              <input value={form.Folio} onChange={e => setForm(f => ({ ...f, Folio: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="OC-001..." />
+              <label className="block text-xs font-medium text-gray-600 mb-1">Folio de orden</label>
+              <input value={form.Folio} readOnly
+                className="w-full border border-gray-200 bg-gray-50 text-gray-700 rounded-lg px-3 py-2 text-sm font-semibold" />
+              <p className="mt-1 text-[11px] text-gray-400">Vista previa. Se valida y asigna definitivamente al guardar.</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Fecha estimada de entrega</label>
@@ -569,6 +596,15 @@ function ModalCrearOrden({ onClose, onSaved }) {
 
 // ── Modal Detalle Orden ────────────────────────────────────────────────────
 function ModalDetalleOrden({ orden, onClose, onCambioEstado }) {
+  const resumenCantidades = (orden.detalle || []).reduce((acc, d) => {
+    const ordenadas = Number(d.CantidadOrdenada || 0);
+    const recibidas = Number(d.CantidadRecibida || 0);
+    acc.ordenadas += ordenadas;
+    acc.recibidas += recibidas;
+    acc.pendientes += Math.max(0, ordenadas - recibidas);
+    return acc;
+  }, { ordenadas: 0, recibidas: 0, pendientes: 0 });
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
@@ -587,19 +623,44 @@ function ModalDetalleOrden({ orden, onClose, onCambioEstado }) {
           {/* Detalle productos */}
           <div>
             <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Productos</h4>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="rounded-xl border border-gray-200 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase text-gray-400">Ordenadas</p>
+                <p className="text-lg font-bold text-gray-800">{resumenCantidades.ordenadas}</p>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase text-emerald-600">Recibidas</p>
+                <p className="text-lg font-bold text-emerald-700">{resumenCantidades.recibidas}</p>
+              </div>
+              <div className={`rounded-xl border px-3 py-2 ${resumenCantidades.pendientes > 0 ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                <p className={`text-[10px] font-semibold uppercase ${resumenCantidades.pendientes > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>Pendientes</p>
+                <p className={`text-lg font-bold ${resumenCantidades.pendientes > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>{resumenCantidades.pendientes}</p>
+              </div>
+            </div>
             <div className="space-y-2">
-              {(orden.detalle || []).map(d => (
-                <div key={d.idDetalle} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
+              {(orden.detalle || []).map(d => {
+                const ordenadas = Number(d.CantidadOrdenada || 0);
+                const recibidas = Number(d.CantidadRecibida || 0);
+                const pendientes = Math.max(0, ordenadas - recibidas);
+                const avance = ordenadas > 0 ? Math.min(100, (recibidas / ordenadas) * 100) : 0;
+                return (
+                <div key={d.idDetalle} className="bg-gray-50 rounded-xl px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-gray-800">{d.NombreProducto}</p>
                     <p className="text-xs text-gray-500">SKU: {d.SKU}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold">{d.CantidadRecibida ?? 0} / {d.CantidadOrdenada}</p>
+                  <div className="text-right shrink-0">
+                    <p className={`text-sm font-bold ${pendientes > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>Pendientes: {pendientes}</p>
+                    <p className="text-xs text-gray-500">Recibidas {recibidas} de {ordenadas}</p>
                     <p className="text-xs text-gray-400">${(d.CantidadOrdenada * d.PrecioUnitario).toFixed(2)}</p>
                   </div>
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200">
+                    <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${avance}%` }} />
+                  </div>
                 </div>
-              ))}
+              );})}
             </div>
             <div className="text-right mt-2 text-sm font-bold text-gray-700">
               Total: <span className="text-vida-blue">${orden.TotalUSD?.toFixed(2)}</span>
@@ -799,7 +860,7 @@ function TabProveedores({ puedeEscribir }) {
 // ══════════════════════════════════════════════════════════════════════════
 // TAB: Órdenes de compra
 // ══════════════════════════════════════════════════════════════════════════
-function TabOrdenes({ puedeEscribir }) {
+function TabOrdenes({ puedeEscribir, matriz }) {
   const [data, setData]         = useState([]);
   const [total, setTotal]       = useState(0);
   const [page, setPage]         = useState(1);
@@ -912,6 +973,7 @@ function TabOrdenes({ puedeEscribir }) {
       {/* Modales */}
       {modal === 'crear' && (
         <ModalCrearOrden
+          matriz={matriz}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); cargar(1); setPage(1); }}
         />
@@ -951,7 +1013,7 @@ export default function Proveedores() {
   const [cargandoMatriz, setCargandoMatriz] = useState(true);
 
   useEffect(() => {
-    api.get('/matriz/estado')
+    api.get('/matriz')
       .then(r => setMatriz(r.data?.matriz || null))
       .catch(() => setMatriz(null))
       .finally(() => setCargandoMatriz(false));
@@ -999,7 +1061,7 @@ export default function Proveedores() {
       </div>
 
       {tab === 'proveedores' && <TabProveedores puedeEscribir={puedeEscribir}/>}
-      {tab === 'ordenes' && operaMatriz && <TabOrdenes puedeEscribir={puedeEscribir}/>}
+      {tab === 'ordenes' && operaMatriz && <TabOrdenes puedeEscribir={puedeEscribir} matriz={matriz}/>}
 
       {!cargandoMatriz && !operaMatriz && (
         <p className="mt-6 text-sm text-gray-400 border-t border-gray-100 pt-4">

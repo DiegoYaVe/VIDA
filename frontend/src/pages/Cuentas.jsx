@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Wallet, TrendingDown, TrendingUp, AlertTriangle, Search,
   Plus, RotateCcw, X, Calendar, CheckCircle2, Loader2, FileMinus, Ban,
+  Settings2, Download, FileText, Sheet,
 } from 'lucide-react';
 import api from '../services/api.js';
 import { useAuthStore } from '../store/authStore.js';
@@ -287,7 +288,7 @@ function PanelDetalle({ idDocumento, puedeAbonar, onCerrar, onCambio }) {
     try {
       const actual=(await api.get(`/cuentas/${idDocumento}`)).data;
       const {exportarCuenta}=await import('../utils/exportCuenta.js');
-      exportarCuenta(actual,formato);setData(actual);
+      await exportarCuenta(actual,formato);setData(actual);
     } catch(e) {setErrorExportacion(e.response?.data?.error||e.message||'No se pudo exportar');}
     finally {setExportando(false);}
   }
@@ -333,9 +334,20 @@ function PanelDetalle({ idDocumento, puedeAbonar, onCerrar, onCambio }) {
         </div>
 
         <div className="px-6 pt-4 space-y-2">
-          <div className="flex gap-4 text-sm font-bold text-vida-blue">
-            <button disabled={exportando} onClick={()=>descargar('pdf')}>{exportando?'Generando…':'Descargar PDF'}</button>
-            <button disabled={exportando} onClick={()=>descargar('excel')}>Descargar Excel</button>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-500">
+              <Download size={14}/> Exportar estado de cuenta
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button disabled={exportando} onClick={()=>descargar('pdf')}
+                className="flex items-center justify-center gap-2 rounded-xl bg-[#0A1E3F] px-3 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#12335a] disabled:opacity-50">
+                <FileText size={18}/> {exportando ? 'Generando…' : 'Descargar PDF'}
+              </button>
+              <button disabled={exportando} onClick={()=>descargar('excel')}
+                className="flex items-center justify-center gap-2 rounded-xl bg-[#16834b] px-3 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#116b3d] disabled:opacity-50">
+                <Sheet size={18}/> {exportando ? 'Generando…' : 'Descargar Excel'}
+              </button>
+            </div>
           </div>
           <p className="text-xs text-gray-500">Estado de cuenta con tasas históricas. No sustituye factura fiscal.</p>
           {errorExportacion&&<p role="alert" className="text-sm text-red-600">{errorExportacion}</p>}
@@ -454,6 +466,7 @@ export default function Cuentas() {
   const [ocultarLiquidadas, setOcultarLiquidadas] = useState(true);
   const [busqueda, setBusqueda] = useState('');
   const [abierta, setAbierta] = useState(null);
+  const [configMoneda, setConfigMoneda] = useState(false);
 
   async function cargar() {
     setLoading(true); setError('');
@@ -486,22 +499,36 @@ export default function Cuentas() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-black text-gray-900">Cuentas</h1>
-        <p className="text-gray-500 text-sm mt-1">
-          {verTodo
-            ? 'Lo que la Matriz le debe a los proveedores y lo que las sucursales le deben a la Matriz'
-            : 'Lo que tu tienda le debe a la Matriz'}
-        </p>
+      <div className="mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-[#0A1E3F] via-[#12335a] to-[#17647a] px-6 py-5 text-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/20">
+              <Wallet size={24}/>
+            </div>
+            <div>
+              <h1 className="text-2xl font-black">Cuentas por pagar y cobrar</h1>
+              <p className="mt-1 text-sm text-white/70">
+                {verTodo
+                  ? 'Control financiero entre proveedores, Matriz y tiendas'
+                  : 'Obligaciones financieras de tu tienda con la Matriz'}
+              </p>
+            </div>
+          </div>
+          {verTodo && (
+            <button type="button" onClick={() => setConfigMoneda(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/20">
+              <Settings2 size={17}/> Monedas y tasa
+            </button>
+          )}
+        </div>
       </div>
 
-      {verTodo && <MonedaCuentas />}
       {verTodo && (
-        <div className="flex gap-1 border-b border-gray-100 mb-6">
+        <div className="mb-6 flex gap-1 rounded-2xl border border-gray-100 bg-white p-1.5 shadow-sm">
           {[['CXP', 'Por pagar', 'proveedores'], ['CXC', 'Por cobrar', 'sucursales']].map(([id, label, sub]) => (
             <button key={id} onClick={() => setTab(id)}
-              className={`px-4 py-2.5 text-sm font-bold border-b-2 -mb-px transition
-                ${tab === id ? 'border-vida-blue text-vida-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              className={`flex-1 rounded-xl px-4 py-3 text-sm font-bold transition
+                ${tab === id ? 'bg-vida-blue text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'}`}>
               {label} <span className="font-normal text-gray-400">· {sub}</span>
             </button>
           ))}
@@ -602,6 +629,26 @@ export default function Cuentas() {
       {abierta && (
         <PanelDetalle idDocumento={abierta} puedeAbonar={verTodo}
                       onCerrar={() => setAbierta(null)} onCambio={cargar}/>
+      )}
+
+      {configMoneda && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" onClick={() => setConfigMoneda(false)}>
+          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-gray-50 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-5 py-4">
+              <div>
+                <h2 className="text-lg font-black text-gray-900">Configuración monetaria</h2>
+                <p className="text-xs text-gray-500">Monedas permitidas y fuente de la tasa de conversión</p>
+              </div>
+              <button type="button" onClick={() => setConfigMoneda(false)}
+                className="rounded-xl p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700" aria-label="Cerrar configuración monetaria">
+                <X size={20}/>
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <MonedaCuentas />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

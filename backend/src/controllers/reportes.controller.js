@@ -1,5 +1,6 @@
 import {construirReporteVentas} from '../services/reporteMonedas.service.js';
 import {construirReporteCaja} from '../services/reporteCaja.service.js';
+import {construirConciliacionPagoMovil} from '../services/conciliacionPagoMovil.service.js';
 // src/controllers/reportes.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
 
@@ -166,6 +167,59 @@ export async function reporteCaja(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error en reporte de caja: ' + err.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/reportes/pago-movil  — conciliación de pagos Pago Móvil
+// Query: fechaInicio, fechaFin, filtroPais?, filtroEstado?, filtroIdPuntoVenta?
+// El rango filtra por fecha de alta del pedido.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function reportePagoMovil(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { fechaInicio, fechaFin } = request.query;
+
+  if (!fechaInicio || !fechaFin)
+    return reply.code(400).send({ error: 'fechaInicio y fechaFin son requeridos' });
+  const fechaValida=f=>/^\d{4}-\d{2}-\d{2}$/.test(f)&&Number.isFinite(Date.parse(f))&&new Date(f).toISOString().slice(0,10)===f;
+  if(!fechaValida(fechaInicio)||!fechaValida(fechaFin)||fechaInicio>fechaFin)
+    return reply.code(400).send({error:'Selecciona un rango de fechas válido'});
+
+  try {
+    const pool = await getPool();
+    const req  = pool.request()
+      .input('idBranch',    sql.BigInt, idBranch)
+      .input('idCuenta',    sql.BigInt, idCuenta)
+      .input('fechaInicio', sql.Date,   new Date(fechaInicio))
+      .input('fechaFin',    sql.Date,   new Date(fechaFin));
+    const geoFilter = buildGeoFilter(request.user, request.query, req);
+    const base = `FROM VIDA_PEDIDOS p
+      JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+        ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
+      WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.MetodoPago='PAGO_MOVIL'
+        AND p.FechaAlta>=@fechaInicio AND p.FechaAlta<DATEADD(day,1,@fechaFin) ${geoFilter}`;
+
+    const r = await req.query(`
+      SELECT TOP (20001) p.idPedido,p.FechaAlta,p.Status,p.StatusPago,p.TotalUSD,p.PagoMonedaJSON,
+        pv.idPuntoVenta,pv.NomComercial AS NombrePuntoVenta,
+        cl.Nombre AS ClienteNombre,cl.Apellidos AS ClienteApellidos,cl.Telefono AS ClienteTelefono
+      ${base.replace('WHERE', `LEFT JOIN VIDA_APP_CLIENTES cl
+        ON cl.idBranch=p.idBranch AND cl.idCuenta=p.idCuenta AND cl.idCliente=p.idCliente
+      WHERE`)}
+      ORDER BY p.FechaAlta DESC,p.idPedido DESC;
+
+      SELECT c.idPedido,c.idComprobante,c.Referencia,c.ImagenURL,c.StatusRevision,c.Notas,c.FechaAlta,c.UsuRevision
+      FROM VIDA_PEDIDOS_COMPROBANTES c
+      JOIN VIDA_PEDIDOS p0 ON p0.idBranch=c.idBranch AND p0.idCuenta=c.idCuenta AND p0.idPedido=c.idPedido
+      WHERE c.idBranch=@idBranch AND c.idCuenta=@idCuenta
+        AND c.idPedido IN (SELECT p.idPedido ${base});
+    `);
+    if (r.recordsets[0].length > 20000)
+      return reply.code(422).send({ error: 'El reporte supera 20,000 pedidos. Reduce el rango o filtra una tienda.' });
+    return reply.send(construirConciliacionPagoMovil(r.recordsets[0], r.recordsets[1]));
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error en conciliación de Pago Móvil: ' + err.message });
   }
 }
 
