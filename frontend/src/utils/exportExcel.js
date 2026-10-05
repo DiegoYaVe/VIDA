@@ -1,4 +1,5 @@
 import {tablasMonedas} from './filasMonedas.mjs';
+import {tablasCaja} from './filasCaja.mjs';
 // src/utils/exportExcel.js
 // Exportación a Excel usando SheetJS (xlsx)
 // npm install xlsx
@@ -237,4 +238,22 @@ export function exportarMovimientosExcel({ filas, resumen, fechaInicio, fechaFin
   const anchos = [12, 12, 12, 22, 28, 12, 14, 10, 10, 10, 10, 25, 14, 14];
   const wb = crearLibro([{ nombre: 'Movimientos', datos, anchos }]);
   descargar(wb, `movimientos_${fechaInicio}_${fechaFin}.xlsx`);
+}
+
+// ─── REPORTE DE CAJA (arqueos por moneda) ────────────────────────────────────
+export function exportarCajaExcel(datos) {
+  const { fechaInicio, fechaFin } = datos;
+  const hojas = tablasCaja(datos).map(t => ({
+    nombre: t.nombre,
+    datos: [
+      [`COMERCIALIZADORA VIDA — ARQUEOS DE CAJA · ${t.nombre.toUpperCase()}`],
+      [`Período (fecha de cierre): ${fechaInicio} al ${fechaFin}`, '', '', `Generado: ${new Date().toLocaleString('es-VE')}`],
+      ...(t.nota ? [[t.nota]] : []),
+      [],
+      t.encabezado,
+      ...t.filas,
+    ],
+    anchos: t.encabezado.map((h, i) => (i === 0 ? 22 : Math.max(12, h.length + 2))),
+  }));
+  descargar(crearLibro(hojas), `caja_${fechaInicio}_${fechaFin}.xlsx`);
 }

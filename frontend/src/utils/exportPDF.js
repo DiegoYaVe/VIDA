@@ -1,4 +1,5 @@
 import {tablasMonedas} from './filasMonedas.mjs';
+import {tablasCaja} from './filasCaja.mjs';
 // src/utils/exportPDF.js
 // Exportación a PDF usando jsPDF + jspdf-autotable
 // npm install jspdf jspdf-autotable
@@ -449,4 +450,45 @@ export function exportarDeliveryPDF({ porRepartidor, totales, fechaInicio, fecha
   autoTable(doc, opTabla(nextY, columns, body));
   agregarPiePagina(doc);
   doc.save(`delivery_${fechaInicio}_${fechaFin}.pdf`);
+}
+
+// ─── REPORTE DE CAJA (arqueos por moneda) ────────────────────────────────────
+export function exportarCajaPDF(datos) {
+  const { totales, monedas, fechaInicio, fechaFin, turnosAbiertos = 0 } = datos;
+  const periodo = `Período (fecha de cierre): ${fechaInicio} al ${fechaFin}`;
+  const N2 = (v) => Number(v || 0).toFixed(2);
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
+  agregarEncabezado(doc, 'Arqueos de Caja por Moneda', periodo);
+
+  let y = tarjetasResumen(doc, [
+    { label: 'Turnos cerrados',    valor: totales.NumTurnos,                 color: AZUL2 },
+    { label: 'Con diferencia',     valor: totales.TurnosConDiferencia,       color: [231, 76, 60] },
+    { label: 'Diferencia USD',     valor: `${N2(monedas.USD.Diferencia)} USD`, color: VERDE },
+    { label: 'Diferencia VES',     valor: `${N2(monedas.VES.Diferencia)} VES`, color: [52, 152, 219] },
+    { label: 'Abiertos sin cerrar', valor: turnosAbiertos,                   color: [243, 156, 18] },
+  ], 33);
+
+  tablasCaja(datos).forEach((t, i) => {
+    if (i > 0) { doc.addPage(); agregarEncabezado(doc, t.nombre, periodo); y = 33; }
+    if (t.nota) {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(80, 80, 80);
+      const lineas = doc.splitTextToSize(t.nota, doc.internal.pageSize.getWidth() - 20);
+      doc.text(lineas, 10, y + 2);
+      y += 4 + lineas.length * 4;
+    }
+    autoTable(doc, {
+      head: [t.encabezado],
+      body: t.filas.map(f => f.map((v, c) =>
+        v == null ? '' : typeof v === 'number' ? (t.conteos.includes(c) ? String(v) : N2(v)) : v)),
+      startY: y,
+      theme: 'grid',
+      margin: { top: 32, bottom: 18, left: 10, right: 10 },
+      styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak', textColor: NEGRO },
+      headStyles: { fillColor: AZUL, textColor: BLANCO, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: GRIS1 },
+    });
+  });
+
+  agregarPiePagina(doc);
+  doc.save(`caja_${fechaInicio}_${fechaFin}.pdf`);
 }

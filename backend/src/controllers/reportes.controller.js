@@ -1,4 +1,5 @@
 import {construirReporteVentas} from '../services/reporteMonedas.service.js';
+import {construirReporteCaja} from '../services/reporteCaja.service.js';
 // src/controllers/reportes.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
 
@@ -109,6 +110,62 @@ export async function reporteVentas(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error en reporte de ventas: ' + err.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/reportes/caja  — arqueos de caja por moneda (turnos CERRADOS)
+// Query: fechaInicio, fechaFin, filtroPais?, filtroEstado?, filtroIdPuntoVenta?
+// El rango filtra por fecha de CIERRE del turno.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function reporteCaja(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { fechaInicio, fechaFin } = request.query;
+
+  if (!fechaInicio || !fechaFin)
+    return reply.code(400).send({ error: 'fechaInicio y fechaFin son requeridos' });
+  const fechaValida=f=>/^\d{4}-\d{2}-\d{2}$/.test(f)&&Number.isFinite(Date.parse(f))&&new Date(f).toISOString().slice(0,10)===f;
+  if(!fechaValida(fechaInicio)||!fechaValida(fechaFin)||fechaInicio>fechaFin)
+    return reply.code(400).send({error:'Selecciona un rango de fechas válido'});
+
+  try {
+    const pool = await getPool();
+    const req  = pool.request()
+      .input('idBranch',    sql.BigInt, idBranch)
+      .input('idCuenta',    sql.BigInt, idCuenta)
+      .input('fechaInicio', sql.Date,   new Date(fechaInicio))
+      .input('fechaFin',    sql.Date,   new Date(fechaFin));
+
+    const geoFilter = buildGeoFilter(request.user, request.query, req);
+    const joinPV = `JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+        ON pv.idBranch=t.idBranch AND pv.idCuenta=t.idCuenta AND pv.idPuntoVenta=t.idPuntoVenta`;
+    const enRango = `t.Status='CERRADO' AND t.FechaCierre>=@fechaInicio AND t.FechaCierre<DATEADD(day,1,@fechaFin)`;
+
+    const r = await req.query(`
+      SELECT TOP (20001) t.idTurno,t.idPuntoVenta,pv.NomComercial AS NombrePuntoVenta,pv.Pais,pv.Estado,pv.Ciudad,
+        t.NombreUsuario,t.FechaApertura,t.FechaCierre,t.TotalVentas,t.NumTransacciones,t.Diferencia,t.ArqueoMonedasJSON
+      FROM VIDA_CAJA_TURNOS t ${joinPV}
+      WHERE t.idBranch=@idBranch AND t.idCuenta=@idCuenta AND ${enRango} ${geoFilter}
+      ORDER BY t.FechaCierre,t.idTurno;
+
+      SELECT m.idTurno,m.Tipo,m.Moneda,m.Monto,m.Status
+      FROM VIDA_CAJA_MOVIMIENTOS m
+      JOIN VIDA_CAJA_TURNOS t ON t.idBranch=m.idBranch AND t.idCuenta=m.idCuenta AND t.idTurno=m.idTurno
+      ${joinPV}
+      WHERE m.idBranch=@idBranch AND m.idCuenta=@idCuenta AND m.Status='ACTIVO' AND ${enRango} ${geoFilter};
+
+      SELECT COUNT(*) AS Abiertos
+      FROM VIDA_CAJA_TURNOS t ${joinPV}
+      WHERE t.idBranch=@idBranch AND t.idCuenta=@idCuenta AND t.Status='ABIERTO' ${geoFilter};
+    `);
+    if (r.recordsets[0].length > 20000)
+      return reply.code(422).send({ error: 'El reporte supera 20,000 turnos. Reduce el rango o filtra una tienda.' });
+
+    const reporte = construirReporteCaja(r.recordsets[0], r.recordsets[1]);
+    return reply.send({ ...reporte, turnosAbiertos: r.recordsets[2][0]?.Abiertos ?? 0 });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error en reporte de caja: ' + err.message });
   }
 }
 

@@ -6,7 +6,7 @@ import {
   Filter, RefreshCw, AlertTriangle,
   DollarSign, ShoppingCart, CreditCard, Banknote,
   MapPin, Store, Globe, ChevronDown, Truck, Star, XCircle, Building2, Award,
-  Calculator, Target, Save,
+  Calculator, Target, Save, Wallet,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -17,12 +17,12 @@ import api from '../services/api.js';
 import {
   exportarVentasExcel, exportarProductosExcel,
   exportarInventarioExcel, exportarMovimientosExcel,
-  exportarDeliveryExcel, exportarRedExcel,
+  exportarDeliveryExcel, exportarRedExcel, exportarCajaExcel,
 } from '../utils/exportExcel.js';
 import {
   exportarVentasPDF, exportarProductosPDF,
   exportarInventarioPDF, exportarMovimientosPDF,
-  exportarDeliveryPDF, exportarRedPDF,
+  exportarDeliveryPDF, exportarRedPDF, exportarCajaPDF,
 } from '../utils/exportPDF.js';
 import { useAuthStore } from '../store/authStore.js';
 
@@ -306,6 +306,272 @@ function TabVentas({ filtros }) {
               </table>
             </div>
           </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── TAB: Caja (arqueos por moneda) ──────────────────────────────────────────
+
+const MOV_TIPO_LABEL = { EGRESO: 'Egresos', RETIRO: 'Retiros', DEVOLUCION: 'Devoluciones', INGRESO: 'Ingresos' };
+const TURNOS_VISIBLES = 200;
+// Faltante en rojo, sobrante en ámbar (ambos son descuadres), cuadre en gris.
+const difCls = (v) => (v < 0 ? 'text-red-600' : v > 0 ? 'text-amber-600' : 'text-gray-700');
+
+function TabCaja({ filtros }) {
+  const { usuario } = useAuthStore();
+  const [rango, setRango]   = useState({ ini: HACE7(), fin: HOY() });
+  const [geo, setGeo]       = useState({});
+  const [datos, setDatos]   = useState(null);
+  const [cargando, setCarg] = useState(false);
+  const [error, setError]   = useState(null);
+
+  const cargar = useCallback(async () => {
+    setCarg(true); setError(null);
+    try {
+      const params = new URLSearchParams({
+        fechaInicio: rango.ini, fechaFin: rango.fin,
+        ...(geo.filtroPais          && { filtroPais: geo.filtroPais }),
+        ...(geo.filtroEstado        && { filtroEstado: geo.filtroEstado }),
+        ...(geo.filtroIdPuntoVenta  && { filtroIdPuntoVenta: geo.filtroIdPuntoVenta }),
+      });
+      const r = await api.get(`/reportes/caja?${params}`);
+      setDatos(r.data);
+    } catch (e) {
+      setError(e.response?.data?.error || 'Error al cargar reporte');
+    } finally { setCarg(false); }
+  }, [rango, geo]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const exportar = { ...datos, fechaInicio: rango.ini, fechaFin: rango.fin };
+  const turnosVisibles = (datos?.turnos || []).slice(-TURNOS_VISIBLES).reverse();
+
+  return (
+    <div className="space-y-5">
+      {/* Filtros */}
+      <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Cierre desde</label>
+            <input type="date" value={rango.ini}
+              onChange={e => setRango(r => ({ ...r, ini: e.target.value }))}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-vida-blue/30" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Hasta</label>
+            <input type="date" value={rango.fin}
+              onChange={e => setRango(r => ({ ...r, fin: e.target.value }))}
+              className="text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-vida-blue/30" />
+          </div>
+          <FiltroGeografia usuario={usuario} filtros={filtros} geo={geo} setGeo={setGeo} />
+          <button onClick={cargar} disabled={cargando}
+            className="flex items-center gap-2 px-4 py-2 bg-vida-blue hover:bg-vida-blue/90 text-white text-sm font-semibold rounded-xl transition-all">
+            <RefreshCw size={14} className={cargando ? 'animate-spin' : ''} />
+            {cargando ? 'Cargando…' : 'Actualizar'}
+          </button>
+          {datos && (
+            <BotonesExport
+              onExcel={() => exportarCajaExcel(exportar)}
+              onPDF={()   => exportarCajaPDF(exportar)}
+              cargando={cargando} />
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm flex items-center gap-2">
+          <AlertTriangle size={16} /> {error}
+        </div>
+      )}
+
+      {cargando && <Spinner />}
+
+      {!cargando && datos && (
+        <>
+          {datos.turnosAbiertos > 0 && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-sm flex items-center gap-2">
+              <AlertTriangle size={16} />
+              Hay {datos.turnosAbiertos} turno{datos.turnosAbiertos === 1 ? '' : 's'} de caja abierto{datos.turnosAbiertos === 1 ? '' : 's'} en este alcance. Su efectivo entra al reporte cuando se cierren.
+            </div>
+          )}
+
+          {/* Tarjetas */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <CardResumen icon={Wallet}        label="Turnos cerrados"   valor={datos.totales.NumTurnos}            color="blue" />
+            <CardResumen icon={AlertTriangle} label="Con diferencia"    valor={datos.totales.TurnosConDiferencia}  color="red"
+              sub={datos.totales.NumTurnos ? `${Math.round(datos.totales.TurnosConDiferencia / datos.totales.NumTurnos * 100)}% de los turnos` : null} />
+            <CardResumen icon={DollarSign}    label="Ventas del período" valor={USD(datos.totales.TotalVentasUSD)} color="green" sub="Valor de venta (equiv. USD)" />
+            <CardResumen icon={Banknote}      label="Faltantes"
+              valor={`${FMT(datos.monedas.USD.Faltantes)} USD`} sub={`${FMT(datos.monedas.VES.Faltantes)} VES`} color="amber" />
+          </div>
+
+          {datos.totales.NumTurnos === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-16 text-center text-gray-400">
+              <Wallet size={40} className="mx-auto mb-2 opacity-30" />
+              No hay turnos de caja cerrados en este período.
+            </div>
+          ) : (
+            <>
+              {/* Por moneda */}
+              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-3">
+                <div>
+                  <h3 className="font-bold text-gray-800">Arqueo por moneda</h3>
+                  <p className="text-xs text-gray-500">Importes originales del cierre: USD y VES no se convierten ni se suman entre sí. Los faltantes y sobrantes se acumulan aparte, para que el sobrante de un turno no tape el faltante de otro.</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        {['Moneda','Apertura','Ventas efectivo','Movimientos','Esperado','Contado','Diferencia neta','Faltantes','Sobrantes'].map(h => (
+                          <th key={h} className={`px-3 py-2 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap ${h === 'Moneda' ? 'text-left' : 'text-right'}`}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {['USD','VES'].map(m => {
+                        const x = datos.monedas[m];
+                        return (
+                          <tr key={m}>
+                            <td className="px-3 py-2.5 font-bold">{m}</td>
+                            <td className="px-3 py-2.5 text-right">{FMT(x.Apertura)}</td>
+                            <td className="px-3 py-2.5 text-right">{FMT(x.VentasNetas)}</td>
+                            <td className={`px-3 py-2.5 text-right ${x.Movimientos < 0 ? 'text-red-600' : x.Movimientos > 0 ? 'text-green-700' : ''}`}>{x.Movimientos > 0 ? '+' : ''}{FMT(x.Movimientos)}</td>
+                            <td className="px-3 py-2.5 text-right font-semibold">{FMT(x.Esperado)}</td>
+                            <td className="px-3 py-2.5 text-right font-semibold">{FMT(x.Contado)}</td>
+                            <td className={`px-3 py-2.5 text-right font-bold ${difCls(x.Diferencia)}`}>{FMT(x.Diferencia)}</td>
+                            <td className="px-3 py-2.5 text-right text-red-600">{FMT(x.Faltantes)}</td>
+                            <td className="px-3 py-2.5 text-right text-amber-600">{FMT(x.Sobrantes)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {datos.totales.TurnosLegado > 0 && (
+                  <p className="text-xs text-gray-500">
+                    {datos.totales.TurnosLegado} turno{datos.totales.TurnosLegado === 1 ? '' : 's'} cerrado{datos.totales.TurnosLegado === 1 ? '' : 's'} antes del arqueo por moneda (legado) no se reparten entre monedas; su diferencia acumulada es {FMT(datos.totales.DiferenciaLegadoUSD)} equiv. USD.
+                  </p>
+                )}
+              </div>
+
+              {/* Movimientos por tipo */}
+              <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-3">
+                <h3 className="font-bold text-gray-800">Movimientos de caja</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        {['Tipo','Cantidad','USD','VES'].map(h => (
+                          <th key={h} className={`px-3 py-2 text-xs font-semibold text-gray-500 uppercase ${h === 'Tipo' ? 'text-left' : 'text-right'}`}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {Object.entries(datos.movimientosPorTipo).map(([tipo, x]) => (
+                        <tr key={tipo} className={x.Cantidad === 0 ? 'text-gray-400' : ''}>
+                          <td className="px-3 py-2.5 font-medium">{MOV_TIPO_LABEL[tipo] || tipo}</td>
+                          <td className="px-3 py-2.5 text-right">{x.Cantidad}</td>
+                          <td className="px-3 py-2.5 text-right">{FMT(x.USD)}</td>
+                          <td className="px-3 py-2.5 text-right">{FMT(x.VES)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Por sucursal */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                    <Store size={16} className="text-vida-blue" />
+                    Por sucursal
+                  </h3>
+                  <span className="text-xs text-gray-400">{datos.filas.length} sucursales</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        {['Sucursal','Turnos','Con dif.','Esperado USD','Contado USD','Dif. USD','Esperado VES','Contado VES','Dif. VES'].map(h => (
+                          <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap ${h === 'Sucursal' ? 'text-left' : 'text-right'}`}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {datos.filas.map(f => (
+                        <tr key={f.idPuntoVenta} className="hover:bg-gray-50/50">
+                          <td className="px-4 py-3 font-semibold text-gray-800">
+                            {f.NombrePuntoVenta}
+                            {f.TurnosLegado > 0 && <span className="block text-xs font-normal text-gray-400">{f.TurnosLegado} legado</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right">{f.NumTurnos}</td>
+                          <td className={`px-4 py-3 text-right ${f.TurnosConDiferencia ? 'text-red-600 font-semibold' : ''}`}>{f.TurnosConDiferencia}</td>
+                          <td className="px-4 py-3 text-right">{FMT(f.USD.Esperado)}</td>
+                          <td className="px-4 py-3 text-right">{FMT(f.USD.Contado)}</td>
+                          <td className={`px-4 py-3 text-right font-bold ${difCls(f.USD.Diferencia)}`}>{FMT(f.USD.Diferencia)}</td>
+                          <td className="px-4 py-3 text-right">{FMT(f.VES.Esperado)}</td>
+                          <td className="px-4 py-3 text-right">{FMT(f.VES.Contado)}</td>
+                          <td className={`px-4 py-3 text-right font-bold ${difCls(f.VES.Diferencia)}`}>{FMT(f.VES.Diferencia)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Por turno */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <h3 className="font-bold text-gray-800">Detalle por turno</h3>
+                  <span className="text-xs text-gray-400">
+                    {datos.turnos.length > TURNOS_VISIBLES
+                      ? `Últimos ${TURNOS_VISIBLES} de ${datos.turnos.length} · exporta para verlos todos`
+                      : `${datos.turnos.length} turnos`}
+                  </span>
+                </div>
+                <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0">
+                      <tr className="bg-gray-50">
+                        {['Cierre','Sucursal','Cajero','Esperado USD','Contado USD','Dif. USD','Esperado VES','Contado VES','Dif. VES'].map(h => (
+                          <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap ${['Cierre','Sucursal','Cajero'].includes(h) ? 'text-left' : 'text-right'}`}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {turnosVisibles.map(t => (
+                        <tr key={t.idTurno} className="hover:bg-gray-50/50">
+                          <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">
+                            {new Date(t.FechaCierre).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' })}
+                            <span className="block text-xs text-gray-400">Turno #{t.idTurno}</span>
+                          </td>
+                          <td className="px-4 py-2.5 font-medium text-gray-800">{t.Tienda}</td>
+                          <td className="px-4 py-2.5 text-gray-600">{t.Cajero || '—'}</td>
+                          {t.Legado ? (
+                            <td colSpan={6} className={`px-4 py-2.5 text-right ${difCls(t.DiferenciaEquivUSD)}`}>
+                              Legado · diferencia {FMT(t.DiferenciaEquivUSD)} equiv. USD
+                            </td>
+                          ) : (
+                            <>
+                              <td className="px-4 py-2.5 text-right">{FMT(t.USD.Esperado)}</td>
+                              <td className="px-4 py-2.5 text-right">{FMT(t.USD.Contado)}</td>
+                              <td className={`px-4 py-2.5 text-right font-semibold ${difCls(t.USD.Diferencia)}`}>{FMT(t.USD.Diferencia)}</td>
+                              <td className="px-4 py-2.5 text-right">{FMT(t.VES.Esperado)}</td>
+                              <td className="px-4 py-2.5 text-right">{FMT(t.VES.Contado)}</td>
+                              <td className={`px-4 py-2.5 text-right font-semibold ${difCls(t.VES.Diferencia)}`}>{FMT(t.VES.Diferencia)}</td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
@@ -1412,6 +1678,7 @@ function TabRentabilidad({ filtros, puedeVerRed }) {
 
 const TABS = [
   { id: 'ventas',       label: 'Ventas',       icon: BarChart2    },
+  { id: 'caja',         label: 'Caja',         icon: Wallet       },
   { id: 'red',          label: 'Red',          icon: Building2, soloRed: true },
   { id: 'delivery',     label: 'Delivery',      icon: Truck        },
   { id: 'productos',    label: 'Productos',     icon: TrendingUp   },
@@ -1471,6 +1738,7 @@ export default function Reportes() {
       {/* Contenido */}
       <div className="p-6">
         {tab === 'ventas'      && <TabVentas      filtros={filtros} />}
+        {tab === 'caja'        && <TabCaja        filtros={filtros} />}
         {tab === 'red'         && puedeVerRed && <TabRed filtros={filtros} />}
         {tab === 'delivery'    && <TabDelivery    filtros={filtros} />}
         {tab === 'productos'   && <TabProductos   filtros={filtros} />}

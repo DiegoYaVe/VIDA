@@ -3,6 +3,7 @@ import { authenticate, requireRole } from '../middlewares/auth.js';
 import {
   obtenerFiltros,
   reporteVentas,
+  reporteCaja,
   reporteProductos,
   reporteInventario,
   reporteMovimientos,
@@ -18,6 +19,7 @@ export async function reportesRoutes(fastify) {
 
   fastify.get('/reportes/filtros',      pre, obtenerFiltros);
   fastify.get('/reportes/ventas',       pre, reporteVentas);
+  fastify.get('/reportes/caja',         pre, reporteCaja);
   fastify.get('/reportes/productos',    pre, reporteProductos);
   fastify.get('/reportes/inventario',   pre, reporteInventario);
   fastify.get('/reportes/movimientos',  pre, reporteMovimientos);
