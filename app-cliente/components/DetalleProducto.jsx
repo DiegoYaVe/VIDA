@@ -8,11 +8,13 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { absImg } from '../constants/config';
+import { useTasaReferencial, precioMonedas } from '../services/moneda';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PLACEHOLDER = 'https://via.placeholder.com/600/EBF8FF/1A6A9A?text=VIDA';
 
 export default function DetalleProducto({ producto, onClose, onAgregar }) {
+  const tasa = useTasaReferencial();
   const [cantidad, setCantidad] = useState(1);
 
   useEffect(() => { if (producto) setCantidad(1); }, [producto?.idProducto, producto?.idPuntoVenta]);
@@ -47,10 +49,10 @@ export default function DetalleProducto({ producto, onClose, onAgregar }) {
             </View>
 
             <Text style={styles.nombre}>{producto.Nombre}</Text>
-            <Text style={styles.precio}>
-              ${precio.toFixed(2)}
-              <Text style={styles.precioSufijo}>  USD</Text>
-            </Text>
+            <Text style={styles.precio}>{precioMonedas(precio, tasa).principal}</Text>
+            {precioMonedas(precio, tasa).secundario ? (
+              <Text style={styles.precioSufijo}>{precioMonedas(precio, tasa).secundario} · tasa de referencia</Text>
+            ) : null}
 
             {producto.Descripcion ? (
               <Text style={styles.descripcion}>{producto.Descripcion}</Text>
@@ -105,7 +107,7 @@ export default function DetalleProducto({ producto, onClose, onAgregar }) {
               <Text style={styles.agregarBtnText}>
                 Agregar {cantidad} al carrito
               </Text>
-              <Text style={styles.agregarBtnPrecio}>${total.toFixed(2)}</Text>
+              <Text style={styles.agregarBtnPrecio}>{precioMonedas(total, tasa).principal}</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>

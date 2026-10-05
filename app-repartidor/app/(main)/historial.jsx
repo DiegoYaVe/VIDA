@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
+import { efectivoCobrado } from '../../services/cobro';
 
 const COLORS = {
   primary: '#1A6A9A',
@@ -19,7 +20,9 @@ const COLORS = {
 function BadgeMetodo({ metodo }) {
   const cfg = metodo === 'EFECTIVO'
     ? { color: '#27AE60', bg: '#F0FFF4', label: 'Efectivo' }
-    : { color: '#1A6A9A', bg: '#EBF8FF', label: 'Tarjeta' };
+    : metodo === 'PAGO_MOVIL'
+      ? { color: '#6B46C1', bg: '#FAF5FF', label: 'Pago Móvil' }
+      : { color: '#1A6A9A', bg: '#EBF8FF', label: 'Tarjeta' };
   return (
     <View style={[styles.badge, { backgroundColor: cfg.bg }]}>
       <Text style={[styles.badgeText, { color: cfg.color }]}>{cfg.label}</Text>
@@ -50,6 +53,7 @@ function ItemPedido({ item }) {
         <View>
           <Text style={styles.labelSmall}>Total pedido</Text>
           <Text style={styles.total}>${Number(item.TotalUSD).toFixed(2)}</Text>
+          {efectivoCobrado(item) ? <Text style={styles.labelSmall}>Cobraste {efectivoCobrado(item)}</Text> : null}
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <Text style={styles.labelSmall}>Tu comisión</Text>

@@ -21,6 +21,7 @@ import {
   tiendaPublica,
   listarProductosApp,
   cotizacionMonedaCliente,
+  tasaReferencial,
   crearPedidoApp,
   estadoPedidoCliente,
   historialPedidosCliente,
@@ -71,6 +72,7 @@ export async function deliveryRoutes(fastify) {
   // Destino del QR de los flyers: la pagina publica de una tienda
   fastify.get('/delivery/tienda/:idPuntoVenta', tiendaPublica);
   fastify.get('/delivery/pago-movil',   datosPagoMovil);
+  fastify.get('/delivery/tasa-referencial', tasaReferencial);
 
   // ── Registro / login de cliente ───────────────────────────────────────
   fastify.post('/delivery/cliente/registro',        registrarCliente);

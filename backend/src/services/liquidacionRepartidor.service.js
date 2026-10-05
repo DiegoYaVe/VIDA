@@ -43,3 +43,30 @@ export function calcularCobroEfectivoRepartidor({ totalUSD, comisionUSD, pagoMon
   };
 }
 
+
+// Lo que el repartidor debe cobrar en efectivo al entregar, en la moneda que
+// el cliente eligió al pedir (snapshot congelado; mismas reglas que la
+// liquidación de arriba). Pago Móvil y tarjeta ya están cobrados: no se pide
+// efectivo. Un pedido legado sin snapshot se cobra en USD.
+export function cobroAlCliente({ metodoPago, totalUSD, pagoMonedaJSON }) {
+  const metodo = String(metodoPago || '').toUpperCase();
+  const total = r2(totalUSD);
+  if (metodo !== 'EFECTIVO') return { CobrarEfectivo: false, Metodo: metodo, Moneda: null, Monto: null, TotalUSD: total, TasaVESporUSD: null };
+  const pago = leerSnapshot(pagoMonedaJSON);
+  if (String(pago?.Moneda || 'USD').toUpperCase() === 'VES') {
+    const monto = Number(pago?.TotalOriginal ?? pago?.TotalVES);
+    const tasa = Number(pago?.TasaVESporUSD);
+    if (!Number.isFinite(monto) || monto < 0) {
+      throw Object.assign(new Error('El pedido VES no tiene un monto de cobro válido'), { statusCode: 422 });
+    }
+    return { CobrarEfectivo: true, Metodo: metodo, Moneda: 'VES', Monto: r2(monto), TotalUSD: total, TasaVESporUSD: Number.isFinite(tasa) && tasa > 0 ? tasa : null };
+  }
+  return { CobrarEfectivo: true, Metodo: metodo, Moneda: 'USD', Monto: total, TotalUSD: total, TasaVESporUSD: null };
+}
+
+// Versión para listas y avisos: un snapshot dañado no debe tumbar la lista
+// completa; se marca para que el repartidor confirme el cobro con la tienda.
+export function cobroSeguro(fila) {
+  try { return cobroAlCliente(fila); }
+  catch { return { CobrarEfectivo: true, Metodo: String(fila.metodoPago || '').toUpperCase(), Moneda: null, Monto: null, TotalUSD: r2(fila.totalUSD), TasaVESporUSD: null, Error: 'Confirma el monto con la tienda' }; }
+}

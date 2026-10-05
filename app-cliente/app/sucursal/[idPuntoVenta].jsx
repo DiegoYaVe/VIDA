@@ -18,10 +18,13 @@ import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import useCarritoStore from '../../store/carritoStore';
 import { absImg } from '../../constants/config';
+import Precio from '../../components/Precio';
+import { useTasaReferencial, precioMonedas } from '../../services/moneda';
 
 const PLACEHOLDER = 'https://via.placeholder.com/150/EBF8FF/1A6A9A?text=VIDA';
 
 export default function CatalogoScreen() {
+  const tasa = useTasaReferencial();
   const { idPuntoVenta } = useLocalSearchParams();
   const router = useRouter();
   const { idBranch, idCuenta } = useAuthStore();
@@ -158,7 +161,7 @@ export default function CatalogoScreen() {
           </View>
         )}
         <Text style={styles.prodNombre} numberOfLines={2}>{nombre}</Text>
-        <Text style={styles.prodPrecio}>${precio.toFixed(2)}</Text>
+        <Precio usd={precio} tasa={tasa} style={styles.prodPrecio} />
 
         {cant === 0 ? (
           <TouchableOpacity style={styles.addBtn} onPress={() => handleAgregar(item)}>
@@ -276,7 +279,7 @@ export default function CatalogoScreen() {
           </View>
           <Ionicons name="cart-outline" size={20} color="#fff" />
           <Text style={styles.floatingCartText}>Ver carrito</Text>
-          <Text style={styles.floatingCartPrice}>${totalCarrito.toFixed(2)}</Text>
+          <Text style={styles.floatingCartPrice}>{precioMonedas(totalCarrito, tasa).principal}</Text>
         </TouchableOpacity>
       )}
     </SafeAreaView>

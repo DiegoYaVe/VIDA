@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import api from '../services/api';
+import { useTasaReferencial, precioEnLinea } from '../services/moneda';
 
 const MONTOS = [1, 2, 5, 10, 20];
 const METODOS = [
@@ -18,6 +19,7 @@ const METODOS = [
 const ESTADO_COLOR = { PROCESANDO: '#F59E0B', COMPLETADO: '#16A34A', RECHAZADO: '#DC2626' };
 
 export default function ServiciosScreen() {
+  const tasa = useTasaReferencial();
   const router = useRouter();
   const [operadoras, setOperadoras] = useState([]);
   const [ordenes, setOrdenes] = useState([]);
@@ -132,7 +134,7 @@ export default function ServiciosScreen() {
               </View>
 
               <TouchableOpacity style={[styles.confirmBtn, enviando && { opacity: 0.6 }]} onPress={confirmar} disabled={enviando}>
-                {enviando ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmText}>Solicitar {monto ? `— $${Number(monto).toFixed(2)}` : ''}</Text>}
+                {enviando ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmText}>Solicitar {monto ? `— ${precioEnLinea(Number(monto), tasa)}` : ''}</Text>}
               </TouchableOpacity>
               <Text style={styles.hint}>Tu solicitud queda en proceso; el equipo VIDA la completa y te acredita puntos.</Text>
             </>

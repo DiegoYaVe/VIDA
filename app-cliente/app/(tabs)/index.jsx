@@ -27,6 +27,8 @@ import useAuthStore from '../../store/authStore';
 import useCarritoStore from '../../store/carritoStore';
 import { absImg } from '../../constants/config';
 import DetalleProducto from '../../components/DetalleProducto';
+import Precio from '../../components/Precio';
+import { useTasaReferencial, precioMonedas } from '../../services/moneda';
 
 const PLACEHOLDER = 'https://via.placeholder.com/300/F1F5F9/94A3B8?text=VIDA';
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -52,6 +54,7 @@ function emojiCategoria(nombre = '') {
 }
 
 export default function HomeScreen() {
+  const tasa = useTasaReferencial();
   const router = useRouter();
   const { idBranch, idCuenta, cliente } = useAuthStore();
 
@@ -219,11 +222,14 @@ export default function HomeScreen() {
 
           <Text style={styles.prodNombre} numberOfLines={1}>{p.Nombre}</Text>
           <View style={styles.prodMetaRow}>
-            <Text style={styles.prodPrecio}>${precio.toFixed(2)}</Text>
+            <Text style={styles.prodPrecio}>{precioMonedas(precio, tasa).principal}</Text>
             <Text style={styles.prodMetaSep}> · </Text>
             <Ionicons name="storefront-outline" size={12} color="#6B7280" />
             <Text style={styles.prodMeta} numberOfLines={1}> {p.NombreSucursal}</Text>
           </View>
+          {precioMonedas(precio, tasa).secundario ? (
+            <Text style={{fontSize: 11, color: '#718096', marginTop: 1}}>{precioMonedas(precio, tasa).secundario}</Text>
+          ) : null}
         </TouchableOpacity>
       </View>
     );
@@ -313,7 +319,7 @@ export default function HomeScreen() {
                       style={styles.miniProdImg}
                     />
                     <Text style={styles.miniProdNombre} numberOfLines={2}>{p.Nombre}</Text>
-                    <Text style={styles.miniProdPrecio}>${parseFloat(p.PrecioUSD || 0).toFixed(2)}</Text>
+                    <Precio usd={parseFloat(p.PrecioUSD || 0)} tasa={tasa} style={styles.miniProdPrecio} />
                   </TouchableOpacity>
                 ))}
               </ScrollView>

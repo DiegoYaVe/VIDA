@@ -11,6 +11,7 @@
 import { getPool, sql } from '../db/sqlserver.js';
 import { broadcast } from '../ws/ws.manager.js';
 import { reembolsarPuntosPedido } from '../controllers/delivery.controller.js';
+import { cobroSeguro } from './liquidacionRepartidor.service.js';
 import { enviarPush } from './push.service.js';
 import { STATUS_ACTIVOS_REPARTIDOR } from './rutas.service.js';
 // La memoria del despacho vive en su propio módulo para que el controller de
@@ -120,7 +121,7 @@ export async function procesarBusquedas(log) {
   const r = await pool.request().query(`
     SELECT p.idBranch, p.idCuenta, p.idPedido, p.idCliente, p.idPuntoVenta,
            p.FechaAlta, p.FechaInicioBusqueda, p.FechaLimiteBusqueda, p.AvisoSinRepartidor,
-           p.TotalUSD, p.DireccionEntrega,
+           p.TotalUSD, p.DireccionEntrega, p.MetodoPago, p.PagoMonedaJSON,
            DATEDIFF(SECOND, COALESCE(p.FechaInicioBusqueda,p.FechaAlta), GETDATE()) / 60.0 AS MinutosBuscando,
            CASE WHEN p.FechaLimiteBusqueda IS NOT NULL AND GETDATE() > p.FechaLimiteBusqueda
                 THEN 1 ELSE 0 END AS Vencido,
@@ -223,6 +224,8 @@ export async function procesarBusquedas(log) {
             NombreSucursal: p.NombreSucursal ?? '',
             TotalUSD: parseFloat(p.TotalUSD),
             DireccionEntrega: p.DireccionEntrega,
+            MetodoPago: p.MetodoPago,
+            Cobro: cobroSeguro({ metodoPago: p.MetodoPago, totalUSD: p.TotalUSD, pagoMonedaJSON: p.PagoMonedaJSON }),
             repartidores: nuevos.map(x => x.idRepartidor),
           });
           enviarPush(

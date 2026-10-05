@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
+import { montoVESDelPedido } from '../services/moneda';
 
 const STATUS_LABELS = {
   BUSCANDO_REPARTIDOR: 'Buscando repartidor',
@@ -109,6 +110,7 @@ export default function MisPedidosScreen() {
                 </View>
                 <View style={styles.cardRight}>
                   {total ? <Text style={styles.cardTotal}>${parseFloat(total).toFixed(2)}</Text> : null}
+                  {montoVESDelPedido(item) ? <Text style={{fontSize: 11, color: '#718096', marginTop: 1}}>{montoVESDelPedido(item)}</Text> : null}
                   <View style={[styles.badge, { backgroundColor: color + '20' }]}>
                     <Text style={[styles.badgeText, { color }]}>{label}</Text>
                   </View>

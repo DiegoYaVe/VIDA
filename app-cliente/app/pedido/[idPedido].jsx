@@ -22,6 +22,7 @@ import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import { WS_URL } from '../../constants/config';
 import MapaTracking from '../../components/MapaTracking';
+import { montoVESDelPedido, fmtUSD } from '../../services/moneda';
 
 const PASOS = [
   { key: 'BUSCANDO', label: 'Buscando\nrepartidor', icon: 'search-outline' },
@@ -577,7 +578,8 @@ export default function SeguimientoScreen() {
               <View style={styles.orderTotal}>
                 <Text style={styles.orderTotalLabel}>Total</Text>
                 <Text style={styles.orderTotalValue}>
-                  ${estado.TotalUSD ?? estado.total ?? '—'}
+                  {(estado.TotalUSD ?? estado.total) != null ? fmtUSD(estado.TotalUSD ?? estado.total) : '—'}
+                  {montoVESDelPedido(estado) ? `  ·  ${montoVESDelPedido(estado)}` : ''}
                 </Text>
               </View>
             </View>

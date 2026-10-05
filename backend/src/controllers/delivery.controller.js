@@ -9,7 +9,7 @@ import { promocionesVigentes, mejorPromoUnitaria, calcularLinea } from './promoc
 import { evaluarCupon } from './cupones.controller.js';
 import { prepararMoneda,leerMoneda } from '../services/moneda.service.js';
 import { calcularPagoDelivery } from '../services/pagoDelivery.service.js';
-import { calcularCobroEfectivoRepartidor } from '../services/liquidacionRepartidor.service.js';
+import { calcularCobroEfectivoRepartidor, cobroSeguro } from '../services/liquidacionRepartidor.service.js';
 import { plazoPagoMinutos, SQL_SEGUNDOS_SIN_PAGO } from '../services/pagoMovil.service.js';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
@@ -514,6 +514,32 @@ export async function actualizarFcmRepartidor(request, reply) {
 // GET /delivery/pago-movil?idBranch=1&idCuenta=1
 // Se configuran desde el panel admin (claves PagoMovil* en config delivery)
 // ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
+// PÚBLICO — TASA REFERENCIAL PARA MOSTRAR PRECIOS EN BOLÍVARES
+// GET /delivery/tasa-referencial?idBranch=&idCuenta=
+// Solo lectura: devuelve la última tasa guardada (no consulta bcv.today ni
+// escribe), así un endpoint abierto no dispara llamadas externas. Es solo
+// referencia para el catálogo: el cobro real se cotiza y congela al pedir.
+// ══════════════════════════════════════════════════════════════════════════
+export async function tasaReferencial(request, reply) {
+  const idBranch = Number(request.query.idBranch);
+  const idCuenta = Number(request.query.idCuenta);
+  if (!Number.isInteger(idBranch) || !Number.isInteger(idCuenta) || idBranch <= 0 || idCuenta <= 0) {
+    return reply.code(400).send({ error: 'idBranch e idCuenta son requeridos' });
+  }
+  try {
+    const cfg = await leerMoneda(await getPool(), idBranch, idCuenta);
+    const vigente = cfg.tasa && Number(cfg.tasa.Vigente) === 1;
+    return reply.send({
+      Modo: cfg.Modo,
+      tasa: vigente ? { VESporUSD: Number(cfg.tasa.VESporUSD), FechaValor: cfg.tasa.FechaValor, Fuente: cfg.tasa.Fuente } : null,
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'No se pudo obtener la tasa de referencia' });
+  }
+}
+
 export async function datosPagoMovil(request, reply) {
   const { idBranch, idCuenta } = request.query;
   try {
@@ -1219,6 +1245,8 @@ export async function crearPedidoApp(request, reply) {
       idPuntoVenta,
       NombreSucursal:  pv?.NomComercial ?? '',
       TotalUSD,
+      MetodoPago,
+      Cobro:           cobroSeguro({ metodoPago: MetodoPago, totalUSD: TotalUSD, pagoMonedaJSON: pagoSnapshot }),
       DireccionEntrega,
       items,
       repartidores:    repartidores.recordset.map(r => r.idRepartidor),
@@ -2574,6 +2602,12 @@ export async function subirEvidenciaEntrega(request, reply) {
 // REPARTIDOR — PEDIDOS ACTIVOS
 // GET /delivery/repartidor/pedidos-activos
 // ══════════════════════════════════════════════════════════════════════════
+// Adjunta a cada pedido lo que el repartidor debe cobrar (moneda y monto
+// físico); el snapshot crudo no viaja a la app.
+function conCobro({ PagoMonedaJSON, ...p }) {
+  return { ...p, Cobro: cobroSeguro({ metodoPago: p.MetodoPago, totalUSD: p.TotalUSD, pagoMonedaJSON: PagoMonedaJSON }) };
+}
+
 export async function pedidosActivos(request, reply) {
   const { idBranch, idCuenta, idRepartidor } = request.repartidor;
   try {
@@ -2583,7 +2617,7 @@ export async function pedidosActivos(request, reply) {
       .input('idCuenta',     sql.BigInt, idCuenta)
       .input('idRepartidor', sql.BigInt, idRepartidor)
       .query(`
-        SELECT p.idPedido, p.Status, p.MetodoPago, p.TotalUSD,
+        SELECT p.idPedido, p.Status, p.MetodoPago, p.TotalUSD, p.PagoMonedaJSON,
                p.DireccionEntrega, p.UbicacionEntregaLat, p.UbicacionEntregaLon,
                p.NotasCliente, p.FechaAlta, p.idPuntoVenta,
                p.OrdenRuta, p.DistanciaKm, p.ETAEntrega,
@@ -2603,7 +2637,7 @@ export async function pedidosActivos(request, reply) {
           AND p.Status NOT IN ('ENTREGADO','CANCELADO')
         ORDER BY ISNULL(p.OrdenRuta, 999), p.FechaAlta ASC
       `);
-    return reply.send(r.recordset);
+    return reply.send(r.recordset.map(conCobro));
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener pedidos activos' });
@@ -2623,7 +2657,7 @@ export async function pedidosDisponibles(request, reply) {
       .input('idCuenta', sql.BigInt, idCuenta)
       .input('idRepartidor', sql.BigInt, idRepartidor)
       .query(`
-        SELECT p.idPedido, p.Status, p.MetodoPago, p.TotalUSD,
+        SELECT p.idPedido, p.Status, p.MetodoPago, p.TotalUSD, p.PagoMonedaJSON,
                p.DireccionEntrega, p.UbicacionEntregaLat, p.UbicacionEntregaLon,
                p.NotasCliente, p.FechaAlta,
                pv.NomComercial AS NombreSucursal,
@@ -2643,7 +2677,7 @@ export async function pedidosDisponibles(request, reply) {
               AND l.idPedido=p.idPedido AND l.idRepartidor=@idRepartidor)
         ORDER BY p.FechaAlta ASC
       `);
-    return reply.send(r.recordset);
+    return reply.send(r.recordset.map(conCobro));
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener pedidos disponibles' });

@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import api from '../../services/api';
+import { infoCobro, fmtUSD } from '../../services/cobro';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useLocation } from '../../hooks/useLocation';
 import MapaRuta from '../../components/MapaRuta';
@@ -99,6 +100,7 @@ function PulseView({ style }) {
 
 // ---------- NuevoPedidoModal ----------
 function NuevoPedidoModal({ pedido, pedidosActivos, onAceptar, onRechazar }) {
+  const cobro = infoCobro(pedido);
   const slideAnim   = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const progressAnim = useRef(new Animated.Value(1)).current;
   const [segundos, setSegundos] = useState(60);
@@ -153,21 +155,15 @@ function NuevoPedidoModal({ pedido, pedidosActivos, onAceptar, onRechazar }) {
             <Text style={modalStyles.infoValue} numberOfLines={2}>{pedido.direccion || pedido.DireccionEntrega || 'Sin dirección'}</Text>
           </View>
           <View style={modalStyles.totalRow}>
-            <Text style={modalStyles.totalLabel}>Total del pedido</Text>
-            <Text style={modalStyles.totalValue}>${(pedido.total || pedido.Total || pedido.TotalUSD || 0).toFixed(2)}</Text>
+            <Text style={modalStyles.totalLabel}>{cobro.cobrar ? 'Cobrar al cliente' : 'Total del pedido'}</Text>
+            <Text style={modalStyles.totalValue}>{cobro.cobrar ? (cobro.monto || 'Confirmar') : fmtUSD(pedido.total || pedido.Total || pedido.TotalUSD)}</Text>
           </View>
           <View style={modalStyles.pagoRow}>
-            {(pedido.metodoPago || pedido.MetodoPago || '').toLowerCase().includes('efectivo') ? (
-              <>
-                <Ionicons name="cash-outline" size={22} color="#27AE60" />
-                <Text style={[modalStyles.pagoText, { color: '#27AE60' }]}>Efectivo</Text>
-              </>
-            ) : (
-              <>
-                <Ionicons name="card-outline" size={22} color="#1A6A9A" />
-                <Text style={[modalStyles.pagoText, { color: '#1A6A9A' }]}>Tarjeta / Transferencia</Text>
-              </>
-            )}
+            <Ionicons name={cobro.cobrar ? 'cash-outline' : 'checkmark-circle-outline'} size={22} color={cobro.cobrar ? '#27AE60' : '#1A6A9A'} />
+            <View style={{ flexShrink: 1 }}>
+              <Text style={[modalStyles.pagoText, { color: cobro.cobrar ? '#27AE60' : '#1A6A9A' }]}>{cobro.titulo}</Text>
+              {cobro.detalle ? <Text style={{ fontSize: 12, color: '#718096', marginTop: 2 }}>{cobro.detalle}</Text> : null}
+            </View>
           </View>
         </View>
         <View style={modalStyles.actions}>
@@ -696,23 +692,33 @@ export default function IndexScreen() {
                   </View>
                 )}
 
-                {/* Efectivo a cobrar */}
-                {(pedidoSel?.MetodoPago || pedidoSel?.metodoPago || '').toLowerCase().includes('efectivo') && (
-                  <View style={styles.efectivoBox}>
-                    <Ionicons name="cash-outline" size={20} color="#27AE60" />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.efectivoLabel}>Cobrar al cliente</Text>
-                      <Text style={styles.efectivoMonto}>
-                        ${(pedidoSel?.total || pedidoSel?.Total || pedidoSel?.TotalUSD || 0).toFixed(2)}
-                      </Text>
+                {/* Cobro al cliente: moneda y monto físico del snapshot del pedido */}
+                {(() => {
+                  const cobro = infoCobro(pedidoSel);
+                  return cobro.cobrar ? (
+                    <View style={styles.efectivoBox}>
+                      <Ionicons name="cash-outline" size={20} color="#27AE60" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.efectivoLabel}>Cobrar al cliente · {cobro.titulo}</Text>
+                        {cobro.monto ? <Text style={styles.efectivoMonto}>{cobro.monto}</Text> : null}
+                        {cobro.detalle ? <Text style={styles.efectivoLabel}>{cobro.detalle}</Text> : null}
+                      </View>
                     </View>
-                  </View>
-                )}
+                  ) : (
+                    <View style={[styles.efectivoBox, { backgroundColor: '#EBF8FF', borderColor: '#BEE3F8' }]}>
+                      <Ionicons name="checkmark-circle-outline" size={20} color="#1A6A9A" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.efectivoLabel, { color: '#1A6A9A' }]}>{cobro.titulo}</Text>
+                        <Text style={[styles.efectivoLabel, { color: '#1A6A9A' }]}>{cobro.detalle}</Text>
+                      </View>
+                    </View>
+                  );
+                })()}
 
                 <View style={styles.totalRow}>
                   <Text style={styles.totalLabel}>Total</Text>
                   <Text style={styles.totalValue}>
-                    ${(pedidoSel?.total || pedidoSel?.Total || pedidoSel?.TotalUSD || 0).toFixed(2)}
+                    {fmtUSD(pedidoSel?.total || pedidoSel?.Total || pedidoSel?.TotalUSD)}
                   </Text>
                 </View>
               </View>
