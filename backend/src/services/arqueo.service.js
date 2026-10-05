@@ -21,14 +21,35 @@ export function efectivoPorMoneda(ventas) {
   return {USD:centavos(neto.USD),VES:centavos(neto.VES)};
 }
 
-export function calcularArqueo(turno,totales,contado) {
+// Signo del efecto de cada movimiento sobre el EFECTIVO físico de la caja.
+// INGRESO mete billetes; EGRESO/RETIRO/DEVOLUCION los saca.
+export const SIGNO_MOVIMIENTO={INGRESO:1,EGRESO:-1,RETIRO:-1,DEVOLUCION:-1};
+
+// Efecto neto de los movimientos sobre el efectivo, por moneda y SIN netear
+// entre monedas (los dólares de un egreso no tapan un faltante en bolívares).
+// Solo cuenta los ACTIVOS; ignora los ANULADOS.
+export function efectoMovimientos(movimientos) {
+  const neto={USD:0,VES:0};
+  for(const mv of movimientos||[]) {
+    if(mv.Status&&mv.Status!=='ACTIVO') continue;
+    const signo=SIGNO_MOVIMIENTO[mv.Tipo];
+    if(signo===undefined) throw new Error('Tipo de movimiento de caja inválido');
+    if(!['USD','VES'].includes(mv.Moneda)) throw new Error('Moneda de movimiento inválida');
+    neto[mv.Moneda]+=signo*importeCaja(Number(mv.Monto));
+  }
+  return {USD:centavos(neto.USD),VES:centavos(neto.VES)};
+}
+
+export function calcularArqueo(turno,totales,contado,movimientos) {
+  const efecto=efectoMovimientos(movimientos);
   const resultado={Version:2};
   for(const m of ['USD','VES']) {
     const apertura=Number(m==='USD'?turno.MontoApertura:turno.MontoAperturaVES)||0;
     const ventas=Number(totales[`EfectivoOriginal${m}`])||0;
-    const esperado=centavos(apertura+ventas);
+    const mov=efecto[m];
+    const esperado=centavos(apertura+ventas+mov);
     const cuenta=importeCaja(contado[m]);
-    resultado[m]={Apertura:apertura,VentasNetas:ventas,Esperado:esperado,Contado:cuenta,Diferencia:centavos(cuenta-esperado)};
+    resultado[m]={Apertura:apertura,VentasNetas:ventas,Movimientos:mov,Esperado:esperado,Contado:cuenta,Diferencia:centavos(cuenta-esperado)};
   }
   return resultado;
 }

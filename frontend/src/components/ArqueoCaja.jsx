@@ -4,7 +4,7 @@ import {useToast} from './Toast.jsx';
 import {getQueue} from '../services/offlineQueue.js';
 import {useAuthStore} from '../store/authStore.js';
 
-export default function ArqueoCaja({turno,ventas,onClose,onCerrado}) {
+export default function ArqueoCaja({turno,ventas,esperado:espProp,onClose,onCerrado}) {
  const toast=useToast();
  const usuario=useAuthStore(s=>s.usuario);
  const [conteo,setConteo]=useState({USD:'',VES:''});
@@ -27,7 +27,9 @@ export default function ArqueoCaja({turno,ventas,onClose,onCerrado}) {
   <p className="text-sm text-gray-500">Cuenta dólares y bolívares por separado. Las tarjetas no forman parte del efectivo.</p>
   {!cerrado&&<p className="text-xs text-amber-700">Antes de cerrar, sincroniza las ventas pendientes de todos los equipos de esta tienda.</p>}
   {['USD','VES'].map(m=>{
-   const esperado=Number(m==='USD'?turno.MontoApertura:turno.MontoAperturaVES||0)+Number(ventas?.['EfectivoOriginal'+m]||0);
+   // Esperado autoritativo del servidor (incluye movimientos de caja); si no
+   // llega, se recompone con apertura + ventas en efectivo de esa moneda.
+   const esperado=espProp?.[m]!=null?Number(espProp[m]):Number(m==='USD'?turno.MontoApertura:turno.MontoAperturaVES||0)+Number(ventas?.['EfectivoOriginal'+m]||0);
    const diferencia=guardado?.[m]?.Diferencia??(conteo[m]!==''?Number(conteo[m])-esperado:null);
    return <div key={m} className="bg-gray-50 rounded-xl p-4 space-y-2">
     <h3 className="font-bold">{m}</h3><p>Esperado: {Number(guardado?.[m]?.Esperado??esperado).toFixed(2)} {m}</p>

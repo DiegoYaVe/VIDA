@@ -1,7 +1,7 @@
 // src/controllers/caja.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
 import { registrarAuditoria } from '../services/audit.service.js';
-import {efectivoPorMoneda,calcularArqueo} from '../services/arqueo.service.js';
+import {efectivoPorMoneda,calcularArqueo,efectoMovimientos} from '../services/arqueo.service.js';
 import {importeCaja} from '../services/pagoPos.service.js';
 
 // ── Helper ──────────────────────────────────────────────────────────────────
@@ -73,6 +73,24 @@ async function calcularTotales(pool, idBranch, idCuenta, idPuntoVenta, fechaAper
 
   const originales=efectivoPorMoneda(r.recordsets[1] || []);
   return {...r.recordset[0],EfectivoOriginalUSD:originales.USD,EfectivoOriginalVES:originales.VES};
+}
+
+// ── Movimientos de caja del turno (egresos/ingresos/retiros/devoluciones) ───
+// `ejecutor` puede ser un pool o una transacción. Trae todos (ACTIVO+ANULADO)
+// para listarlos; el cálculo de arqueo ignora los ANULADOS por sí mismo.
+async function obtenerMovimientos(ejecutor, idBranch, idCuenta, idTurno) {
+  const r = await new sql.Request(ejecutor)
+    .input('idBranch', sql.BigInt, idBranch)
+    .input('idCuenta', sql.BigInt, idCuenta)
+    .input('idTurno',  sql.BigInt, idTurno)
+    .query(`
+      SELECT idMovimiento, idTurno, idPuntoVenta, Tipo, Moneda, Monto, Motivo,
+             idUsuario, NombreUsuario, Status, FechaAlta, FechaAnula
+      FROM VIDA_CAJA_MOVIMIENTOS
+      WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idTurno=@idTurno
+      ORDER BY FechaAlta DESC, idMovimiento DESC
+    `);
+  return r.recordset;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -277,7 +295,8 @@ export async function resumenTurno(request, reply) {
       EfectivoOriginalVES:arqueoGuardado?.VES.VentasNetas??null,
     } : await calcularTotales(pool,idBranch,idCuenta,turno.idPuntoVenta,turno.FechaApertura,null);
 
-    // Últimos 50 pedidos del turno
+    // Pedidos del turno. La vista del turno actual muestra solo los 10 más
+    // recientes; el historial utiliza la colección completa para auditarlo.
     const req2 = pool.request()
       .input('idBranch',      sql.BigInt,  idBranch)
       .input('idCuenta',      sql.BigInt,  idCuenta)
@@ -293,9 +312,18 @@ export async function resumenTurno(request, reply) {
     }
 
     const pedidosR = await req2.query(`
-      SELECT TOP 50
-        p.idPedido, p.FechaAlta, p.TotalUSD, p.MetodoPago
+      SELECT
+        p.idPedido, p.FechaAlta, p.TotalUSD, p.MetodoPago,
+        COALESCE(
+          NULLIF(LTRIM(RTRIM(CONCAT(u.Nombre, ' ', u.Apellidos))), ''),
+          NULLIF(u.Cve, ''),
+          CONCAT('Usuario #', p.UsuAlta)
+        ) AS RealizadaPor,
+        u.Cve AS UsuarioCve
       FROM VIDA_PEDIDOS p
+      LEFT JOIN VIDA_CUENTA_USUARIOS u
+        ON u.idBranch=p.idBranch AND u.idCuenta=p.idCuenta
+       AND u.idUsuario=TRY_CONVERT(BIGINT, p.UsuAlta)
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
         AND p.idPuntoVenta=@idPuntoVenta
         AND p.Canal='POS' AND p.Status='ENTREGADO'
@@ -304,6 +332,10 @@ export async function resumenTurno(request, reply) {
     `);
 
     const efectivoEsperado = parseFloat(turno.MontoApertura) + parseFloat(totales.TotalEfectivo);
+
+    // Movimientos de caja del turno (egresos/ingresos/retiros/devoluciones).
+    const movimientos = await obtenerMovimientos(pool, idBranch, idCuenta, turno.idTurno);
+    const efectoMov = efectoMovimientos(movimientos);
 
     return reply.send({
       turno: {
@@ -326,8 +358,10 @@ export async function resumenTurno(request, reply) {
         NumTransacciones: totales.NumTransacciones,
       },
       efectivoEsperado,
-      efectivoEsperadoUSD:arqueoGuardado?.USD.Esperado??(turno.Status==='ABIERTO'?Number(turno.MontoApertura)+totales.EfectivoOriginalUSD:null),
-      efectivoEsperadoVES:arqueoGuardado?.VES.Esperado??(turno.Status==='ABIERTO'?Number(turno.MontoAperturaVES||0)+totales.EfectivoOriginalVES:null),
+      efectivoEsperadoUSD:arqueoGuardado?.USD.Esperado??(turno.Status==='ABIERTO'?Number(turno.MontoApertura)+totales.EfectivoOriginalUSD+efectoMov.USD:null),
+      efectivoEsperadoVES:arqueoGuardado?.VES.Esperado??(turno.Status==='ABIERTO'?Number(turno.MontoAperturaVES||0)+totales.EfectivoOriginalVES+efectoMov.VES:null),
+      movimientos,
+      movimientosPorMoneda: efectoMov,
       pedidos: pedidosR.recordset,
     });
   } catch (err) {
@@ -390,7 +424,10 @@ export async function cerrarCaja(request, reply) {
     const montoAp  = parseFloat(turno.MontoApertura);
     const totalEf  = parseFloat(totales.TotalEfectivo);
     const montoCi  = parseFloat(MontoCierre);
-    const arqueo=calcularArqueo(turno,totales,{USD:MontoCierre,VES:MontoCierreVES});
+    // Movimientos de caja del turno (dentro de la misma transacción, con el
+    // turno ya bloqueado) para que el esperado por moneda los contemple.
+    const movimientos = await obtenerMovimientos(transaction, idBranch, idCuenta, BigInt(idTurno));
+    const arqueo=calcularArqueo(turno,totales,{USD:MontoCierre,VES:MontoCierreVES},movimientos);
     const diferencia = arqueo.USD.Diferencia;
 
     // La condición Status='ABIERTO' evita doble cierre concurrente: solo la
@@ -527,5 +564,164 @@ export async function historialTurnos(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener historial de turnos' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// POST /caja/movimiento  — registra un movimiento de caja (egreso/ingreso/
+// retiro/devolución) por moneda sobre un turno ABIERTO.
+// ══════════════════════════════════════════════════════════════════════════════
+const TIPOS_MOVIMIENTO = ['INGRESO', 'EGRESO', 'RETIRO', 'DEVOLUCION'];
+
+export async function registrarMovimiento(request, reply) {
+  const { idBranch, idCuenta, idUsuario, TipoUsuario, idPuntoVenta: pvJwt } = request.user;
+  const { idTurno, Tipo, Moneda, Monto, Motivo = null } = request.body || {};
+
+  if (!idTurno || !Tipo || !Moneda || Monto == null) {
+    return reply.code(400).send({ error: 'idTurno, Tipo, Moneda y Monto son requeridos' });
+  }
+  if (!TIPOS_MOVIMIENTO.includes(Tipo)) {
+    return reply.code(400).send({ error: 'Tipo de movimiento inválido' });
+  }
+  if (!['USD', 'VES'].includes(Moneda)) {
+    return reply.code(400).send({ error: 'Moneda inválida' });
+  }
+
+  let transaction, activa = false;
+  try {
+    importeCaja(Monto);                                   // ≤2 decimales, no negativo
+    if (Number(Monto) <= 0) return reply.code(400).send({ error: 'El monto debe ser mayor a cero' });
+
+    const pool = await getPool();
+
+    // Nombre del usuario que registra (para mostrar en la lista)
+    const usrR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('idUsuario', sql.BigInt, idUsuario)
+      .query(`SELECT TOP 1 LTRIM(RTRIM(Nombre + ' ' + ISNULL(Apellidos,''))) AS NombreUsuario
+              FROM VIDA_CUENTA_USUARIOS WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
+    const NombreUsuario = usrR.recordset[0]?.NombreUsuario || null;
+
+    transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    activa = true;
+
+    // Turno con lock: debe existir y estar ABIERTO
+    const turnoR = await new sql.Request(transaction)
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta)
+      .input('idTurno',  sql.BigInt, BigInt(idTurno))
+      .query(`SELECT TOP 1 idTurno, idPuntoVenta, Status FROM VIDA_CAJA_TURNOS WITH (UPDLOCK, HOLDLOCK)
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idTurno=@idTurno`);
+    const turno = turnoR.recordset[0];
+    if (!turno) throw Object.assign(new Error('Turno no encontrado'), { statusCode: 404 });
+    if (turno.Status !== 'ABIERTO') throw Object.assign(new Error('La caja está cerrada; no admite movimientos'), { statusCode: 409 });
+
+    // Alcance: un rol de tienda solo opera su propio PV
+    if (!esRed({ TipoUsuario }) && (!pvJwt || String(turno.idPuntoVenta) !== String(pvJwt))) {
+      throw Object.assign(new Error('No tienes permiso para operar la caja de este turno'), { statusCode: 403 });
+    }
+
+    const idMovimiento = await nextIdTx(transaction, 'VIDA_CAJA_MOVIMIENTOS', 'idMovimiento', idBranch, idCuenta);
+
+    await new sql.Request(transaction)
+      .input('idBranch',      sql.BigInt,        idBranch)
+      .input('idCuenta',      sql.BigInt,        idCuenta)
+      .input('idMovimiento',  sql.BigInt,        idMovimiento)
+      .input('idTurno',       sql.BigInt,        BigInt(idTurno))
+      .input('idPuntoVenta',  sql.BigInt,        turno.idPuntoVenta)
+      .input('Tipo',          sql.VarChar(20),   Tipo)
+      .input('Moneda',        sql.VarChar(3),    Moneda)
+      .input('Monto',         sql.Decimal(18,2), Number(Monto))
+      .input('Motivo',        sql.VarChar(300),  Motivo ? String(Motivo).slice(0, 300) : null)
+      .input('idUsuario',     sql.BigInt,        idUsuario)
+      .input('NombreUsuario', sql.VarChar(200),  NombreUsuario)
+      .input('UsuAlta',       sql.VarChar(10),   String(idUsuario).slice(0, 10))
+      .query(`
+        INSERT INTO VIDA_CAJA_MOVIMIENTOS
+          (idBranch, idCuenta, idMovimiento, idTurno, idPuntoVenta,
+           Tipo, Moneda, Monto, Motivo, idUsuario, NombreUsuario,
+           Status, UsuAlta, FechaAlta)
+        VALUES
+          (@idBranch, @idCuenta, @idMovimiento, @idTurno, @idPuntoVenta,
+           @Tipo, @Moneda, @Monto, @Motivo, @idUsuario, @NombreUsuario,
+           'ACTIVO', @UsuAlta, GETUTCDATE())
+      `);
+
+    await registrarAuditoria(transaction, {
+      idBranch, idCuenta,
+      entityType: 'CAJA_MOVIMIENTO', entityId: idMovimiento,
+      accion: 'CAJA_MOVIMIENTO_ALTA', actor: idUsuario,
+      data: { idTurno: Number(idTurno), idPuntoVenta: Number(turno.idPuntoVenta), Tipo, Moneda, Monto: Number(Monto), Motivo },
+    }, request.log);
+
+    await transaction.commit();
+    activa = false;
+    return reply.code(201).send({ idMovimiento, mensaje: 'Movimiento registrado' });
+  } catch (err) {
+    if (activa) { try { await transaction.rollback(); } catch {} }
+    request.log.error(err);
+    return reply.code(err.statusCode || 500).send({ error: err.statusCode ? err.message : 'Error al registrar movimiento' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// POST /caja/movimiento/:id/anular  — anula (soft) un movimiento mientras el
+// turno sigue ABIERTO. Una vez cerrado el turno, el arqueo queda congelado.
+// ══════════════════════════════════════════════════════════════════════════════
+export async function anularMovimiento(request, reply) {
+  const { idBranch, idCuenta, idUsuario, TipoUsuario, idPuntoVenta: pvJwt } = request.user;
+  const idMovimiento = request.params.id;
+
+  if (!idMovimiento) return reply.code(400).send({ error: 'idMovimiento requerido' });
+
+  let transaction, activa = false;
+  try {
+    const pool = await getPool();
+    transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    activa = true;
+
+    const movR = await new sql.Request(transaction)
+      .input('idBranch',     sql.BigInt, idBranch)
+      .input('idCuenta',     sql.BigInt, idCuenta)
+      .input('idMovimiento', sql.BigInt, BigInt(idMovimiento))
+      .query(`SELECT TOP 1 m.idMovimiento, m.idTurno, m.idPuntoVenta, m.Status, t.Status AS TurnoStatus
+              FROM VIDA_CAJA_MOVIMIENTOS m WITH (UPDLOCK, HOLDLOCK)
+              JOIN VIDA_CAJA_TURNOS t
+                ON t.idBranch=m.idBranch AND t.idCuenta=m.idCuenta AND t.idTurno=m.idTurno
+              WHERE m.idBranch=@idBranch AND m.idCuenta=@idCuenta AND m.idMovimiento=@idMovimiento`);
+    const mov = movR.recordset[0];
+    if (!mov) throw Object.assign(new Error('Movimiento no encontrado'), { statusCode: 404 });
+    if (mov.Status !== 'ACTIVO') throw Object.assign(new Error('El movimiento ya está anulado'), { statusCode: 409 });
+    if (mov.TurnoStatus !== 'ABIERTO') throw Object.assign(new Error('La caja ya está cerrada; no se puede anular'), { statusCode: 409 });
+    if (!esRed({ TipoUsuario }) && (!pvJwt || String(mov.idPuntoVenta) !== String(pvJwt))) {
+      throw Object.assign(new Error('No tienes permiso para operar la caja de este turno'), { statusCode: 403 });
+    }
+
+    const upd = await new sql.Request(transaction)
+      .input('idBranch',     sql.BigInt,      idBranch)
+      .input('idCuenta',     sql.BigInt,      idCuenta)
+      .input('idMovimiento', sql.BigInt,      BigInt(idMovimiento))
+      .input('UsuAnula',     sql.VarChar(10), String(idUsuario).slice(0, 10))
+      .query(`UPDATE VIDA_CAJA_MOVIMIENTOS SET Status='ANULADO', UsuAnula=@UsuAnula, FechaAnula=GETUTCDATE()
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idMovimiento=@idMovimiento AND Status='ACTIVO'`);
+    if (upd.rowsAffected[0] === 0) throw Object.assign(new Error('El movimiento ya fue anulado'), { statusCode: 409 });
+
+    await registrarAuditoria(transaction, {
+      idBranch, idCuenta,
+      entityType: 'CAJA_MOVIMIENTO', entityId: idMovimiento,
+      accion: 'CAJA_MOVIMIENTO_ANULA', actor: idUsuario,
+      data: { idTurno: Number(mov.idTurno), idPuntoVenta: Number(mov.idPuntoVenta) },
+    }, request.log);
+
+    await transaction.commit();
+    activa = false;
+    return reply.send({ idMovimiento: Number(idMovimiento), mensaje: 'Movimiento anulado' });
+  } catch (err) {
+    if (activa) { try { await transaction.rollback(); } catch {} }
+    request.log.error(err);
+    return reply.code(err.statusCode || 500).send({ error: err.statusCode ? err.message : 'Error al anular movimiento' });
   }
 }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {calcularPagoPos} from '../src/services/pagoPos.service.js';
-import {efectivoPorMoneda,calcularArqueo} from '../src/services/arqueo.service.js';
+import {efectivoPorMoneda,calcularArqueo,efectoMovimientos} from '../src/services/arqueo.service.js';
 const tasa={VESporUSD:40,idTasa:1,FechaValor:'2026-09-28',Fuente:'prueba'};
 const pago=(usd,ves,tarUSD=0,tarVES=0,MonedaCambio='USD')=>({Moneda:'MIXTA',MonedaCambio,Desglose:{USD:{Efectivo:usd,Tarjeta:tarUSD},VES:{Efectivo:ves,Tarjeta:tarVES}}});
 const venta=p=>({MetodoPago:p.Metodo,PagoMonedaJSON:JSON.stringify(p)});
@@ -53,8 +53,29 @@ test('caja agrega ventas antiguas, moneda única y combinadas con distintas tasa
 });
 test('apertura y cierre físico no compensan faltante USD con sobrante VES',()=>{
  const a=calcularArqueo({MontoApertura:20,MontoAperturaVES:100},{EfectivoOriginalUSD:12,EfectivoOriginalVES:700},{USD:30,VES:900});
- assert.deepEqual(a.USD,{Apertura:20,VentasNetas:12,Esperado:32,Contado:30,Diferencia:-2});
- assert.deepEqual(a.VES,{Apertura:100,VentasNetas:700,Esperado:800,Contado:900,Diferencia:100});
+ assert.deepEqual(a.USD,{Apertura:20,VentasNetas:12,Movimientos:0,Esperado:32,Contado:30,Diferencia:-2});
+ assert.deepEqual(a.VES,{Apertura:100,VentasNetas:700,Movimientos:0,Esperado:800,Contado:900,Diferencia:100});
+});
+test('egreso e ingreso ajustan el efectivo esperado por su propia moneda',()=>{
+ // Egreso de $5 (gasto pagado de caja) baja el esperado USD; ingreso de Bs50 lo sube en VES.
+ const movs=[{Tipo:'EGRESO',Moneda:'USD',Monto:5,Status:'ACTIVO'},{Tipo:'INGRESO',Moneda:'VES',Monto:50,Status:'ACTIVO'}];
+ assert.deepEqual(efectoMovimientos(movs),{USD:-5,VES:50});
+ const a=calcularArqueo({MontoApertura:20,MontoAperturaVES:100},{EfectivoOriginalUSD:12,EfectivoOriginalVES:700},{USD:27,VES:850},movs);
+ assert.deepEqual(a.USD,{Apertura:20,VentasNetas:12,Movimientos:-5,Esperado:27,Contado:27,Diferencia:0});
+ assert.deepEqual(a.VES,{Apertura:100,VentasNetas:700,Movimientos:50,Esperado:850,Contado:850,Diferencia:0});
+});
+test('retiro y devolución restan; los movimientos de una moneda no tocan la otra',()=>{
+ const movs=[{Tipo:'RETIRO',Moneda:'USD',Monto:10,Status:'ACTIVO'},{Tipo:'DEVOLUCION',Moneda:'VES',Monto:200,Status:'ACTIVO'}];
+ assert.deepEqual(efectoMovimientos(movs),{USD:-10,VES:-200});
+});
+test('un movimiento ANULADO no afecta el arqueo',()=>{
+ const movs=[{Tipo:'EGRESO',Moneda:'USD',Monto:5,Status:'ANULADO'},{Tipo:'EGRESO',Moneda:'USD',Monto:3,Status:'ACTIVO'}];
+ assert.deepEqual(efectoMovimientos(movs),{USD:-3,VES:0});
+});
+test('movimiento con tipo o moneda inválidos o monto no admitido se rechaza',()=>{
+ assert.throws(()=>efectoMovimientos([{Tipo:'DEPOSITO',Moneda:'USD',Monto:5,Status:'ACTIVO'}]));
+ assert.throws(()=>efectoMovimientos([{Tipo:'EGRESO',Moneda:'EUR',Monto:5,Status:'ACTIVO'}]));
+ for(const n of [-1,NaN,Infinity,0.001]) assert.throws(()=>efectoMovimientos([{Tipo:'EGRESO',Moneda:'USD',Monto:n,Status:'ACTIVO'}]));
 });
 test('cero en caja es válido; no admite negativos, ausencia ni centavos fraccionarios',()=>{
  assert.equal(calcularArqueo({MontoApertura:0},{},{USD:0,VES:0}).VES.Diferencia,0);

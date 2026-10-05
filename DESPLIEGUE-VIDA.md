@@ -16,7 +16,8 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
 - [ ] Flujo E2E verde (auditoría + día-en-la-tienda) — ver `AUDITORIA-VIDA.md`.
 - [ ] **Backup de la BD de producción** tomado y verificado (restaurable). Las migraciones no tienen rollback automático.
 - [ ] Ventana de mantenimiento acordada si habrá downtime.
-- [ ] Anota la lista de migraciones nuevas respecto al último despliegue (no hay tabla de control; es responsabilidad de quien despliega).
+- [ ] El migrador **sí lleva tabla de control** (`VIDA_SCHEMA_MIGRATIONS`); `npm run migrate:status` te dice qué falta. Aun así, revisa el rango de migraciones nuevas (hoy el repo llega a **47**, 48 archivos — hay dos con prefijo `12`).
+- [ ] `cd backend && npm install` y `cd frontend && npm install` — esta versión suma deps nuevas (frontend: `exceljs`, `xlsx`, `jspdf`, `jspdf-autotable`, `quill`, `dompurify`, `qrcode`; backend: `qrcode`). Un deploy que solo copia archivos sin `npm install` romperá exportaciones PDF/Excel y el editor de Academia.
 
 ---
 
@@ -32,7 +33,7 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
 
 **Opción B — manual (fallback).** Abrir **SSMS** conectado a la BD de producción (no QA) y correr en orden las migraciones pendientes de `sql/`, una por una, del número más bajo al más alto (usan `GO`, no mandar el archivo como una sola sentencia).
 
-- [ ] Las migraciones que **insertan pantallas del sidebar** (`VIDA_CUENTA_PANTALLAS`: 25–29, 32 cupones) conceden acceso a roles; revisa que el sidebar del panel las muestre tras desplegar.
+- [ ] Las migraciones que **insertan pantallas del sidebar** (`VIDA_CUENTA_PANTALLAS`: 25–29, 32 cupones, y las de cuentas/notas de crédito/academia 33–46) conceden acceso a roles; revisa que el sidebar del panel las muestre tras desplegar.
 - [ ] Si es una BD nueva desde cero: insertar el primer usuario a mano en `VIDA_CUENTA_USUARIOS` (bcrypt 12 rounds) — ningún `.sql` crea usuarios.
 - [ ] Sanity check: `SELECT COUNT(*) FROM VIDA_CUENTA_PANTALLAS;` y confirmar tiendas/productos esperados.
 
@@ -56,8 +57,11 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
   PORT=3001
   FRONTEND_URL=https://app.comercializadoravida.com
   BASE_URL=https://app.comercializadoravida.com   # URLs de correos de registro/delivery
+
+  PUNTOS_EXPIRACION_INTERVALO_MS=86400000   # vencimiento de puntos (1 día). 0 lo desactiva.
   ```
 - [ ] Completar SMTP y credenciales de Google Sign-In en el `.env` si aplican (ver `.env.example`).
+- [ ] **Salida a internet (egress) permitida hacia `https://bcv.today`** — el servicio de tasa automática (BCV) la consulta bajo demanda al cotizar. Sin salida, el backend no fabrica una tasa (por diseño) y las ventas en VES fallarán al no tener cotización vigente.
 - [ ] Confirmar que `web.config` (IIS + iisnode) está presente en `backend/`.
 - [ ] Subir el backend por FTP/panel de SmarterASP (incluye `node_modules` si el hosting no corre `npm install`, o instálalos allá).
 - [ ] **Preservar `backend/uploads/`** — las imágenes subidas viven ahí y NO están en git; no borrarlas en el deploy.
@@ -70,7 +74,8 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
 ## 3. Panel web (React + Vite)
 
 - [ ] `cd frontend && npm install && npm run build`.
-- [ ] **No** completar `frontend/.env.production`: en prod el panel consume `/api` del mismo origen; las URLs vacías son a propósito (solo cámbialas si el API se muda de host).
+- [ ] **No** completar `VITE_API_URL`/`VITE_WS_URL` en prod: el panel consume `/api` del mismo origen; las URLs vacías son a propósito (solo cámbialas si el API se muda de host).
+- [ ] **`VITE_GOOGLE_MAPS_KEY` sí debe estar presente al correr `npm run build`** (se inyecta en build time). Sin ella no cargan el **selector de ubicación de Nueva tienda** (Sucursales) ni el **mapa de Logística**. Usa una key de **producción** restringida a "Maps JavaScript API" y a los dominios del panel.
 - [ ] Confirmar que `public/web.config` (rewrite del SPA) quede incluido en el `dist/`.
 - [ ] Subir el contenido de `frontend/dist/` al sitio (misma raíz donde cuelga `/api`).
 - [ ] Verificar en el navegador:
@@ -115,6 +120,8 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
 
 ## Pendientes conocidos (no bloquean el deploy, informar al negocio)
 
-- **Cupones:** NO existe módulo de cupones todavía. El spec lo menciona como Marketing fase 2 (pendiente). Lo que sí hay es **promociones** (descuento por producto/categoría) y **puntos/canje**.
-- Integración **real de telco/pagos** y **Google Maps key** de producción: validar credenciales propias de prod.
-- `INSTALACION.md` menciona migraciones "01..24" (desactualizado) — el rango real hoy es **01..29**.
+- **Cupones:** ya existe módulo de cupones (migración `32_cupones.sql` + pantalla en panel), además de **promociones** (descuento por producto/categoría) y **puntos/canje**. Lo que sigue pendiente de Marketing fase 2 es la automatización/redes.
+- Integración **real de telco/pagos**: validar credenciales propias de prod.
+- **Google Maps key de producción** (`VITE_GOOGLE_MAPS_KEY`): validar la key propia de prod, restringida a Maps JavaScript API y a los dominios del panel.
+- **Factura fiscal:** decisión de negocio pendiente (qué formato/impresión fiscal se requiere en Venezuela).
+- `INSTALACION.md` puede mencionar un rango viejo de migraciones — el rango real hoy es **01..47** (48 archivos).
