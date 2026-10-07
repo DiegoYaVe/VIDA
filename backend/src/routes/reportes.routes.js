@@ -12,8 +12,9 @@ import {
   reporteRed,
 } from '../controllers/reportes.controller.js';
 
-// Roles con acceso a reportes (todos excepto CASHIER/CAJERO básico que solo ven su sucursal)
-const REPORTES = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
+// Roles con acceso a reportes; cada uno ve solo su alcance (ver alcanceGeo en
+// reportes.controller.js): tienda, estado, país o toda la cuenta.
+const REPORTES = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
 
 export async function reportesRoutes(fastify) {
   const pre = { preHandler: [authenticate, requireRole(...REPORTES)] };

@@ -4,54 +4,74 @@ import {construirConciliacionPagoMovil} from '../services/conciliacionPagoMovil.
 // src/controllers/reportes.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPER: construye el filtro de acceso + los filtros opcionales de geografía
-// Modifica el objeto `req` (mssql request) in-place y devuelve la cadena WHERE
-// ─────────────────────────────────────────────────────────────────────────────
-function buildGeoFilter(user, query, dbReq) {
-  const { TipoUsuario, idPuntoVenta } = user;
-  const { filtroPais, filtroEstado, filtroIdPuntoVenta } = query;
+const ROLES_TIENDA = ['ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
 
-  // Roles de solo-su-tienda: ADMIN de tienda, supervisor y cajero quedan
-  // forzados a su propio punto de venta (no ven reportes de otras tiendas).
-  if (['ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'].includes(TipoUsuario)) {
-    dbReq.input('geoForzado', sql.BigInt, idPuntoVenta);
-    return ' AND pv.idPuntoVenta = @geoForzado';
-  }
+// ─────────────────────────────────────────────────────────────────────────────
+// Alcance geográfico de cada rol sobre las tiendas (VIDA_CUENTA_PUNTOS_VENTA):
+//  - ADMIN / SUPERVISOR / CAJERO / CASHIER: solo su tienda.
+//  - ADMIN_ESTADO: solo las tiendas de su estado. Sin estado asignado no ve
+//    nada: un error de configuración no debe abrirle toda la red.
+//  - ADMIN_PAIS: solo su país si lo tiene asignado; si no, toda la cuenta.
+//  - SUPER_ADMIN: toda la cuenta.
+// Devuelve la condición SQL (columnas con el prefijo `alias`) y sus parámetros.
+// ─────────────────────────────────────────────────────────────────────────────
+export function alcanceGeo(user, alias = 'pv') {
+  const { TipoUsuario, idPuntoVenta, idEstado, idPais } = user || {};
+  const col = (c) => (alias ? `${alias}.${c}` : c);
+  if (ROLES_TIENDA.includes(TipoUsuario))
+    return { sql: ` AND ${col('idPuntoVenta')} = @geoForzado`, params: [['geoForzado', sql.BigInt, idPuntoVenta ?? null]] };
+  if (TipoUsuario === 'ADMIN_ESTADO')
+    return idEstado != null
+      ? { sql: ` AND ${col('idEstado')} = @geoAlcance`, params: [['geoAlcance', sql.BigInt, idEstado]] }
+      : { sql: ' AND 1 = 0', params: [] };
+  if (TipoUsuario === 'ADMIN_PAIS' && idPais != null)
+    return { sql: ` AND ${col('idPais')} = @geoAlcance`, params: [['geoAlcance', sql.BigInt, idPais]] };
+  return { sql: '', params: [] };
+}
 
-  // SUPER_ADMIN / ADMIN_PAIS: acceso completo con filtros opcionales
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPER: alcance del rol + filtros opcionales de geografía del selector, que
+// siempre se aplican DENTRO de ese alcance. Agrega los parámetros a `dbReq`
+// (mssql request) y devuelve la condición WHERE.
+// ─────────────────────────────────────────────────────────────────────────────
+export function buildGeoFilter(user, query, dbReq) {
+  const alcance = alcanceGeo(user);
+  for (const [nombre, tipo, valor] of alcance.params) dbReq.input(nombre, tipo, valor);
+
+  // Los roles de tienda ya quedan fijados a su tienda: no aplican filtros.
+  if (ROLES_TIENDA.includes(user?.TipoUsuario)) return alcance.sql;
+
+  const { filtroPais, filtroEstado, filtroIdPuntoVenta } = query || {};
   if (filtroIdPuntoVenta) {
     dbReq.input('geoPV', sql.BigInt, filtroIdPuntoVenta);
-    return ' AND pv.idPuntoVenta = @geoPV';
+    return `${alcance.sql} AND pv.idPuntoVenta = @geoPV`;
   }
   if (filtroEstado) {
     dbReq.input('geoEstado', sql.VarChar(100), filtroEstado);
-    return ' AND pv.Estado = @geoEstado';
+    return `${alcance.sql} AND pv.Estado = @geoEstado`;
   }
   if (filtroPais) {
     dbReq.input('geoPais', sql.VarChar(100), filtroPais);
-    return ' AND pv.Pais = @geoPais';
+    return `${alcance.sql} AND pv.Pais = @geoPais`;
   }
-  return '';
+  return alcance.sql;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/reportes/filtros  — opciones disponibles para los selectores del UI
 // ─────────────────────────────────────────────────────────────────────────────
 export async function obtenerFiltros(request, reply) {
-  const { idBranch, idCuenta, TipoUsuario, idPuntoVenta } = request.user;
+  const { idBranch, idCuenta } = request.user;
   try {
     const pool = await getPool();
     const req = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta);
 
-    let whereExtra = '';
-    // El dropdown de tiendas solo muestra la propia para roles de tienda.
-    if (['ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'].includes(TipoUsuario)) {
-      req.input('pvFilt', sql.BigInt, idPuntoVenta);
-      whereExtra = ' AND idPuntoVenta = @pvFilt';
-    }
+    // El selector solo ofrece las tiendas dentro del alcance del rol.
+    const alcance = alcanceGeo(request.user, '');
+    for (const [nombre, tipo, valor] of alcance.params) req.input(nombre, tipo, valor);
+    const whereExtra = alcance.sql;
 
     const r = await req.query(`
       SELECT idPuntoVenta, NomComercial AS NombrePuntoVenta, Ciudad, Estado, Pais, Status
