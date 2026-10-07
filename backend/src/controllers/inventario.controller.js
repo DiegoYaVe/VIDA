@@ -1,4 +1,4 @@
-import { operadorMatriz } from '../services/alcance.service.js';
+import { operadorMatriz, tiendaEnAlcance, filtroTiendasRed } from '../services/alcance.service.js';
 // src/controllers/inventario.controller.js
 import path from 'path';
 import fs from 'fs';
@@ -203,10 +203,15 @@ export async function listarProductos(request, reply) {
       // Los roles de red pueden consultar el agregado (sin parámetro) o el
       // stock de una tienda concreta (POS / selector de tienda). Los roles de
       // tienda siempre quedan limitados a la tienda incluida en su JWT.
+      // El agregado de un rol regional suma solo las tiendas de su alcance.
       const pvStock = esRed ? idPuntoVenta : pvUsuario;
       if (pvStock) {
+        if (esRed && !(await tiendaEnAlcance(request.user, pvStock, pool)))
+          return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
         req.input('pvStock', sql.BigInt, pvStock);
         filtroStockPv = ' AND s2.idPuntoVenta = @pvStock';
+      } else if (esRed) {
+        filtroStockPv = filtroTiendasRed(request.user, 's2.idPuntoVenta', req);
       }
       query = `
         SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
@@ -508,6 +513,8 @@ export async function verStock(request, reply) {
 
   try {
     const pool = await getPool();
+    if (!(await tiendaEnAlcance(request.user, idPuntoVenta, pool)))
+      return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
 
     let filtroStock = soloStockBajo === 'true'
       ? 'AND ISNULL(s.Cantidad, 0) <= p.StockMinimo'

@@ -39,8 +39,11 @@ export async function listarPuntosVenta(request, reply) {
     } else if (['ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'].includes(TipoUsuario) && idPuntoVenta) {
       req.input('idPuntoVenta', sql.BigInt, idPuntoVenta);
       whereExtra = 'AND pv.idPuntoVenta = @idPuntoVenta';
+    } else if (TipoUsuario === 'ADMIN_ESTADO' || ['ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'].includes(TipoUsuario)) {
+      // Sin su estado/tienda asignado no ve ninguna (antes veía todas).
+      whereExtra = 'AND 1 = 0';
     }
-    // SUPER_ADMIN: sin filtro, ve todo
+    // SUPER_ADMIN (y ADMIN_PAIS sin país asignado): sin filtro, ve todo
 
     const r = await req.query(`
       SELECT pv.idPuntoVenta, pv.Nombre, pv.NomComercial, pv.TipoPuntoVenta,

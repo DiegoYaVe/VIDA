@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { alcanceGeo, buildGeoFilter } from '../src/controllers/reportes.controller.js';
+import { filtroTiendasRed, tiendaEnAlcance } from '../src/services/alcance.service.js';
 
 // Request de mssql simulado: guarda los parámetros que recibe.
 const fakeReq = () => { const r = { p: {} }; r.input = (n, _t, v) => { r.p[n] = v; return r; }; return r; };
@@ -48,4 +49,30 @@ test('SUPER_ADMIN: toda la cuenta, con filtros opcionales', () => {
 
 test('alcanceGeo sin alias (selector de tiendas)', () => {
   assert.equal(alcanceGeo({ TipoUsuario: 'ADMIN_ESTADO', idEstado: '10' }, '').sql, ' AND idEstado = @geoAlcance');
+});
+
+test('filtroTiendasRed: ADMIN_ESTADO limita la columna de tienda a su estado', () => {
+  const r = fakeReq();
+  const w = filtroTiendasRed({ TipoUsuario: 'ADMIN_ESTADO', idEstado: '10' }, 'p.idPuntoVenta', r);
+  assert.match(w, /p\.idPuntoVenta IN \(SELECT alc\.idPuntoVenta FROM VIDA_CUENTA_PUNTOS_VENTA alc/);
+  assert.match(w, /alc\.idEstado=@alcRed/);
+  assert.equal(r.p.alcRed, '10');
+});
+
+test('filtroTiendasRed: sin estado nada; ADMIN_PAIS por país; SUPER_ADMIN y ADMIN_PAIS sin país sin filtro', () => {
+  assert.equal(filtroTiendasRed({ TipoUsuario: 'ADMIN_ESTADO', idEstado: null }, 'x', fakeReq()), ' AND 1 = 0');
+  assert.match(filtroTiendasRed({ TipoUsuario: 'ADMIN_PAIS', idPais: '1' }, 'x', fakeReq()), /alc\.idPais=@alcRed/);
+  assert.equal(filtroTiendasRed({ TipoUsuario: 'ADMIN_PAIS', idPais: null }, 'x', fakeReq()), '');
+  assert.equal(filtroTiendasRed({ TipoUsuario: 'SUPER_ADMIN' }, 'x', fakeReq()), '');
+});
+
+test('tiendaEnAlcance sin consultar la BD: tienda propia, super admin, estado sin asignar', async () => {
+  assert.equal(await tiendaEnAlcance({ TipoUsuario: 'CAJERO', idPuntoVenta: '3' }, '3'), true);
+  assert.equal(await tiendaEnAlcance({ TipoUsuario: 'CAJERO', idPuntoVenta: '3' }, '4'), false);
+  assert.equal(await tiendaEnAlcance({ TipoUsuario: 'ADMIN', idPuntoVenta: null }, '3'), false);
+  assert.equal(await tiendaEnAlcance({ TipoUsuario: 'SUPER_ADMIN' }, '99'), true);
+  assert.equal(await tiendaEnAlcance({ TipoUsuario: 'ADMIN_PAIS', idPais: null }, '99'), true);
+  assert.equal(await tiendaEnAlcance({ TipoUsuario: 'ADMIN_ESTADO', idEstado: null }, '99'), false);
+  assert.equal(await tiendaEnAlcance({ TipoUsuario: 'SUPER_ADMIN' }, null), false);
+  assert.equal(await tiendaEnAlcance({ TipoUsuario: 'CLIENTE' }, '3'), false);
 });

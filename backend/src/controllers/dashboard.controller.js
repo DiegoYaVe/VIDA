@@ -1,6 +1,7 @@
 // src/controllers/dashboard.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
 import { fechaCaracas, sumarDias } from '../services/fechas.service.js';
+import { alcanceGeo, filtroTiendasRed } from '../services/alcance.service.js';
 
 // Días de negocio de Caracas (no la fecha UTC ni la del servidor).
 const HOY   = () => fechaCaracas();
@@ -20,8 +21,18 @@ export async function getStats(request, reply) {
 
     // ── Filtro de acceso ─────────────────────────────────────────────────────
     // Para cajeros/supervisores filtramos por su punto de venta
-    const pvWhere = alcanceTienda ? ' AND p.idPuntoVenta = @pvId' : '';
-    const pvWhereM = alcanceTienda ? ' AND s.idPuntoVenta = @pvId' : '';
+    // Roles de red: solo las tiendas de su alcance (ADMIN_ESTADO: su estado;
+    // ADMIN_PAIS: su país). Los parámetros se agregan a cada consulta.
+    const paramsRed = [];
+    const colector = { input: (...p) => paramsRed.push(p) };
+    const redP = esRed ? filtroTiendasRed(request.user, 'p.idPuntoVenta', colector) : '';
+    const redS = esRed ? filtroTiendasRed(request.user, 's.idPuntoVenta', { input() {} }) : '';
+    const conAlcance = (req) => { for (const p of paramsRed) req.input(...p); return req; };
+    const pvWhere = alcanceTienda ? ' AND p.idPuntoVenta = @pvId' : redP;
+    const pvWhereM = alcanceTienda ? ' AND s.idPuntoVenta = @pvId' : redS;
+    // Alcance sobre la tabla de tiendas (ranking, contadores, conexión)
+    const alcPV = alcanceGeo(request.user, 'pv'), alcT = alcanceGeo(request.user, '');
+    const conGeo = (req, alc) => { for (const p of alc.params) req.input(...p); return req; };
 
     const base = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
@@ -30,7 +41,7 @@ export async function getStats(request, reply) {
       .input('ayer',      sql.Date,   new Date(AYER()))
       .input('hace7',     sql.Date,   new Date(HACE7()));
 
-    if (alcanceTienda) base.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base.input('pvId', sql.BigInt, idPuntoVenta); else conAlcance(base);
 
     // ── 1. Ventas HOY y AYER ─────────────────────────────────────────────────
     const qVentas = await base.query(`
@@ -54,7 +65,7 @@ export async function getStats(request, reply) {
       .input('idCuenta',  sql.BigInt, idCuenta)
       .input('hace7',     sql.Date,   new Date(HACE7()))
       .input('hoy',       sql.Date,   new Date(HOY()));
-    if (alcanceTienda) base2.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base2.input('pvId', sql.BigInt, idPuntoVenta); else conAlcance(base2);
 
     const qGrafica = await base2.query(`
       SELECT
@@ -75,7 +86,7 @@ export async function getStats(request, reply) {
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta',  sql.BigInt, idCuenta)
       .input('hoy',       sql.Date,   new Date(HOY()));
-    if (alcanceTienda) base3.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base3.input('pvId', sql.BigInt, idPuntoVenta); else conAlcance(base3);
 
     const qTop = await base3.query(`
       SELECT TOP 5
@@ -98,7 +109,7 @@ export async function getStats(request, reply) {
     // ── 4. Top 5 sucursales HOY (solo admins) ─────────────────────────────────
     let topSucursales = [];
     if (esRed) {
-      const qSuc = await pool.request()
+      const qSuc = await conGeo(pool.request(), alcPV)
         .input('idBranch', sql.BigInt, idBranch)
         .input('idCuenta',  sql.BigInt, idCuenta)
         .input('hoy',       sql.Date,   new Date(HOY()))
@@ -116,6 +127,7 @@ export async function getStats(request, reply) {
           WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
             AND p.Canal = 'POS' AND p.Status = 'ENTREGADO'
             AND CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) = @hoy
+            ${alcPV.sql}
           GROUP BY pv.NomComercial, pv.Ciudad, pv.Estado
           ORDER BY TotalUSD DESC
         `);
@@ -126,7 +138,7 @@ export async function getStats(request, reply) {
     const base5 = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta',  sql.BigInt, idCuenta);
-    if (alcanceTienda) base5.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base5.input('pvId', sql.BigInt, idPuntoVenta); else conAlcance(base5);
 
     const qStock = await base5.query(`
       SELECT COUNT(*) AS TotalBajoStock
@@ -144,7 +156,7 @@ export async function getStats(request, reply) {
     const base5b = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta',  sql.BigInt, idCuenta);
-    if (alcanceTienda) base5b.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base5b.input('pvId', sql.BigInt, idPuntoVenta); else conAlcance(base5b);
 
     const qStockDet = await base5b.query(`
       SELECT TOP 5
@@ -170,7 +182,7 @@ export async function getStats(request, reply) {
     const base6 = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta',  sql.BigInt, idCuenta);
-    if (alcanceTienda) base6.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base6.input('pvId', sql.BigInt, idPuntoVenta); else conAlcance(base6);
 
     const qPedidos = await base6.query(`
       SELECT
@@ -189,7 +201,7 @@ export async function getStats(request, reply) {
     const base7 = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta',  sql.BigInt, idCuenta);
-    if (alcanceTienda) base7.input('pvId', sql.BigInt, idPuntoVenta);
+    if (alcanceTienda) base7.input('pvId', sql.BigInt, idPuntoVenta); else conAlcance(base7);
 
     const qRecientes = await base7.query(`
       SELECT TOP 8
@@ -225,26 +237,28 @@ export async function getStats(request, reply) {
     let totalesGlobales = qCat.recordset[0];
 
     if (esRed) {
-      const qRed = await pool.request()
+      const reqRed = conGeo(pool.request(), alcT)
         .input('idBranch', sql.BigInt, idBranch)
-        .input('idCuenta',  sql.BigInt, idCuenta)
+        .input('idCuenta',  sql.BigInt, idCuenta);
+      const usuariosRed = filtroTiendasRed(request.user, 'idPuntoVenta', reqRed);
+      const qRed = await reqRed
         .query(`
           SELECT
-            (SELECT COUNT(*) FROM VIDA_CUENTA_PUNTOS_VENTA WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO')                               AS TotalSucursales,
-            (SELECT COUNT(*) FROM VIDA_CUENTA_PUNTOS_VENTA WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO' AND StatusConexion='ONLINE')    AS SucursalesOnline,
-            (SELECT COUNT(*) FROM VIDA_CUENTA_USUARIOS       WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO')                              AS TotalUsuarios
+            (SELECT COUNT(*) FROM VIDA_CUENTA_PUNTOS_VENTA WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO' ${alcT.sql})                               AS TotalSucursales,
+            (SELECT COUNT(*) FROM VIDA_CUENTA_PUNTOS_VENTA WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO' AND StatusConexion='ONLINE' ${alcT.sql})    AS SucursalesOnline,
+            (SELECT COUNT(*) FROM VIDA_CUENTA_USUARIOS       WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO' ${usuariosRed})                              AS TotalUsuarios
         `);
       totalesGlobales = { ...totalesGlobales, ...qRed.recordset[0] };
 
       // Lista de tiendas con su estado de conexión (solo red)
-      const qConex = await pool.request()
+      const qConex = await conGeo(pool.request(), alcT)
         .input('idBranch', sql.BigInt, idBranch)
         .input('idCuenta',  sql.BigInt, idCuenta)
         .query(`
           SELECT idPuntoVenta, NomComercial AS Nombre, Ciudad, Estado,
                  StatusConexion, UltimoHeartbeat
           FROM VIDA_CUENTA_PUNTOS_VENTA
-          WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND Status = 'ACTIVO'
+          WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND Status = 'ACTIVO' ${alcT.sql}
           ORDER BY StatusConexion DESC, NomComercial
         `);
       sucursalesConexion = qConex.recordset;

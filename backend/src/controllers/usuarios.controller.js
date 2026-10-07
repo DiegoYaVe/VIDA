@@ -168,6 +168,10 @@ export async function listarUsuarios(request, reply) {
       whereExtra += ` AND u.idEstado = @geoIdEstado`;
     } else if (['ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'].includes(TipoUsuario) && idPuntoVenta) {
       whereExtra += ` AND u.idPuntoVenta = @geoIdPV`;
+    } else if (TipoUsuario === 'ADMIN_ESTADO' || ['ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'].includes(TipoUsuario)) {
+      // Rol regional o de tienda sin su estado/tienda asignado: no ve a nadie
+      // (antes caía al caso sin filtro y veía a todos los usuarios de la cuenta).
+      whereExtra += ' AND 1 = 0';
     }
 
     const req = pool.request()
@@ -216,6 +220,8 @@ export async function listarUsuarios(request, reply) {
     if (['ADMIN','SUPERVISOR','CAJERO','CASHIER'].includes(TipoUsuario) && idPuntoVenta) {
       countReq.input('cIdPV', sql.BigInt, idPuntoVenta); countWhere = 'AND idPuntoVenta=@cIdPV';
     }
+    if ((TipoUsuario === 'ADMIN_ESTADO' && !idEstado) ||
+        (['ADMIN','SUPERVISOR','CAJERO','CASHIER'].includes(TipoUsuario) && !idPuntoVenta)) countWhere = 'AND 1 = 0';
 
     const totalRes = await countReq.query(
       `SELECT COUNT(*) AS total FROM VIDA_CUENTA_USUARIOS WHERE idBranch=@idBranch AND idCuenta=@idCuenta ${countWhere}`

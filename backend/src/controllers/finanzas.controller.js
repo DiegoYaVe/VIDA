@@ -3,11 +3,13 @@
 // y el sistema calcula punto de equilibrio, rentabilidad en 3 modos (Solo Plus /
 // Mixto / Solo Normal) y meta diaria. Operación USD-only.
 import { getPool, sql } from '../db/sqlserver.js';
+import { tiendaEnAlcance } from '../services/alcance.service.js';
 
 const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
 
 // Punto de venta efectivo: roles de tienda quedan forzados al suyo; los de red
-// pueden consultar/guardar el que pasen por query/body.
+// pueden consultar/guardar el que pasen por query/body, siempre que esté en su
+// alcance (cada handler lo verifica con tiendaEnAlcance).
 function pvEfectivo(request, pvExplicito) {
   const { TipoUsuario, idPuntoVenta } = request.user;
   const esRed = ROLES_RED.includes(TipoUsuario);
@@ -36,6 +38,7 @@ export async function obtenerFinanzas(request, reply) {
   const { idBranch, idCuenta } = request.user;
   const idPuntoVenta = pvEfectivo(request, request.query.idPuntoVenta);
   if (!idPuntoVenta) return reply.code(400).send({ error: 'Se requiere idPuntoVenta' });
+  if (!(await tiendaEnAlcance(request.user, idPuntoVenta))) return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
   try {
     const pool = await getPool();
     const fin = await leerFinanzas(pool, idBranch, idCuenta, idPuntoVenta);
@@ -52,6 +55,7 @@ export async function guardarFinanzas(request, reply) {
   const b = request.body || {};
   const idPuntoVenta = pvEfectivo(request, b.idPuntoVenta);
   if (!idPuntoVenta) return reply.code(400).send({ error: 'Se requiere idPuntoVenta' });
+  if (!(await tiendaEnAlcance(request.user, idPuntoVenta))) return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
 
   const num = (v) => (v === '' || v == null || isNaN(Number(v)) ? 0 : Number(v));
   try {
@@ -131,6 +135,7 @@ export async function obtenerMetas(request, reply) {
   const { idBranch, idCuenta } = request.user;
   const idPuntoVenta = pvEfectivo(request, request.query.idPuntoVenta);
   if (!idPuntoVenta) return reply.code(400).send({ error: 'Se requiere idPuntoVenta' });
+  if (!(await tiendaEnAlcance(request.user, idPuntoVenta))) return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
   try {
     const pool = await getPool();
     const metas = await leerMetas(pool, idBranch, idCuenta, idPuntoVenta);
@@ -147,6 +152,7 @@ export async function guardarMetas(request, reply) {
   const b = request.body || {};
   const idPuntoVenta = pvEfectivo(request, b.idPuntoVenta);
   if (!idPuntoVenta) return reply.code(400).send({ error: 'Se requiere idPuntoVenta' });
+  if (!(await tiendaEnAlcance(request.user, idPuntoVenta))) return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
   const num = (v) => (v === '' || v == null || isNaN(Number(v)) ? 0 : Number(v));
   try {
     const pool = await getPool();
@@ -179,6 +185,7 @@ export async function progresoMetas(request, reply) {
   const { idBranch, idCuenta } = request.user;
   const idPuntoVenta = pvEfectivo(request, request.query.idPuntoVenta);
   if (!idPuntoVenta) return reply.code(400).send({ error: 'Se requiere idPuntoVenta' });
+  if (!(await tiendaEnAlcance(request.user, idPuntoVenta))) return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
   try {
     const pool = await getPool();
     const metas = await leerMetas(pool, idBranch, idCuenta, idPuntoVenta);
@@ -224,6 +231,7 @@ export async function calcularRentabilidad(request, reply) {
   const { idBranch, idCuenta } = request.user;
   const idPuntoVenta = pvEfectivo(request, request.query.idPuntoVenta);
   if (!idPuntoVenta) return reply.code(400).send({ error: 'Se requiere idPuntoVenta' });
+  if (!(await tiendaEnAlcance(request.user, idPuntoVenta))) return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
 
   try {
     const pool = await getPool();

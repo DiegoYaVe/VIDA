@@ -5,6 +5,7 @@ import { broadcast } from '../ws/ws.manager.js';
 import { enviarPush } from '../services/push.service.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 import { fechaCaracas } from '../services/fechas.service.js';
+import { tiendaEnAlcance, filtroTiendasRed } from '../services/alcance.service.js';
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
@@ -60,6 +61,8 @@ export async function listarPedidos(request, reply) {
     if (canal)        whereExtra += ' AND p.Canal = @canal';
     if (idPuntoVenta) whereExtra += ' AND p.idPuntoVenta = @idPuntoVenta';
     if (requiereRevision === '1') whereExtra += ' AND p.RequiereRevision = 1';
+    // Roles de red: solo pedidos de tiendas de su alcance
+    const conRed = esRed ? (rq) => filtroTiendasRed(request.user, 'p.idPuntoVenta', rq) : () => '';
 
     const req = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
@@ -70,6 +73,7 @@ export async function listarPedidos(request, reply) {
     if (status)       req.input('status',       sql.VarChar(20), status);
     if (canal)        req.input('canal',         sql.VarChar(10), canal);
     if (idPuntoVenta) req.input('idPuntoVenta',  sql.BigInt,      idPuntoVenta);
+    whereExtra += conRed(req);
 
     const r = await req.query(`
       SELECT p.idPedido, p.Canal, p.Status, p.MetodoPago, p.StatusPago,
@@ -103,6 +107,7 @@ export async function listarPedidos(request, reply) {
     if (status)       totalReq.input('status',      sql.VarChar(20), status);
     if (canal)        totalReq.input('canal',        sql.VarChar(10), canal);
     if (idPuntoVenta) totalReq.input('idPuntoVenta', sql.BigInt,      idPuntoVenta);
+    conRed(totalReq);
 
     const totalR = await totalReq.query(`
       SELECT COUNT(*) AS total FROM VIDA_PEDIDOS p
@@ -616,7 +621,7 @@ export async function sincronizarVentasOffline(request, reply) {
         continue;
       }
 
-      if (!['SUPER_ADMIN','ADMIN_PAIS','ADMIN_ESTADO'].includes(request.user.TipoUsuario) && String(venta.idPuntoVenta)!==String(request.user.idPuntoVenta)) throw new Error('Tienda no autorizada');
+      if (!(await tiendaEnAlcance(request.user, venta.idPuntoVenta, pool))) throw new Error('Tienda no autorizada');
 
       // Idempotencia: si el UUID ya está registrado, se responde como synced
       const dupR = await pool.request()
@@ -1070,8 +1075,8 @@ export async function revisarComprobante(request, reply) {
       return reply.code(404).send({ error:'Comprobante no encontrado' });
     }
     const pedido = actual.recordset[0];
-    // Los roles de tienda solo revisan pagos de su propia tienda; la red, todas.
-    if (!['SUPER_ADMIN','ADMIN_PAIS','ADMIN_ESTADO'].includes(TipoUsuario) && String(pedido.idPuntoVenta) !== String(pvUsuario)) {
+    // Cada rol revisa pagos solo de las tiendas de su alcance.
+    if (!(await tiendaEnAlcance(request.user, pedido.idPuntoVenta, pool))) {
       await transaction.rollback(); transaction=null;
       return reply.code(403).send({ error:'No puedes revisar pagos de otra tienda' });
     }
@@ -1264,6 +1269,8 @@ export async function listarVentasPOS(request, reply) {
       req.input('idPuntoVenta', sql.BigInt, idPuntoVenta);
       whereExtra = 'AND p.idPuntoVenta = @idPuntoVenta';
     }
+    // Roles de red: solo ventas de tiendas de su alcance
+    if (esRed) whereExtra += filtroTiendasRed(request.user, 'p.idPuntoVenta', req);
 
     // Pedidos POS entregados (ventas completadas)
     const pedidosR = await req.query(`

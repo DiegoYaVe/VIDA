@@ -3,6 +3,7 @@ import { getPool, sql } from '../db/sqlserver.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 import {efectivoPorMoneda,calcularArqueo,efectoMovimientos} from '../services/arqueo.service.js';
 import {importeCaja} from '../services/pagoPos.service.js';
+import { tiendaEnAlcance, filtroTiendasRed } from '../services/alcance.service.js';
 
 // ── Helper ──────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
@@ -24,8 +25,9 @@ async function nextIdTx(transaction, tabla, campo, idBranch, idCuenta) {
 }
 
 // Solo los roles de RED pueden operar/ver la caja de OTRA tienda (pasando
-// idPuntoVenta). Los roles de tienda (ADMIN, SUPERVISOR, CAJERO) quedan
-// forzados a su propio punto de venta.
+// idPuntoVenta), y solo dentro de su alcance (ADMIN_ESTADO: su estado; ver
+// services/alcance.service.js). Los roles de tienda (ADMIN, SUPERVISOR,
+// CAJERO) quedan forzados a su propio punto de venta.
 const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
 
 function esRed(user) {
@@ -108,6 +110,9 @@ export async function turnoActivo(request, reply) {
 
   try {
     const pool = await getPool();
+    if (!(await tiendaEnAlcance(request.user, pvId, pool))) {
+      return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
+    }
     const r = await pool.request()
       .input('idBranch',     sql.BigInt,     idBranch)
       .input('idCuenta',     sql.BigInt,     idCuenta)
@@ -149,6 +154,9 @@ export async function abrirCaja(request, reply) {
   try {
     importeCaja(MontoApertura);
     importeCaja(MontoAperturaVES);
+    if (!(await tiendaEnAlcance(request.user, pvId, pool))) {
+      return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
+    }
     // Obtener nombre del cajero
     const cajeroR = await pool.request()
       .input('idBranch',  sql.BigInt, idBranch)
@@ -282,7 +290,7 @@ export async function resumenTurno(request, reply) {
       return reply.send({ turno: null, ventas: null, pedidos: [] });
     }
 
-    if (!esRed({TipoUsuario}) && (!pvJwt || String(turno.idPuntoVenta)!==String(pvJwt))) return reply.code(403).send({error: 'No tienes permiso para consultar este turno'});
+    if (!(await tiendaEnAlcance(request.user, turno.idPuntoVenta, pool))) return reply.code(403).send({error: 'No tienes permiso para consultar este turno'});
 
     // Calcular totales
     // Un cierre confirmado conserva sus cifras aunque lleguen ventas offline después.
@@ -407,8 +415,8 @@ export async function cerrarCaja(request, reply) {
       throw Object.assign(new Error('El turno ya está cerrado'),{statusCode:409});
     }
 
-    // Cajero solo puede cerrar su propio PV
-    if (!esRed({ TipoUsuario }) && (!pvJwt || String(turno.idPuntoVenta) !== String(pvJwt))) {
+    // Cada rol solo cierra cajas de tiendas de su alcance
+    if (!(await tiendaEnAlcance(request.user, turno.idPuntoVenta, pool))) {
       throw Object.assign(new Error('No tienes permiso para cerrar este turno'),{statusCode:403});
     }
 
@@ -520,6 +528,9 @@ export async function historialTurnos(request, reply) {
       req.input('idPuntoVenta', sql.BigInt, pvFiltro);
       whereExtra += ' AND t.idPuntoVenta=@idPuntoVenta';
     }
+    // Roles de red: solo turnos de tiendas de su alcance
+    const filtroRed = esRed({ TipoUsuario }) ? filtroTiendasRed(request.user, 't.idPuntoVenta', req) : '';
+    whereExtra += filtroRed;
     if (status) {
       req.input('status', sql.VarChar(20), status);
       whereExtra += ' AND t.Status=@status';
@@ -547,6 +558,7 @@ export async function historialTurnos(request, reply) {
       .input('idCuenta', sql.BigInt, idCuenta);
     if (pvFiltro) countReq.input('idPuntoVenta', sql.BigInt, pvFiltro);
     if (status)   countReq.input('status', sql.VarChar(20), status);
+    if (filtroRed) filtroTiendasRed(request.user, 't.idPuntoVenta', countReq);
 
     const countR = await countReq.query(`
       SELECT COUNT(*) AS total FROM VIDA_CAJA_TURNOS t
@@ -617,8 +629,8 @@ export async function registrarMovimiento(request, reply) {
     if (!turno) throw Object.assign(new Error('Turno no encontrado'), { statusCode: 404 });
     if (turno.Status !== 'ABIERTO') throw Object.assign(new Error('La caja está cerrada; no admite movimientos'), { statusCode: 409 });
 
-    // Alcance: un rol de tienda solo opera su propio PV
-    if (!esRed({ TipoUsuario }) && (!pvJwt || String(turno.idPuntoVenta) !== String(pvJwt))) {
+    // Alcance: cada rol solo opera cajas de tiendas de su alcance
+    if (!(await tiendaEnAlcance(request.user, turno.idPuntoVenta, pool))) {
       throw Object.assign(new Error('No tienes permiso para operar la caja de este turno'), { statusCode: 403 });
     }
 
@@ -695,7 +707,7 @@ export async function anularMovimiento(request, reply) {
     if (!mov) throw Object.assign(new Error('Movimiento no encontrado'), { statusCode: 404 });
     if (mov.Status !== 'ACTIVO') throw Object.assign(new Error('El movimiento ya está anulado'), { statusCode: 409 });
     if (mov.TurnoStatus !== 'ABIERTO') throw Object.assign(new Error('La caja ya está cerrada; no se puede anular'), { statusCode: 409 });
-    if (!esRed({ TipoUsuario }) && (!pvJwt || String(mov.idPuntoVenta) !== String(pvJwt))) {
+    if (!(await tiendaEnAlcance(request.user, mov.idPuntoVenta, pool))) {
       throw Object.assign(new Error('No tienes permiso para operar la caja de este turno'), { statusCode: 403 });
     }
 

@@ -16,6 +16,78 @@ export function esRed(user) {
   return ROLES_RED.includes(user?.TipoUsuario);
 }
 
+// Roles de tienda: solo su propio punto de venta.
+export const ROLES_TIENDA = ['ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
+
+// ── Alcance geográfico sobre las tiendas ────────────────────────────────────
+// "Rol de red" no significa "toda la red":
+//  - SUPER_ADMIN: toda la cuenta.
+//  - ADMIN_PAIS: las tiendas de su país si lo tiene asignado; si no, toda la
+//    cuenta (comportamiento histórico, para no dejar sin acceso a nadie).
+//  - ADMIN_ESTADO: solo las tiendas de su estado. Sin estado asignado, ninguna:
+//    un error de configuración no debe abrirle toda la red.
+//  - Roles de tienda: su tienda.
+
+// Condición SQL sobre la tabla de tiendas (columnas con prefijo `alias`) y sus
+// parámetros. La usan los reportes y los selectores de tiendas.
+export function alcanceGeo(user, alias = 'pv') {
+  const { TipoUsuario, idPuntoVenta, idEstado, idPais } = user || {};
+  const col = (c) => (alias ? `${alias}.${c}` : c);
+  if (ROLES_TIENDA.includes(TipoUsuario))
+    return { sql: ` AND ${col('idPuntoVenta')} = @geoForzado`, params: [['geoForzado', sql.BigInt, idPuntoVenta ?? null]] };
+  if (TipoUsuario === 'ADMIN_ESTADO')
+    return idEstado != null
+      ? { sql: ` AND ${col('idEstado')} = @geoAlcance`, params: [['geoAlcance', sql.BigInt, idEstado]] }
+      : { sql: ' AND 1 = 0', params: [] };
+  if (TipoUsuario === 'ADMIN_PAIS' && idPais != null)
+    return { sql: ` AND ${col('idPais')} = @geoAlcance`, params: [['geoAlcance', sql.BigInt, idPais]] };
+  return { sql: '', params: [] };
+}
+
+// Para los listados de red: restringe la columna de tienda `colPV` de
+// cualquier consulta a las tiendas del alcance del usuario. Agrega sus
+// parámetros a `dbReq`, que debe declarar @idBranch e @idCuenta. Para roles de
+// tienda no hace nada (cada controller ya los fija a su tienda).
+export function filtroTiendasRed(user, colPV, dbReq) {
+  const { TipoUsuario, idEstado, idPais } = user || {};
+  const sub = (campo) =>
+    ` AND ${colPV} IN (SELECT alc.idPuntoVenta FROM VIDA_CUENTA_PUNTOS_VENTA alc
+        WHERE alc.idBranch=@idBranch AND alc.idCuenta=@idCuenta AND alc.${campo}=@alcRed)`;
+  if (TipoUsuario === 'ADMIN_ESTADO') {
+    if (idEstado == null) return ' AND 1 = 0';
+    dbReq.input('alcRed', sql.BigInt, idEstado);
+    return sub('idEstado');
+  }
+  if (TipoUsuario === 'ADMIN_PAIS' && idPais != null) {
+    dbReq.input('alcRed', sql.BigInt, idPais);
+    return sub('idPais');
+  }
+  return '';
+}
+
+// ¿Puede este usuario ver u operar la tienda `idPuntoVenta`?
+export async function tiendaEnAlcance(user, idPuntoVenta, pool = null) {
+  if (idPuntoVenta == null || idPuntoVenta === '') return false;
+  const { TipoUsuario, idEstado, idPais } = user || {};
+  if (ROLES_TIENDA.includes(TipoUsuario)) return String(idPuntoVenta) === String(user.idPuntoVenta);
+  if (TipoUsuario === 'SUPER_ADMIN') return true;
+  if (TipoUsuario === 'ADMIN_PAIS' && idPais == null) return true;
+  if (TipoUsuario === 'ADMIN_ESTADO' && idEstado == null) return false;
+  if (!['ADMIN_PAIS', 'ADMIN_ESTADO'].includes(TipoUsuario)) return false;
+  const p = pool || await getPool();
+  const r = await p.request()
+    .input('idBranch', sql.BigInt, user.idBranch)
+    .input('idCuenta', sql.BigInt, user.idCuenta)
+    .input('idPuntoVenta', sql.BigInt, idPuntoVenta)
+    .query(`SELECT idEstado, idPais FROM VIDA_CUENTA_PUNTOS_VENTA
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta`);
+  const t = r.recordset[0];
+  if (!t) return false;
+  return TipoUsuario === 'ADMIN_ESTADO'
+    ? String(t.idEstado) === String(idEstado)
+    : String(t.idPais) === String(idPais);
+}
+
 // idPuntoVenta de la Matriz de la cuenta, o null si no hay ninguna designada.
 export async function idPuntoVentaMatriz(pool, idBranch, idCuenta) {
   const r = await pool.request()

@@ -3,31 +3,10 @@ import {construirReporteCaja} from '../services/reporteCaja.service.js';
 import {construirConciliacionPagoMovil} from '../services/conciliacionPagoMovil.service.js';
 // src/controllers/reportes.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
+import { alcanceGeo, ROLES_TIENDA } from '../services/alcance.service.js';
 
-const ROLES_TIENDA = ['ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Alcance geográfico de cada rol sobre las tiendas (VIDA_CUENTA_PUNTOS_VENTA):
-//  - ADMIN / SUPERVISOR / CAJERO / CASHIER: solo su tienda.
-//  - ADMIN_ESTADO: solo las tiendas de su estado. Sin estado asignado no ve
-//    nada: un error de configuración no debe abrirle toda la red.
-//  - ADMIN_PAIS: solo su país si lo tiene asignado; si no, toda la cuenta.
-//  - SUPER_ADMIN: toda la cuenta.
-// Devuelve la condición SQL (columnas con el prefijo `alias`) y sus parámetros.
-// ─────────────────────────────────────────────────────────────────────────────
-export function alcanceGeo(user, alias = 'pv') {
-  const { TipoUsuario, idPuntoVenta, idEstado, idPais } = user || {};
-  const col = (c) => (alias ? `${alias}.${c}` : c);
-  if (ROLES_TIENDA.includes(TipoUsuario))
-    return { sql: ` AND ${col('idPuntoVenta')} = @geoForzado`, params: [['geoForzado', sql.BigInt, idPuntoVenta ?? null]] };
-  if (TipoUsuario === 'ADMIN_ESTADO')
-    return idEstado != null
-      ? { sql: ` AND ${col('idEstado')} = @geoAlcance`, params: [['geoAlcance', sql.BigInt, idEstado]] }
-      : { sql: ' AND 1 = 0', params: [] };
-  if (TipoUsuario === 'ADMIN_PAIS' && idPais != null)
-    return { sql: ` AND ${col('idPais')} = @geoAlcance`, params: [['geoAlcance', sql.BigInt, idPais]] };
-  return { sql: '', params: [] };
-}
+// Se reexporta para los tests y para quien ya lo importaba desde aquí.
+export { alcanceGeo };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPER: alcance del rol + filtros opcionales de geografía del selector, que

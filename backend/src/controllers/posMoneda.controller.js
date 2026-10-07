@@ -2,12 +2,14 @@ import {randomUUID} from 'node:crypto';
 import {getPool,sql} from '../db/sqlserver.js';
 import {prepararMoneda} from '../services/moneda.service.js';
 import {fechaCaracas} from '../services/tasaBcv.service.js';
+import {tiendaEnAlcance} from '../services/alcance.service.js';
 export async function cotizarMonedaPOS(req,reply) {
  const u=req.user;const pv=Number(req.body?.idPuntoVenta);
- const red=['SUPER_ADMIN','ADMIN_PAIS','ADMIN_ESTADO'].includes(u.TipoUsuario);
- if(!Number.isSafeInteger(pv)||pv<=0||(!red&&String(pv)!==String(u.idPuntoVenta))) return reply.code(403).send({error:'Tienda no autorizada'});
+ if(!Number.isSafeInteger(pv)||pv<=0) return reply.code(403).send({error:'Tienda no autorizada'});
  try {
   const pool=await getPool();
+  // Cada rol cotiza solo para tiendas de su alcance (ADMIN_ESTADO: su estado).
+  if(!(await tiendaEnAlcance(u,pv,pool))) return reply.code(403).send({error:'Tienda no autorizada'});
   const tienda=await pool.request().input('b',sql.BigInt,u.idBranch).input('c',sql.BigInt,u.idCuenta).input('p',sql.BigInt,pv)
    .query(`SELECT idPuntoVenta FROM VIDA_CUENTA_PUNTOS_VENTA WHERE idBranch=@b AND idCuenta=@c AND idPuntoVenta=@p AND Status='ACTIVO'`);
   if(!tienda.recordset.length) return reply.code(404).send({error:'Tienda no disponible'});

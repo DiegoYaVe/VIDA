@@ -7,10 +7,12 @@ import { precioSuministro } from '../services/precioSuministro.service.js';
 import { getPool, sql } from '../db/sqlserver.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 import { emitirCuenta } from '../services/cuentas.service.js';
+import { tiendaEnAlcance, filtroTiendasRed } from '../services/alcance.service.js';
 
-// Roles de RED: ven/gestionan los pedidos de todas las tiendas (bandeja de la
-// Matriz). Los roles de tienda (ADMIN, SUPERVISOR) solo pueden pedir, ver y
-// recibir el reabasto de SU propia tienda.
+// Roles de RED: ven/gestionan los pedidos de las tiendas de su alcance
+// (bandeja de la Matriz; ADMIN_ESTADO solo su estado, ver alcance.service.js).
+// Los roles de tienda (ADMIN, SUPERVISOR) solo pueden pedir, ver y recibir el
+// reabasto de SU propia tienda.
 const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
 const esRed = (user) => ROLES_RED.includes(user.TipoUsuario);
 
@@ -158,6 +160,8 @@ export async function crearPedidoMatriz(request, reply) {
     : pvUsuario;
   if (!idPuntoVentaSolicita || !Array.isArray(items) || !items.length)
     return reply.code(400).send({ error: 'idPuntoVentaSolicita e items son requeridos' });
+  if (esRed(request.user) && !(await tiendaEnAlcance(request.user, idPuntoVentaSolicita)))
+    return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
   if (items.some(i => !i || !Number.isSafeInteger(Number(i.idProducto)) || Number(i.idProducto) <= 0 ||
       !Number.isFinite(Number(i.Cantidad)) || Number(i.Cantidad) <= 0 ||
       Math.abs(Number(i.Cantidad) * 10000 - Math.round(Number(i.Cantidad) * 10000)) > 1e-6) ||
@@ -264,6 +268,7 @@ export async function listarPedidosMatriz(request, reply) {
     let filtro = '';
     if (idPuntoVenta) { req.input('idpv', sql.BigInt, idPuntoVenta); filtro += ' AND pm.idPuntoVentaSolicita=@idpv'; }
     if (status)       { req.input('st', sql.VarChar(30), status);     filtro += ' AND pm.Status=@st'; }
+    if (esRed(request.user)) filtro += filtroTiendasRed(request.user, 'pm.idPuntoVentaSolicita', req);
 
     const r = await req.query(`
       SELECT pm.idPedidoMatriz, pm.Status, pm.TotalCostoUSD, pm.TotalSuministroUSD, pm.Notas,
@@ -302,9 +307,8 @@ export async function obtenerPedidoMatriz(request, reply) {
               WHERE pm.idBranch=@idBranch AND pm.idCuenta=@idCuenta AND pm.idPedidoMatriz=@idPedidoMatriz`);
     if (!cab.recordset.length) return reply.code(404).send({ error: 'Pedido no encontrado' });
 
-    // Un rol de tienda solo puede ver su propio pedido de reabasto.
-    if (!esRed(request.user) &&
-        String(cab.recordset[0].idPuntoVentaSolicita) !== String(request.user.idPuntoVenta))
+    // Cada rol solo ve pedidos de reabasto de tiendas de su alcance.
+    if (!(await tiendaEnAlcance(request.user, cab.recordset[0].idPuntoVentaSolicita, pool)))
       return reply.code(404).send({ error: 'Pedido no encontrado' });
 
     const det = await pool.request()
@@ -368,10 +372,9 @@ export async function cambiarEstadoPedidoMatriz(request, reply) {
     if (!cabR.recordset.length) return reply.code(404).send({ error: 'Pedido no encontrado' });
 
     const ped = cabR.recordset[0];
-    // Un rol de tienda solo puede cambiar el estado de su propio pedido
-    // (p. ej. recibir el reabasto o cancelar su solicitud).
-    if (!esRed(request.user) &&
-        String(ped.idPuntoVentaSolicita) !== String(request.user.idPuntoVenta)) {
+    // Cada rol solo cambia pedidos de tiendas de su alcance (un rol de tienda:
+    // su propio pedido, p. ej. recibir el reabasto o cancelar su solicitud).
+    if (!(await tiendaEnAlcance(request.user, ped.idPuntoVentaSolicita, pool))) {
       if (enTx) { try { await transaction.rollback(); } catch {} }
       return reply.code(403).send({ error: 'No puedes modificar el pedido de otra tienda' });
     }
