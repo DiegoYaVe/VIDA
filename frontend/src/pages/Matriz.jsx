@@ -12,7 +12,9 @@ import { useAuthStore } from '../store/authStore.js';
 
 const USD = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const FECHA = (f) => f ? new Date(f).toLocaleString('es-VE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
-const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
+// Las tiendas que pueden recibir o cancelar SU reabasto. Despachar (preparar y
+// enviar) y designar la Matriz lo indica el backend (operaMatriz / puedeDesignar).
+const ROLES_TIENDA_REABASTO = ['ADMIN', 'SUPERVISOR'];
 
 const STATUS_CFG = {
   SOLICITADO: { label: 'Solicitado', color: 'bg-blue-100 text-blue-700', icon: ClipboardList },
@@ -209,7 +211,7 @@ function TabPedir({ matriz, puntosVenta, onPedidoCreado }) {
 }
 
 // ─── Modal recepción / avance de un pedido ────────────────────────────────────
-function ModalPedido({ idPedidoMatriz, puedeEscribir, onClose, onCambiado }) {
+function ModalPedido({ idPedidoMatriz, operaMatriz, puedeRecibir, onClose, onCambiado }) {
   const [ped, setPed] = useState(null);
   const [cargando, setCarg] = useState(true);
   const [recibidas, setRecibidas] = useState({});
@@ -280,7 +282,7 @@ function ModalPedido({ idPedidoMatriz, puedeEscribir, onClose, onCambiado }) {
                         <p className="text-xs text-gray-400">Solicitado: {d.CantidadSolicitada} · precio {d.PrecioTiendaUnitario == null ? 'no fijado (histórico)' : USD(d.PrecioTiendaUnitario)}</p>
                       </div>
                       {/* Al recibir, la tienda ajusta cantidades */}
-                      {ped.Status === 'ENVIADO' && puedeEscribir ? (
+                      {ped.Status === 'ENVIADO' && puedeRecibir ? (
                         <input type="number" value={recibidas[d.idDetalle] ?? ''} min="0" max={d.CantidadSolicitada}
                           onChange={e => setRecibidas(r => ({ ...r, [d.idDetalle]: e.target.value }))}
                           className="w-20 border border-gray-200 rounded-lg px-2 py-1 text-sm text-center" />
@@ -311,21 +313,31 @@ function ModalPedido({ idPedidoMatriz, puedeEscribir, onClose, onCambiado }) {
               )}
             </div>
 
-            {/* Acciones según estado */}
-            {puedeEscribir && SIGUIENTE[ped.Status] && (
-              <div className="p-5 border-t flex gap-2 justify-end">
-                {ped.Status !== 'ENVIADO' && (
-                  <button onClick={() => avanzar('CANCELADO')} disabled={proc}
-                    className="border border-red-200 text-red-600 rounded-xl px-4 py-2 text-sm hover:bg-red-50">Cancelar pedido</button>
-                )}
-                <button onClick={() => avanzar(SIGUIENTE[ped.Status])} disabled={proc}
-                  className="flex items-center gap-2 bg-vida-blue text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50">
-                  {ped.Status === 'SOLICITADO' && <><Package size={15} /> Marcar preparando</>}
-                  {ped.Status === 'PREPARANDO' && <><Truck size={15} /> Marcar enviado</>}
-                  {ped.Status === 'ENVIADO' && <><Check size={15} /> Confirmar recepción</>}
-                </button>
-              </div>
-            )}
+            {/* Acciones según estado: preparar y enviar las da la Matriz; recibir,
+                la tienda; cancelar, la tienda mientras está solicitado o la Matriz. */}
+            {(() => {
+              const siguiente = SIGUIENTE[ped.Status];
+              const puedeAvanzar = siguiente && (siguiente === 'RECIBIDO' ? puedeRecibir : operaMatriz);
+              const puedeCancelar = siguiente && ped.Status !== 'ENVIADO'
+                && (operaMatriz || (puedeRecibir && ped.Status === 'SOLICITADO'));
+              if (!puedeAvanzar && !puedeCancelar) return null;
+              return (
+                <div className="p-5 border-t flex gap-2 justify-end">
+                  {puedeCancelar && (
+                    <button onClick={() => avanzar('CANCELADO')} disabled={proc}
+                      className="border border-red-200 text-red-600 rounded-xl px-4 py-2 text-sm hover:bg-red-50">Cancelar pedido</button>
+                  )}
+                  {puedeAvanzar && (
+                    <button onClick={() => avanzar(siguiente)} disabled={proc}
+                      className="flex items-center gap-2 bg-vida-blue text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+                      {ped.Status === 'SOLICITADO' && <><Package size={15} /> Marcar preparando</>}
+                      {ped.Status === 'PREPARANDO' && <><Truck size={15} /> Marcar enviado</>}
+                      {ped.Status === 'ENVIADO' && <><Check size={15} /> Confirmar recepción</>}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </>
         )}
       </div>
@@ -334,7 +346,7 @@ function ModalPedido({ idPedidoMatriz, puedeEscribir, onClose, onCambiado }) {
 }
 
 // ─── TAB: Pedidos (bandeja) ───────────────────────────────────────────────────
-function TabPedidos({ puedeEscribir, refresh }) {
+function TabPedidos({ operaMatriz, puedeRecibir, refresh }) {
   const [pedidos, setPedidos] = useState(null);
   const [cargando, setCarg] = useState(true);
   const [abierto, setAbierto] = useState(null);
@@ -390,7 +402,7 @@ function TabPedidos({ puedeEscribir, refresh }) {
           </div>
         </div>
       )}
-      {abierto && <ModalPedido idPedidoMatriz={abierto} puedeEscribir={puedeEscribir} onClose={() => setAbierto(null)} onCambiado={cargar} />}
+      {abierto && <ModalPedido idPedidoMatriz={abierto} operaMatriz={operaMatriz} puedeRecibir={puedeRecibir} onClose={() => setAbierto(null)} onCambiado={cargar} />}
     </div>
   );
 }
@@ -398,7 +410,6 @@ function TabPedidos({ puedeEscribir, refresh }) {
 // ─── Página principal ──────────────────────────────────────────────────────────
 export default function Matriz() {
   const { usuario } = useAuthStore();
-  const puedeEscribir = ROLES_ESCRITURA.includes(usuario?.TipoUsuario);
   const [tab, setTab] = useState('pedir');
   const [estado, setEstado] = useState(null);
   const [cargando, setCarg] = useState(true);
@@ -411,6 +422,9 @@ export default function Matriz() {
     finally { setCarg(false); }
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
+
+  const operaMatriz = !!estado?.operaMatriz;
+  const puedeRecibir = operaMatriz || ROLES_TIENDA_REABASTO.includes(usuario?.TipoUsuario);
 
   const TABS = [
     { id: 'pedir', label: 'Pedir a la Matriz', icon: ShoppingCart },
@@ -430,7 +444,7 @@ export default function Matriz() {
       </div>
 
       {cargando ? <Spinner /> : !estado?.matriz ? (
-        <div className="p-6"><SinMatriz puntosVenta={estado?.puntosVenta || []} puedeEscribir={puedeEscribir} onDesignada={cargar} /></div>
+        <div className="p-6"><SinMatriz puntosVenta={estado?.puntosVenta || []} puedeEscribir={!!estado?.puedeDesignar} onDesignada={cargar} /></div>
       ) : (
         <>
           <div className="bg-white border-b border-gray-100 px-6">
@@ -449,7 +463,7 @@ export default function Matriz() {
           </div>
           <div className="p-6">
             {tab === 'pedir'   && <TabPedir matriz={estado.matriz} puntosVenta={estado.puntosVenta} onPedidoCreado={() => setRefresh(x => x + 1)} />}
-            {tab === 'pedidos' && <TabPedidos puedeEscribir={puedeEscribir} refresh={refresh} />}
+            {tab === 'pedidos' && <TabPedidos operaMatriz={operaMatriz} puedeRecibir={puedeRecibir} refresh={refresh} />}
           </div>
         </>
       )}

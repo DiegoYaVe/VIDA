@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { alcanceGeo, buildGeoFilter } from '../src/controllers/reportes.controller.js';
-import { filtroTiendasRed, tiendaEnAlcance } from '../src/services/alcance.service.js';
+import { filtroTiendasRed, tiendaEnAlcance, operadorMatriz, alcanceCuentas } from '../src/services/alcance.service.js';
 
 // Request de mssql simulado: guarda los parámetros que recibe.
 const fakeReq = () => { const r = { p: {} }; r.input = (n, _t, v) => { r.p[n] = v; return r; }; return r; };
@@ -75,4 +75,24 @@ test('tiendaEnAlcance sin consultar la BD: tienda propia, super admin, estado si
   assert.equal(await tiendaEnAlcance({ TipoUsuario: 'ADMIN_ESTADO', idEstado: null }, '99'), false);
   assert.equal(await tiendaEnAlcance({ TipoUsuario: 'SUPER_ADMIN' }, null), false);
   assert.equal(await tiendaEnAlcance({ TipoUsuario: 'CLIENTE' }, '3'), false);
+});
+// Pool simulado: la Matriz de la cuenta es la tienda 5.
+const poolMatriz = { request() { const r = { input: () => r, query: async () => ({ recordset: [{ idPuntoVenta: '5' }] }) }; return r; } };
+const u = (TipoUsuario, extra = {}) => ({ idBranch: '1', idCuenta: '1', TipoUsuario, ...extra });
+
+test('operar la Matriz: solo SUPER_ADMIN y el ADMIN de la tienda Matriz', async () => {
+  assert.equal((await operadorMatriz(u('SUPER_ADMIN'), poolMatriz)).permitido, true);
+  assert.equal((await operadorMatriz(u('ADMIN', { idPuntoVenta: '5' }), poolMatriz)).permitido, true);
+  for (const t of ['ADMIN_PAIS', 'ADMIN_ESTADO']) {
+    const r = await operadorMatriz(u(t, { idEstado: '10', idPais: '1' }), poolMatriz);
+    assert.equal(r.permitido, false); assert.match(r.motivo, /SUPER_ADMIN/);
+  }
+  assert.equal((await operadorMatriz(u('ADMIN', { idPuntoVenta: '3' }), poolMatriz)).permitido, false);
+});
+
+test('cuentas: región en solo lectura para ADMIN_PAIS/ADMIN_ESTADO; ADMIN de sucursal solo lo suyo', async () => {
+  assert.deepEqual(await alcanceCuentas(u('SUPER_ADMIN'), poolMatriz), { verTodo: true, region: false, soloCxcDe: null });
+  assert.deepEqual(await alcanceCuentas(u('ADMIN_ESTADO', { idEstado: '10' }), poolMatriz), { verTodo: false, region: true, soloCxcDe: null });
+  assert.deepEqual(await alcanceCuentas(u('ADMIN_PAIS', { idPais: '1' }), poolMatriz), { verTodo: false, region: true, soloCxcDe: null });
+  assert.deepEqual(await alcanceCuentas(u('ADMIN', { idPuntoVenta: '3' }), poolMatriz), { verTodo: false, region: false, soloCxcDe: '3' });
 });

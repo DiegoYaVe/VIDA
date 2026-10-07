@@ -7,14 +7,18 @@ import { precioSuministro } from '../services/precioSuministro.service.js';
 import { getPool, sql } from '../db/sqlserver.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 import { emitirCuenta } from '../services/cuentas.service.js';
-import { tiendaEnAlcance, filtroTiendasRed } from '../services/alcance.service.js';
+import { operadorMatriz } from '../services/alcance.service.js';
 
-// Roles de RED: ven/gestionan los pedidos de las tiendas de su alcance
-// (bandeja de la Matriz; ADMIN_ESTADO solo su estado, ver alcance.service.js).
-// Los roles de tienda (ADMIN, SUPERVISOR) solo pueden pedir, ver y recibir el
-// reabasto de SU propia tienda.
-const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
-const esRed = (user) => ROLES_RED.includes(user.TipoUsuario);
+// La bandeja de reabasto la opera quien opera la Matriz: SUPER_ADMIN y el
+// ADMIN de la tienda Matriz (ver operadorMatriz; decisión de negocio del
+// 2026-10-07). Ven todos los pedidos, los preparan y envían, y pueden crearlos a
+// nombre de cualquier tienda. Las tiendas (ADMIN, SUPERVISOR) solo piden, ven,
+// reciben o cancelan los SUYOS. Los roles regionales no operan la bandeja.
+const operaMatriz = async (user, pool) => (await operadorMatriz(user, pool)).permitido;
+const esPropia = (user, idPuntoVenta) =>
+  user.idPuntoVenta != null && String(idPuntoVenta) === String(user.idPuntoVenta);
+// Pasos del despacho: solo los da la Matriz.
+const PASOS_DESPACHO = ['PREPARANDO', 'ENVIADO'];
 
 // Lee una clave de VIDA_CONFIG_DELIVERY (la tabla clave/valor de la cuenta).
 // Misma forma que el helper homonimo de delivery.controller.js.
@@ -72,7 +76,13 @@ export async function estadoMatriz(request, reply) {
               FROM VIDA_CUENTA_PUNTOS_VENTA
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'
               ORDER BY EsMatriz DESC, NomComercial`);
-    return reply.send({ matriz, puntosVenta: pv.recordset });
+    // La pantalla decide qué acciones mostrar con estos indicadores (misma regla
+    // que aplica el backend), no con su propia lista de roles.
+    return reply.send({
+      matriz, puntosVenta: pv.recordset,
+      operaMatriz: await operaMatriz(request.user, pool),
+      puedeDesignar: request.user.TipoUsuario === 'SUPER_ADMIN',
+    });
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener la matriz' });
@@ -153,15 +163,16 @@ export async function catalogoMatriz(request, reply) {
 export async function crearPedidoMatriz(request, reply) {
   const { idBranch, idCuenta, idUsuario, idPuntoVenta: pvUsuario } = request.user;
   const { items, Notas } = request.body || {};
-  // Roles de tienda solo pueden pedir reabasto para SU tienda; los de red
-  // pueden crear a nombre de la tienda que indiquen.
-  const idPuntoVentaSolicita = esRed(request.user)
-    ? request.body?.idPuntoVentaSolicita
+  // Las tiendas solo piden reabasto para SU tienda; quien opera la Matriz
+  // puede crearlo a nombre de la tienda que indique.
+  const opera = await operaMatriz(request.user, await getPool());
+  if (!opera && !pvUsuario)
+    return reply.code(403).send({ error: 'Solo la Matriz y las tiendas piden reabasto' });
+  const idPuntoVentaSolicita = opera
+    ? (request.body?.idPuntoVentaSolicita || pvUsuario)
     : pvUsuario;
   if (!idPuntoVentaSolicita || !Array.isArray(items) || !items.length)
     return reply.code(400).send({ error: 'idPuntoVentaSolicita e items son requeridos' });
-  if (esRed(request.user) && !(await tiendaEnAlcance(request.user, idPuntoVentaSolicita)))
-    return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
   if (items.some(i => !i || !Number.isSafeInteger(Number(i.idProducto)) || Number(i.idProducto) <= 0 ||
       !Number.isFinite(Number(i.Cantidad)) || Number(i.Cantidad) <= 0 ||
       Math.abs(Number(i.Cantidad) * 10000 - Math.round(Number(i.Cantidad) * 10000)) > 1e-6) ||
@@ -257,18 +268,21 @@ export async function crearPedidoMatriz(request, reply) {
 export async function listarPedidosMatriz(request, reply) {
   const { idBranch, idCuenta, idPuntoVenta: pvUsuario } = request.user;
   const { status } = request.query;
-  // Roles de tienda solo ven sus pedidos; los de red ven la bandeja completa
-  // y pueden filtrar por la tienda que pasen en la query.
-  const idPuntoVenta = esRed(request.user) ? request.query.idPuntoVenta : pvUsuario;
+  // Quien opera la Matriz ve la bandeja completa y puede filtrar por tienda;
+  // los demás solo sus pedidos (sin tienda asignada, ninguno).
   try {
     const pool = await getPool();
+    const opera = await operaMatriz(request.user, pool);
     const req = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta);
     let filtro = '';
-    if (idPuntoVenta) { req.input('idpv', sql.BigInt, idPuntoVenta); filtro += ' AND pm.idPuntoVentaSolicita=@idpv'; }
+    if (!opera) {
+      req.input('idpv', sql.BigInt, pvUsuario ?? null); filtro += ' AND pm.idPuntoVentaSolicita=@idpv';
+    } else if (request.query.idPuntoVenta) {
+      req.input('idpv', sql.BigInt, request.query.idPuntoVenta); filtro += ' AND pm.idPuntoVentaSolicita=@idpv';
+    }
     if (status)       { req.input('st', sql.VarChar(30), status);     filtro += ' AND pm.Status=@st'; }
-    if (esRed(request.user)) filtro += filtroTiendasRed(request.user, 'pm.idPuntoVentaSolicita', req);
 
     const r = await req.query(`
       SELECT pm.idPedidoMatriz, pm.Status, pm.TotalCostoUSD, pm.TotalSuministroUSD, pm.Notas,
@@ -307,8 +321,8 @@ export async function obtenerPedidoMatriz(request, reply) {
               WHERE pm.idBranch=@idBranch AND pm.idCuenta=@idCuenta AND pm.idPedidoMatriz=@idPedidoMatriz`);
     if (!cab.recordset.length) return reply.code(404).send({ error: 'Pedido no encontrado' });
 
-    // Cada rol solo ve pedidos de reabasto de tiendas de su alcance.
-    if (!(await tiendaEnAlcance(request.user, cab.recordset[0].idPuntoVentaSolicita, pool)))
+    // Quien opera la Matriz ve cualquier pedido; una tienda, solo el suyo.
+    if (!esPropia(request.user, cab.recordset[0].idPuntoVentaSolicita) && !(await operaMatriz(request.user, pool)))
       return reply.code(404).send({ error: 'Pedido no encontrado' });
 
     const det = await pool.request()
@@ -372,15 +386,20 @@ export async function cambiarEstadoPedidoMatriz(request, reply) {
     if (!cabR.recordset.length) return reply.code(404).send({ error: 'Pedido no encontrado' });
 
     const ped = cabR.recordset[0];
-    // Cada rol solo cambia pedidos de tiendas de su alcance (un rol de tienda:
-    // su propio pedido, p. ej. recibir el reabasto o cancelar su solicitud).
-    if (!(await tiendaEnAlcance(request.user, ped.idPuntoVentaSolicita, pool))) {
-      if (enTx) { try { await transaction.rollback(); } catch {} }
+    // Quien opera la Matriz gestiona cualquier pedido; una tienda, solo el suyo.
+    const opera = await operaMatriz(request.user, pool);
+    if (!opera && !esPropia(request.user, ped.idPuntoVentaSolicita)) {
       return reply.code(403).send({ error: 'No puedes modificar el pedido de otra tienda' });
     }
     const permitidos = TRANSICIONES[ped.Status] ?? [];
     if (!permitidos.includes(StatusNuevo))
       return reply.code(422).send({ error: `Transición inválida: ${ped.Status} → ${StatusNuevo}`, permitidos });
+    // Preparar y enviar son pasos del despacho: solo la Matriz. La tienda solo
+    // recibe, o cancela mientras su solicitud no se empezó a preparar.
+    if (!opera && PASOS_DESPACHO.includes(StatusNuevo))
+      return reply.code(403).send({ error: 'Solo la Matriz prepara y envía el reabasto' });
+    if (!opera && StatusNuevo === 'CANCELADO' && ped.Status !== 'SOLICITADO')
+      return reply.code(403).send({ error: 'Solo puedes cancelar mientras el pedido está solicitado; después, lo cancela la Matriz' });
 
     if (StatusNuevo === 'RECIBIDO' && !cantidadesRecibidas?.length)
       return reply.code(400).send({ error: 'cantidadesRecibidas es requerido para recibir' });

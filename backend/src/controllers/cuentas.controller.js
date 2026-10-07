@@ -4,7 +4,7 @@
 // acá solo va la capa HTTP y el control de alcance.
 import { getPool, sql } from '../db/sqlserver.js';
 import { registrarAbono, emitirNotaCredito, SELECT_CUENTA, METODOS } from '../services/cuentas.service.js';
-import { alcanceCuentas } from '../services/alcance.service.js';
+import { alcanceCuentas, filtroTiendasRed, tiendaEnAlcance } from '../services/alcance.service.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 
 const TIPOS_FILTRO   = ['CXP', 'CXC'];
@@ -24,9 +24,12 @@ export async function listarCuentas(request, reply) {
       .input('idCuenta', sql.BigInt, idCuenta);
     let filtro = ' WHERE c.idBranch=@idBranch AND c.idCuenta=@idCuenta';
 
+    // ADMIN_PAIS / ADMIN_ESTADO: CXC de las tiendas de su región, solo lectura.
     // Un ADMIN de sucursal común solo ve lo que SU tienda le debe a la Matriz.
-    // Nunca ve las CXP: la deuda con el proveedor no es asunto suyo.
-    if (!alcance.verTodo) {
+    // Ninguno ve las CXP: la deuda con el proveedor no es asunto suyo.
+    if (alcance.region) {
+      filtro += ` AND c.Tipo='CXC'` + filtroTiendasRed(request.user, 'c.idPuntoVenta', req);
+    } else if (!alcance.verTodo) {
       req.input('pvPropio', sql.BigInt, alcance.soloCxcDe);
       filtro += ` AND c.Tipo='CXC' AND c.idPuntoVenta=@pvPropio`;
     } else if (tipo && TIPOS_FILTRO.includes(tipo)) {
@@ -47,7 +50,7 @@ export async function listarCuentas(request, reply) {
       req.input('idProveedor', sql.BigInt, BigInt(idProveedor));
       filtro += ' AND c.idProveedor=@idProveedor';
     }
-    if (idPuntoVenta && alcance.verTodo) {
+    if (idPuntoVenta && (alcance.verTodo || alcance.region)) {
       req.input('idPv', sql.BigInt, BigInt(idPuntoVenta));
       filtro += ' AND c.idPuntoVenta=@idPv';
     }
@@ -72,7 +75,7 @@ export async function listarCuentas(request, reply) {
       CXC: { saldo: 0, vencido: 0, abiertas: 0, vencidas: 0 },
     });
 
-    return reply.send({ cuentas: r.recordset, resumen, verTodo: alcance.verTodo });
+    return reply.send({ cuentas: r.recordset, resumen, verTodo: alcance.verTodo, region: alcance.region });
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al listar cuentas' });
@@ -100,8 +103,11 @@ export async function detalleCuenta(request, reply) {
 
     // Mismo alcance que el listado: sin esto, un ADMIN de sucursal podría leer
     // por id una CXP o la CXC de otra tienda
-    if (!alcance.verTodo &&
-        (doc.Tipo !== 'CXC' || String(doc.idPuntoVenta) !== String(alcance.soloCxcDe))) {
+    const puedeVer = alcance.verTodo
+      || (doc.Tipo === 'CXC' && (alcance.region
+        ? await tiendaEnAlcance(request.user, doc.idPuntoVenta, pool)
+        : String(doc.idPuntoVenta) === String(alcance.soloCxcDe)));
+    if (!puedeVer) {
       return reply.code(403).send({ error: 'No tienes acceso a esta cuenta' });
     }
 

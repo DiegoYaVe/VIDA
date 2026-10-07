@@ -460,6 +460,7 @@ export default function Cuentas() {
   const [cuentas, setCuentas] = useState([]);
   const [resumen, setResumen] = useState(null);
   const [verTodo, setVerTodo] = useState(true);
+  const [region, setRegion] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
   const [soloVencidas, setSoloVencidas] = useState(false);
@@ -478,6 +479,7 @@ export default function Cuentas() {
       setCuentas(r.data.cuentas || []);
       setResumen(r.data.resumen || null);
       setVerTodo(r.data.verTodo !== false);
+      setRegion(r.data.region === true);
     } catch (e) {
       setError(e.response?.data?.error || 'No se pudieron cargar las cuentas');
     } finally { setLoading(false); }
@@ -510,7 +512,9 @@ export default function Cuentas() {
               <p className="mt-1 text-sm text-white/70">
                 {verTodo
                   ? 'Control financiero entre proveedores, Matriz y tiendas'
-                  : 'Obligaciones financieras de tu tienda con la Matriz'}
+                  : region
+                    ? 'Lo que las tiendas de tu región le deben a la Matriz (solo lectura)'
+                    : 'Obligaciones financieras de tu tienda con la Matriz'}
               </p>
             </div>
           </div>

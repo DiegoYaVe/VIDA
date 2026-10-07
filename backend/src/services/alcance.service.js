@@ -100,19 +100,21 @@ export async function idPuntoVentaMatriz(pool, idBranch, idCuenta) {
 }
 
 // ¿Este usuario puede operar la Matriz (comprar a proveedores, ver y cobrar las
-// cuentas de toda la red)?
+// cuentas de toda la red, configurar moneda y tasas)?
 //
-// Son los roles de red, MÁS el ADMIN del punto de venta marcado como Matriz:
+// Solo el SUPER_ADMIN, MÁS el ADMIN del punto de venta marcado como Matriz:
 // ese es el ensanchamiento que pidió el negocio. Un ADMIN sigue scopeado a su
 // tienda en todo lo demás (inventario, caja, ventas); lo único que se le abre es
-// la operación de la Matriz, y solo si su tienda ES la Matriz.
+// la operación de la Matriz, y solo si su tienda ES la Matriz. ADMIN_PAIS y
+// ADMIN_ESTADO no la operan (decisión de negocio, 2026-10-07): solo leen las
+// CXC de su región (ver alcanceCuentas).
 //
 // Devuelve { permitido, esRed, idPuntoVentaMatriz, motivo }.
 export async function operadorMatriz(user, pool = null) {
   const p = pool || await getPool();
   const pvMatriz = await idPuntoVentaMatriz(p, user.idBranch, user.idCuenta);
 
-  if (esRed(user)) {
+  if (user?.TipoUsuario === 'SUPER_ADMIN') {
     return { permitido: true, esRed: true, idPuntoVentaMatriz: pvMatriz, motivo: null };
   }
 
@@ -128,8 +130,8 @@ export async function operadorMatriz(user, pool = null) {
   }
 
   return {
-    permitido: false, esRed: false, idPuntoVentaMatriz: pvMatriz,
-    motivo: 'Solo la Matriz puede operar compras a proveedores y cuentas de la red',
+    permitido: false, esRed: esRed(user), idPuntoVentaMatriz: pvMatriz,
+    motivo: 'Solo el SUPER_ADMIN y la Matriz pueden operar compras a proveedores y cuentas de la red',
   };
 }
 
@@ -145,14 +147,18 @@ export async function requireMatriz(request, reply) {
 
 // Alcance de lectura de cuentas.
 //
-// Un rol de red y el ADMIN de la Matriz ven TODAS las cuentas. Un ADMIN de
-// sucursal común no opera la Matriz, pero sí tiene derecho a ver lo que SU
-// tienda le debe a la Matriz: se le devuelven solo las CXC donde él es el
+// El SUPER_ADMIN y el ADMIN de la Matriz ven TODAS las cuentas y las operan.
+// ADMIN_PAIS / ADMIN_ESTADO ven, en solo lectura, las CXC de las tiendas de su
+// región (lo que le deben a la Matriz) y ninguna CXP. Un ADMIN de sucursal
+// común ve solo lo que SU tienda le debe a la Matriz: las CXC donde él es el
 // deudor, y ninguna CXP (la deuda con el proveedor no es asunto suyo).
 //
-// Devuelve { verTodo, soloCxcDe } — `soloCxcDe` es su idPuntoVenta.
+// Devuelve { verTodo, region, soloCxcDe } — `region` indica lectura regional
+// (filtrar con filtroTiendasRed / tiendaEnAlcance); `soloCxcDe` es el
+// idPuntoVenta del ADMIN de sucursal.
 export async function alcanceCuentas(user, pool = null) {
   const res = await operadorMatriz(user, pool);
-  if (res.permitido) return { verTodo: true, soloCxcDe: null };
-  return { verTodo: false, soloCxcDe: user.idPuntoVenta ?? null };
+  if (res.permitido) return { verTodo: true, region: false, soloCxcDe: null };
+  if (['ADMIN_PAIS', 'ADMIN_ESTADO'].includes(user?.TipoUsuario)) return { verTodo: false, region: true, soloCxcDe: null };
+  return { verTodo: false, region: false, soloCxcDe: user.idPuntoVenta ?? null };
 }
