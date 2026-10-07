@@ -392,7 +392,7 @@ export async function cambiarEstadoPedidoMatriz(request, reply) {
       .input('idCuenta', sql.BigInt, idCuenta)
       .input('idPedidoMatriz', sql.BigInt, idPedidoMatriz)
       .input('StatusNuevo', sql.VarChar(30), StatusNuevo)
-      .query(`UPDATE VIDA_PEDIDOS_MATRIZ SET Status=@StatusNuevo, FechaMod=GETDATE()
+      .query(`UPDATE VIDA_PEDIDOS_MATRIZ SET Status=@StatusNuevo, FechaMod=GETUTCDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoMatriz=@idPedidoMatriz`);
 
     // Recepción: mover stock (baja Matriz, sube tienda) al costo
@@ -442,7 +442,7 @@ export async function cambiarEstadoPedidoMatriz(request, reply) {
               WHEN MATCHED THEN
                 UPDATE SET Cantidad = CASE WHEN ISNULL(t.Cantidad,0)+@delta < 0 THEN 0
                                            ELSE ISNULL(t.Cantidad,0)+@delta END,
-                           FechaMod = GETDATE()
+                           FechaMod = GETUTCDATE()
               WHEN NOT MATCHED THEN
                 INSERT (idBranch,idCuenta,idPuntoVenta,idProducto,Cantidad)
                 VALUES (@idBranch,@idCuenta,@idPuntoVenta,@idProducto,CASE WHEN @delta<0 THEN 0 ELSE @delta END)

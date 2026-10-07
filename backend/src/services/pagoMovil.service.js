@@ -20,9 +20,9 @@ export function plazoPagoMinutos(valor) {
 
 // El plazo corre desde la última novedad del pedido (alta, comprobante subido
 // o rechazado): un rechazo le devuelve al cliente el plazo completo. Las
-// fechas de delivery se guardan con GETDATE(), así que todo se compara en SQL
-// contra el mismo reloj (no en JS, donde saldría corrido por zona horaria).
-export const SQL_SEGUNDOS_SIN_PAGO = 'DATEDIFF(SECOND, COALESCE(p.FechaMod, p.FechaAlta), GETDATE())';
+// fechas se guardan en UTC y se comparan en SQL contra GETUTCDATE(), el mismo
+// reloj de la BD.
+export const SQL_SEGUNDOS_SIN_PAGO = 'DATEDIFF(SECOND, COALESCE(p.FechaMod, p.FechaAlta), GETUTCDATE())';
 const SIN_COMPROBANTE_PENDIENTE = `NOT EXISTS (SELECT 1 FROM VIDA_PEDIDOS_COMPROBANTES c
   WHERE c.idBranch=p.idBranch AND c.idCuenta=p.idCuenta AND c.idPedido=p.idPedido AND c.StatusRevision='PENDIENTE')`;
 
@@ -37,7 +37,7 @@ async function cancelarPorPlazo(pool, p, plazo, log) {
       .input('idCuenta', sql.BigInt, p.idCuenta)
       .input('idPedido', sql.BigInt, p.idPedido)
       .input('segundos', sql.Int, plazo * 60)
-      .query(`UPDATE p SET Status='CANCELADO', FechaMod=GETDATE()
+      .query(`UPDATE p SET Status='CANCELADO', FechaMod=GETUTCDATE()
               FROM VIDA_PEDIDOS p
               WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.idPedido=@idPedido
                 AND p.Status='ESPERANDO_PAGO' AND ${SIN_COMPROBANTE_PENDIENTE}

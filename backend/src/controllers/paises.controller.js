@@ -89,7 +89,7 @@ export async function editarPais(request, reply) {
       .input('UsuMod',     sql.VarChar(20), String(idUsuario))
       .query(`UPDATE VIDA_CUENTA_PAISES SET
                 NombrePais = @NombrePais, CodigoISO = @CodigoISO,
-                FechaMod = GETDATE(), UsuMod = @UsuMod
+                FechaMod = GETUTCDATE(), UsuMod = @UsuMod
               WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idPais = @idPais`);
 
     return reply.send({ message: 'País actualizado' });
@@ -117,7 +117,7 @@ export async function togglePais(request, reply) {
       .input('Status',   sql.VarChar(20), status)
       .input('UsuMod',   sql.VarChar(20), String(idUsuario))
       .query(`UPDATE VIDA_CUENTA_PAISES SET
-                Status = @Status, FechaMod = GETDATE(), UsuMod = @UsuMod
+                Status = @Status, FechaMod = GETUTCDATE(), UsuMod = @UsuMod
               WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idPais = @idPais`);
 
     return reply.send({ message: `País ${status === 'ACTIVO' ? 'activado' : 'desactivado'}` });

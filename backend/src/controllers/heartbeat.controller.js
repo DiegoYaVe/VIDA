@@ -33,7 +33,7 @@ export async function ping(request, reply) {
       .input('idPuntoVenta',sql.BigInt, idPuntoVenta)
       .query(`UPDATE VIDA_CUENTA_PUNTOS_VENTA
               SET StatusConexion  = 'ONLINE',
-                  UltimoHeartbeat = GETDATE()
+                  UltimoHeartbeat = GETUTCDATE()
               WHERE idBranch = @idBranch AND idCuenta = @idCuenta
                 AND idPuntoVenta = @idPuntoVenta`);
 
@@ -62,7 +62,7 @@ export async function marcarInactivos(pool, log) {
       SELECT idBranch, idCuenta, idPuntoVenta, NomComercial
       FROM VIDA_CUENTA_PUNTOS_VENTA
       WHERE StatusConexion = 'ONLINE'
-        AND (UltimoHeartbeat IS NULL OR UltimoHeartbeat < DATEADD(MINUTE, -2, GETDATE()))
+        AND (UltimoHeartbeat IS NULL OR UltimoHeartbeat < DATEADD(MINUTE, -2, GETUTCDATE()))
     `);
 
     if (r.recordset.length === 0) return;
@@ -72,7 +72,7 @@ export async function marcarInactivos(pool, log) {
       UPDATE VIDA_CUENTA_PUNTOS_VENTA
       SET StatusConexion = 'OFFLINE'
       WHERE StatusConexion = 'ONLINE'
-        AND (UltimoHeartbeat IS NULL OR UltimoHeartbeat < DATEADD(MINUTE, -2, GETDATE()))
+        AND (UltimoHeartbeat IS NULL OR UltimoHeartbeat < DATEADD(MINUTE, -2, GETUTCDATE()))
     `);
 
     // Broadcast por cada sucursal que acaba de desconectarse

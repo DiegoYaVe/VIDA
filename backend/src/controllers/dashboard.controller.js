@@ -1,9 +1,11 @@
 // src/controllers/dashboard.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
+import { fechaCaracas, sumarDias } from '../services/fechas.service.js';
 
-const HOY   = () => new Date().toISOString().split('T')[0];
-const AYER  = () => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]; };
-const HACE7 = () => { const d = new Date(); d.setDate(d.getDate()-6); return d.toISOString().split('T')[0]; };
+// Días de negocio de Caracas (no la fecha UTC ni la del servidor).
+const HOY   = () => fechaCaracas();
+const AYER  = () => sumarDias(fechaCaracas(), -1);
+const HACE7 = () => sumarDias(fechaCaracas(), -6);
 
 export async function getStats(request, reply) {
   const { idBranch, idCuenta, TipoUsuario, idPuntoVenta } = request.user;
@@ -33,12 +35,12 @@ export async function getStats(request, reply) {
     // ── 1. Ventas HOY y AYER ─────────────────────────────────────────────────
     const qVentas = await base.query(`
       SELECT
-        SUM(CASE WHEN CAST(p.FechaAlta AS DATE) = @hoy  THEN p.TotalUSD ELSE 0 END) AS VentasHoy,
-        COUNT(CASE WHEN CAST(p.FechaAlta AS DATE) = @hoy  THEN 1 END)               AS NumHoy,
-        SUM(CASE WHEN CAST(p.FechaAlta AS DATE) = @ayer THEN p.TotalUSD ELSE 0 END) AS VentasAyer,
-        COUNT(CASE WHEN CAST(p.FechaAlta AS DATE) = @ayer THEN 1 END)               AS NumAyer,
-        SUM(CASE WHEN CAST(p.FechaAlta AS DATE) = @hoy  THEN ISNULL(p.MontoEfectivo,0) ELSE 0 END) AS EfectivoHoy,
-        SUM(CASE WHEN CAST(p.FechaAlta AS DATE) = @hoy  THEN ISNULL(p.MontoTarjeta,0)  ELSE 0 END) AS TarjetaHoy
+        SUM(CASE WHEN CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) = @hoy  THEN p.TotalUSD ELSE 0 END) AS VentasHoy,
+        COUNT(CASE WHEN CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) = @hoy  THEN 1 END)               AS NumHoy,
+        SUM(CASE WHEN CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) = @ayer THEN p.TotalUSD ELSE 0 END) AS VentasAyer,
+        COUNT(CASE WHEN CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) = @ayer THEN 1 END)               AS NumAyer,
+        SUM(CASE WHEN CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) = @hoy  THEN ISNULL(p.MontoEfectivo,0) ELSE 0 END) AS EfectivoHoy,
+        SUM(CASE WHEN CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) = @hoy  THEN ISNULL(p.MontoTarjeta,0)  ELSE 0 END) AS TarjetaHoy
       FROM VIDA_PEDIDOS p
       WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
         AND p.Canal = 'POS' AND p.Status = 'ENTREGADO'
@@ -56,16 +58,16 @@ export async function getStats(request, reply) {
 
     const qGrafica = await base2.query(`
       SELECT
-        CAST(p.FechaAlta AS DATE)  AS Fecha,
+        CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE)  AS Fecha,
         COUNT(p.idPedido)          AS NumVentas,
         SUM(p.TotalUSD)            AS TotalUSD
       FROM VIDA_PEDIDOS p
       WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
         AND p.Canal = 'POS' AND p.Status = 'ENTREGADO'
-        AND CAST(p.FechaAlta AS DATE) BETWEEN @hace7 AND @hoy
+        AND CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) BETWEEN @hace7 AND @hoy
         ${pvWhere}
-      GROUP BY CAST(p.FechaAlta AS DATE)
-      ORDER BY CAST(p.FechaAlta AS DATE)
+      GROUP BY CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE)
+      ORDER BY CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE)
     `);
 
     // ── 3. Top 5 productos HOY ────────────────────────────────────────────────
@@ -87,7 +89,7 @@ export async function getStats(request, reply) {
         ON prod.idBranch = d.idBranch AND prod.idCuenta = d.idCuenta AND prod.idProducto = d.idProducto
       WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
         AND p.Canal = 'POS' AND p.Status = 'ENTREGADO'
-        AND CAST(p.FechaAlta AS DATE) = @hoy
+        AND CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) = @hoy
         ${pvWhere}
       GROUP BY d.idProducto, prod.Nombre
       ORDER BY TotalUSD DESC
@@ -113,7 +115,7 @@ export async function getStats(request, reply) {
            AND pv.idPuntoVenta = p.idPuntoVenta
           WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
             AND p.Canal = 'POS' AND p.Status = 'ENTREGADO'
-            AND CAST(p.FechaAlta AS DATE) = @hoy
+            AND CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) = @hoy
           GROUP BY pv.NomComercial, pv.Ciudad, pv.Estado
           ORDER BY TotalUSD DESC
         `);

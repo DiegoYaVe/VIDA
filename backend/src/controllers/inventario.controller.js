@@ -101,7 +101,7 @@ export async function editarCategoria(request, reply) {
       .input('UsuMod',         sql.VarChar(20),  String(idUsuario))
       .query(`UPDATE VIDA_INVENTARIO_CATEGORIAS SET
                 Nombre = @Nombre, Descripcion = @Descripcion, Icono = @Icono,
-                OrdenCategoria = @OrdenCategoria, FechaMod = GETDATE(), UsuMod = @UsuMod
+                OrdenCategoria = @OrdenCategoria, FechaMod = GETUTCDATE(), UsuMod = @UsuMod
               WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idCategoria = @idCategoria`);
 
     return reply.send({ message: 'Categoría actualizada' });
@@ -129,7 +129,7 @@ export async function toggleCategoria(request, reply) {
       .input('Status',      sql.VarChar(20), status)
       .input('UsuMod',      sql.VarChar(20), String(idUsuario))
       .query(`UPDATE VIDA_INVENTARIO_CATEGORIAS SET
-                Status = @Status, FechaMod = GETDATE(), UsuMod = @UsuMod
+                Status = @Status, FechaMod = GETUTCDATE(), UsuMod = @UsuMod
               WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idCategoria = @idCategoria`);
 
     return reply.send({ message: `Categoría ${status === 'ACTIVO' ? 'activada' : 'desactivada'}` });
@@ -420,7 +420,7 @@ export async function editarProducto(request, reply) {
                 idCategoria = @idCategoria, Nombre = @Nombre, Descripcion = @Descripcion,
                 SKU = @SKU, CodigoBarras = @CodigoBarras, UnidadMedida = @UnidadMedida,
                 PrecioUSD = @PrecioUSD, CostoUSD = @CostoUSD, PrecioSuministroUSD = CASE WHEN @CambiarSuministro=1 THEN @PrecioSuministroUSD ELSE PrecioSuministroUSD END, StockMinimo = @StockMinimo,
-                Notas = @Notas, EsProductoPlus = @EsProductoPlus, FechaMod = GETDATE(), UsuMod = @UsuMod
+                Notas = @Notas, EsProductoPlus = @EsProductoPlus, FechaMod = GETUTCDATE(), UsuMod = @UsuMod
               WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idProducto = @idProducto`);
 
     return reply.send({ message: 'Producto actualizado' });
@@ -450,7 +450,7 @@ export async function actualizarPreciosLote(request, reply) {
         .input('PrecioUSD',  sql.Decimal(18,4), precio)
         .input('UsuMod',     sql.VarChar(30),  `U:${idUsuario}`)
         .query(`UPDATE VIDA_INVENTARIO_PRODUCTOS
-                SET PrecioUSD=@PrecioUSD, FechaMod=GETDATE(), UsuMod=@UsuMod
+                SET PrecioUSD=@PrecioUSD, FechaMod=GETUTCDATE(), UsuMod=@UsuMod
                 WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProducto=@idProducto`);
       actualizados += r.rowsAffected[0];
     }
@@ -479,7 +479,7 @@ export async function toggleProducto(request, reply) {
       .input('Status',     sql.VarChar(20), status)
       .input('UsuMod',     sql.VarChar(20), String(idUsuario))
       .query(`UPDATE VIDA_INVENTARIO_PRODUCTOS SET
-                Status = @Status, FechaMod = GETDATE(), UsuMod = @UsuMod
+                Status = @Status, FechaMod = GETUTCDATE(), UsuMod = @UsuMod
               WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idProducto = @idProducto`);
 
     return reply.send({ message: `Producto ${status === 'ACTIVO' ? 'activado' : 'desactivado'}` });
@@ -600,7 +600,7 @@ export async function registrarMovimiento(request, reply) {
                 ON target.idBranch = src.idBranch AND target.idCuenta = src.idCuenta
                AND target.idPuntoVenta = src.idPuntoVenta AND target.idProducto = src.idProducto
               WHEN MATCHED THEN
-                UPDATE SET Cantidad = @Cantidad, FechaMod = GETDATE()
+                UPDATE SET Cantidad = @Cantidad, FechaMod = GETUTCDATE()
               WHEN NOT MATCHED THEN
                 INSERT (idBranch, idCuenta, idPuntoVenta, idProducto, Cantidad)
                 VALUES (@idBranch, @idCuenta, @idPuntoVenta, @idProducto, @Cantidad);`);
@@ -732,7 +732,7 @@ export async function subirImagenProducto(request, reply) {
       .input('ImagenProducto', sql.VarChar(300), urlImagen)
       .input('UsuMod',         sql.VarChar(20),  String(idUsuario))
       .query(`UPDATE VIDA_INVENTARIO_PRODUCTOS SET
-                ImagenProducto=@ImagenProducto, FechaMod=GETDATE(), UsuMod=@UsuMod
+                ImagenProducto=@ImagenProducto, FechaMod=GETUTCDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProducto=@idProducto`);
 
     if (r.rowsAffected[0] === 0) {

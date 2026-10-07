@@ -23,8 +23,8 @@ export async function promocionesVigentes(pool, idBranch, idCuenta) {
     .query(`SELECT idPromocion, Nombre, Tipo, Valor, Valor2, Alcance, idCategoria, idProducto
             FROM VIDA_PROMOCIONES
             WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'
-              AND (FechaInicio IS NULL OR FechaInicio <= CAST(GETDATE() AS DATE))
-              AND (FechaFin    IS NULL OR FechaFin    >= CAST(GETDATE() AS DATE))`);
+              AND (FechaInicio IS NULL OR FechaInicio <= CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE))
+              AND (FechaFin    IS NULL OR FechaFin    >= CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE))`);
   return r.recordset;
 }
 
@@ -109,8 +109,8 @@ export async function listarPromociones(request, reply) {
       .input('idCuenta', sql.BigInt, idCuenta)
       .query(`SELECT pr.*, cat.Nombre AS NombreCategoria, prod.Nombre AS NombreProducto,
                      CASE WHEN pr.Status='ACTIVO'
-                            AND (pr.FechaInicio IS NULL OR pr.FechaInicio <= CAST(GETDATE() AS DATE))
-                            AND (pr.FechaFin    IS NULL OR pr.FechaFin    >= CAST(GETDATE() AS DATE))
+                            AND (pr.FechaInicio IS NULL OR pr.FechaInicio <= CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE))
+                            AND (pr.FechaFin    IS NULL OR pr.FechaFin    >= CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE))
                           THEN 1 ELSE 0 END AS Vigente
               FROM VIDA_PROMOCIONES pr
               LEFT JOIN VIDA_INVENTARIO_CATEGORIAS cat

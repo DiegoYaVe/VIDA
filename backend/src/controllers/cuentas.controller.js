@@ -41,7 +41,7 @@ export async function listarCuentas(request, reply) {
     if (vencidas === '1' || vencidas === 'true') {
       filtro += ` AND c.Status IN ('ABIERTA','PARCIAL')
                   AND c.FechaVencimiento IS NOT NULL
-                  AND c.FechaVencimiento < CAST(GETUTCDATE() AS DATE)`;
+                  AND c.FechaVencimiento < CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE)`;
     }
     if (idProveedor) {
       req.input('idProveedor', sql.BigInt, BigInt(idProveedor));

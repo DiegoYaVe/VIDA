@@ -143,9 +143,9 @@ async function recomputarCurso(pool, actor, idCurso) {
       .query(`MERGE VIDA_ACADEMIA_PROGRESO AS t
               USING (SELECT @b AS idBranch,@c AS idCuenta,@ta AS TipoActor,@u AS idUsuario,@cur AS idCurso) AS s
                 ON (t.idBranch=s.idBranch AND t.idCuenta=s.idCuenta AND t.TipoActor=s.TipoActor AND t.idUsuario=s.idUsuario AND t.idCurso=s.idCurso)
-              WHEN MATCHED AND t.Completado=0 THEN UPDATE SET Completado=1, FechaCompletado=GETDATE()
+              WHEN MATCHED AND t.Completado=0 THEN UPDATE SET Completado=1, FechaCompletado=GETUTCDATE()
               WHEN NOT MATCHED THEN INSERT (idBranch,idCuenta,TipoActor,idUsuario,idCurso,Completado,FechaCompletado)
-                VALUES (@b,@c,@ta,@u,@cur,1,GETDATE());`);
+                VALUES (@b,@c,@ta,@u,@cur,1,GETUTCDATE());`);
     const dip = await emitirConstancia(pool, actor, idCurso);
     if (actorTipo === 'CLIENTE' && dip.nueva) {
       const cur = await pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('cur', sql.BigInt, idCurso)
@@ -346,9 +346,9 @@ export async function iniciarLeccion(request, reply) {
       .query(`MERGE VIDA_ACADEMIA_LECCION_PROGRESO AS t
               USING (SELECT @b AS idBranch,@c AS idCuenta,@ta AS TipoActor,@u AS idUsuario,@l AS idLeccion) AS s
                 ON (t.idBranch=s.idBranch AND t.idCuenta=s.idCuenta AND t.TipoActor=s.TipoActor AND t.idUsuario=s.idUsuario AND t.idLeccion=s.idLeccion)
-              WHEN MATCHED AND t.FechaInicio IS NULL THEN UPDATE SET FechaInicio=GETDATE()
+              WHEN MATCHED AND t.FechaInicio IS NULL THEN UPDATE SET FechaInicio=GETUTCDATE()
               WHEN NOT MATCHED THEN INSERT (idBranch,idCuenta,TipoActor,idUsuario,idLeccion,idCurso,Completado,FechaInicio)
-                VALUES (@b,@c,@ta,@u,@l,@cur,0,GETDATE());`);
+                VALUES (@b,@c,@ta,@u,@l,@cur,0,GETUTCDATE());`);
     return reply.send({ ok: true });
   } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al iniciar la lección' }); }
 }
@@ -372,10 +372,10 @@ export async function completarLeccion(request, reply) {
       .query(`MERGE VIDA_ACADEMIA_LECCION_PROGRESO AS t
               USING (SELECT @b AS idBranch,@c AS idCuenta,@ta AS TipoActor,@u AS idUsuario,@l AS idLeccion) AS s
                 ON (t.idBranch=s.idBranch AND t.idCuenta=s.idCuenta AND t.TipoActor=s.TipoActor AND t.idUsuario=s.idUsuario AND t.idLeccion=s.idLeccion)
-              WHEN MATCHED THEN UPDATE SET Completado=1, FechaFin=GETDATE(), FechaInicio=COALESCE(t.FechaInicio, GETDATE()),
+              WHEN MATCHED THEN UPDATE SET Completado=1, FechaFin=GETUTCDATE(), FechaInicio=COALESCE(t.FechaInicio, GETUTCDATE()),
                 SegundosTomados=CASE WHEN @seg>0 THEN @seg ELSE t.SegundosTomados END
               WHEN NOT MATCHED THEN INSERT (idBranch,idCuenta,TipoActor,idUsuario,idLeccion,idCurso,Completado,FechaInicio,FechaFin,SegundosTomados)
-                VALUES (@b,@c,@ta,@u,@l,@cur,1,GETDATE(),GETDATE(),@seg);`);
+                VALUES (@b,@c,@ta,@u,@l,@cur,1,GETUTCDATE(),GETUTCDATE(),@seg);`);
 
     const estado = await recomputarCurso(pool, actor, idCurso);
     return reply.send({ ok: true, curso: estado });
@@ -425,9 +425,9 @@ export async function responderQuiz(request, reply) {
               USING (SELECT @b AS idBranch,@c AS idCuenta,@ta AS TipoActor,@u AS idUsuario,@l AS idLeccion) AS s
                 ON (t.idBranch=s.idBranch AND t.idCuenta=s.idCuenta AND t.TipoActor=s.TipoActor AND t.idUsuario=s.idUsuario AND t.idLeccion=s.idLeccion)
               WHEN MATCHED THEN UPDATE SET QuizPuntaje=@pj, Completado=CASE WHEN @done=1 THEN 1 ELSE t.Completado END,
-                FechaInicio=COALESCE(t.FechaInicio, GETDATE()), FechaFin=CASE WHEN @done=1 THEN GETDATE() ELSE t.FechaFin END
+                FechaInicio=COALESCE(t.FechaInicio, GETUTCDATE()), FechaFin=CASE WHEN @done=1 THEN GETUTCDATE() ELSE t.FechaFin END
               WHEN NOT MATCHED THEN INSERT (idBranch,idCuenta,TipoActor,idUsuario,idLeccion,idCurso,Completado,QuizPuntaje,FechaInicio,FechaFin)
-                VALUES (@b,@c,@ta,@u,@l,@cur,@done,@pj,GETDATE(),CASE WHEN @done=1 THEN GETDATE() ELSE NULL END);`);
+                VALUES (@b,@c,@ta,@u,@l,@cur,@done,@pj,GETUTCDATE(),CASE WHEN @done=1 THEN GETUTCDATE() ELSE NULL END);`);
 
     let estado = null;
     if (res.aprobado) estado = await recomputarCurso(pool, actor, idCurso);
@@ -457,9 +457,9 @@ export async function completarCurso(request, reply) {
       .query(`MERGE VIDA_ACADEMIA_PROGRESO AS t
               USING (SELECT @b AS idBranch,@c AS idCuenta,@ta AS TipoActor,@u AS idUsuario,@cur AS idCurso) AS s
                 ON (t.idBranch=s.idBranch AND t.idCuenta=s.idCuenta AND t.TipoActor=s.TipoActor AND t.idUsuario=s.idUsuario AND t.idCurso=s.idCurso)
-              WHEN MATCHED AND t.Completado=0 THEN UPDATE SET Completado=1, FechaCompletado=GETDATE()
+              WHEN MATCHED AND t.Completado=0 THEN UPDATE SET Completado=1, FechaCompletado=GETUTCDATE()
               WHEN NOT MATCHED THEN INSERT (idBranch,idCuenta,TipoActor,idUsuario,idCurso,Completado,FechaCompletado)
-                VALUES (@b,@c,@ta,@u,@cur,1,GETDATE());`);
+                VALUES (@b,@c,@ta,@u,@cur,1,GETUTCDATE());`);
     const dip = await emitirConstancia(pool, actor, idCurso);
     if (actorTipo === 'CLIENTE' && dip.nueva) await acreditarPuntosCliente(pool, idBranch, idCuenta, actorId, idCurso, c.recordset[0].Puntos || 0, c.recordset[0].Titulo);
     return reply.send({ ok: true, curso: { completado: true } });

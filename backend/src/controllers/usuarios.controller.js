@@ -396,7 +396,7 @@ export async function editarUsuario(request, reply) {
                 Puesto=@Puesto, FechaNacimiento=@FechaNacimiento,
                 idPuntoVenta=@idPuntoVenta, idEstado=@idEstado, idPais=@idPais,
                 NivelAcceso=@NivelAcceso,
-                FechaMod=GETDATE(), UsuMod=@UsuMod
+                FechaMod=GETUTCDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
 
     if (pantallas !== undefined) {
@@ -454,7 +454,7 @@ export async function toggleStatus(request, reply) {
       .input('idUsuario', sql.BigInt,      idUsuario)
       .input('Status',    sql.VarChar(50), status)
       .input('UsuMod',    sql.VarChar(10), String(idEditor))
-      .query(`UPDATE VIDA_CUENTA_USUARIOS SET Status=@Status, FechaMod=GETDATE(), UsuMod=@UsuMod
+      .query(`UPDATE VIDA_CUENTA_USUARIOS SET Status=@Status, FechaMod=GETUTCDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
 
     return reply.send({ message: `Usuario ${status === 'ACTIVO' ? 'activado' : 'desactivado'} correctamente` });
@@ -496,7 +496,7 @@ export async function cambiarPassword(request, reply) {
       .input('idCuenta',  sql.BigInt,       idCuenta)
       .input('idUsuario', sql.BigInt,       idUsuario)
       .input('Pass',      sql.VarChar(255), hash)
-      .query(`UPDATE VIDA_CUENTA_USUARIOS SET Pass=@Pass, CambiarPass=0, FechaMod=GETDATE(), UsuMod='CAMBIO_PASS'
+      .query(`UPDATE VIDA_CUENTA_USUARIOS SET Pass=@Pass, CambiarPass=0, FechaMod=GETUTCDATE(), UsuMod='CAMBIO_PASS'
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
 
     return reply.send({ message: 'Contraseña actualizada correctamente' });

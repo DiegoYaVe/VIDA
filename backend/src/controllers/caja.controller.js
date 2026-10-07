@@ -47,9 +47,8 @@ async function calcularTotales(pool, idBranch, idCuenta, idPuntoVenta, fechaAper
     req.input('fechaHasta', sql.DateTime, new Date(fechaHasta));
     fechaCondicion += ' AND p.FechaAlta <= @fechaHasta';
   } else {
-    // UTC: las ventas POS guardan FechaAlta en UTC (el navegador manda
-    // toISOString()); el servidor puede estar en otra zona (QA en UTC-7), así
-    // que GETDATE() (hora local del server) dejaba fuera ventas válidas.
+    // UTC: todas las fechas se guardan en UTC (ver services/fechas.service.js);
+    // la hora local del servidor de BD (QA en UTC-7) dejaba fuera ventas válidas.
     fechaCondicion += ' AND p.FechaAlta <= GETUTCDATE()';
   }
 

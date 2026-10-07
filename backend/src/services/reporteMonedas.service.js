@@ -1,10 +1,11 @@
+import {fechaCaracas} from './fechas.service.js';
 // Agrega snapshots históricos, sin consultar tipos de cambio nuevos.
 export function construirReporteVentas(ventas) {
  const tiendas=new Map(),dias=new Map(),detalleMonedas=[];
  const monedas={USD:{Efectivo:0,Tarjeta:0,Cambio:0,NetoEfectivo:0},VES:{Efectivo:0,Tarjeta:0,Cambio:0,NetoEfectivo:0}};
  let sinTasa=0;
  for(const v of ventas) {
-  const key=String(v.idPuntoVenta),fecha=new Date(v.FechaAlta).toISOString().slice(0,10);
+  const key=String(v.idPuntoVenta),fecha=fechaCaracas(new Date(v.FechaAlta));
   if(!tiendas.has(key)) tiendas.set(key,{idPuntoVenta:v.idPuntoVenta,NombrePuntoVenta:v.NombrePuntoVenta,Pais:v.Pais,Estado:v.Estado,Ciudad:v.Ciudad,NumVentas:0,TotalUSD:0,TotalEfectivo:0,TotalTarjeta:0,TotalCambio:0});
   const t=tiendas.get(key);t.NumVentas++;t.TotalUSD+=Number(v.TotalUSD);
   t.TotalEfectivo+=Number(v.MontoEfectivo||0);t.TotalTarjeta+=Number(v.MontoTarjeta||0);t.TotalCambio+=Number(v.MontoCambio||0);

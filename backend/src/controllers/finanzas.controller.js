@@ -74,7 +74,7 @@ export async function guardarFinanzas(request, reply) {
         WHEN MATCHED THEN UPDATE SET
           CostosFijosMensualUSD=@Fijos, PctComisionDelivery=@Delivery, PctImpuestos=@Impuestos,
           PctPasarela=@Pasarela, InversionInicialUSD=@Inversion, MetaGananciaMensualUSD=@Meta,
-          FechaMod=GETDATE(), UsuMod=@Usu
+          FechaMod=GETUTCDATE(), UsuMod=@Usu
         WHEN NOT MATCHED THEN INSERT
           (idBranch,idCuenta,idPuntoVenta,CostosFijosMensualUSD,PctComisionDelivery,PctImpuestos,
            PctPasarela,InversionInicialUSD,MetaGananciaMensualUSD,UsuAlta)
@@ -163,7 +163,7 @@ export async function guardarMetas(request, reply) {
         USING (SELECT @idBranch AS idBranch, @idCuenta AS idCuenta, @idPuntoVenta AS idPuntoVenta) AS s
           ON (t.idBranch=s.idBranch AND t.idCuenta=s.idCuenta AND t.idPuntoVenta=s.idPuntoVenta)
         WHEN MATCHED THEN UPDATE SET
-          MetaDiariaUSD=@Dia, MetaSemanalUSD=@Sem, MetaMensualUSD=@Mes, FechaMod=GETDATE(), UsuMod=@Usu
+          MetaDiariaUSD=@Dia, MetaSemanalUSD=@Sem, MetaMensualUSD=@Mes, FechaMod=GETUTCDATE(), UsuMod=@Usu
         WHEN NOT MATCHED THEN INSERT
           (idBranch,idCuenta,idPuntoVenta,MetaDiariaUSD,MetaSemanalUSD,MetaMensualUSD,UsuAlta)
           VALUES (@idBranch,@idCuenta,@idPuntoVenta,@Dia,@Sem,@Mes,@Usu);`);
@@ -190,9 +190,9 @@ export async function progresoMetas(request, reply) {
       .input('idPuntoVenta', sql.BigInt, idPuntoVenta)
       .query(`
         SELECT
-          ISNULL(SUM(CASE WHEN CAST(FechaAlta AS DATE)=CAST(GETDATE() AS DATE) THEN TotalUSD ELSE 0 END),0) AS Dia,
-          ISNULL(SUM(CASE WHEN FechaAlta >= DATEADD(DAY,-6, CAST(GETDATE() AS DATE)) THEN TotalUSD ELSE 0 END),0) AS Semana,
-          ISNULL(SUM(CASE WHEN FechaAlta >= DATEFROMPARTS(YEAR(GETDATE()),MONTH(GETDATE()),1) THEN TotalUSD ELSE 0 END),0) AS Mes
+          ISNULL(SUM(CASE WHEN CAST(DATEADD(HOUR,-4,FechaAlta) AS DATE)=CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE) THEN TotalUSD ELSE 0 END),0) AS Dia,
+          ISNULL(SUM(CASE WHEN DATEADD(HOUR,-4,FechaAlta) >= DATEADD(DAY,-6, CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE)) THEN TotalUSD ELSE 0 END),0) AS Semana,
+          ISNULL(SUM(CASE WHEN DATEADD(HOUR,-4,FechaAlta) >= DATEFROMPARTS(YEAR(DATEADD(HOUR,-4,GETUTCDATE())),MONTH(DATEADD(HOUR,-4,GETUTCDATE())),1) THEN TotalUSD ELSE 0 END),0) AS Mes
         FROM VIDA_PEDIDOS
         WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta
           AND Canal='POS' AND Status='ENTREGADO'`);
@@ -254,8 +254,8 @@ export async function calcularRentabilidad(request, reply) {
       .input('idPuntoVenta', sql.BigInt, idPuntoVenta)
       .query(`
         SELECT
-          ISNULL(SUM(CASE WHEN CAST(FechaAlta AS DATE)=CAST(GETDATE() AS DATE) THEN TotalUSD ELSE 0 END),0) AS VentasHoy,
-          ISNULL(SUM(CASE WHEN FechaAlta >= DATEADD(DAY,-30,GETDATE()) THEN TotalUSD ELSE 0 END),0)         AS Ventas30
+          ISNULL(SUM(CASE WHEN CAST(DATEADD(HOUR,-4,FechaAlta) AS DATE)=CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE) THEN TotalUSD ELSE 0 END),0) AS VentasHoy,
+          ISNULL(SUM(CASE WHEN FechaAlta >= DATEADD(DAY,-30,GETUTCDATE()) THEN TotalUSD ELSE 0 END),0)         AS Ventas30
         FROM VIDA_PEDIDOS
         WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta
           AND Canal='POS' AND Status='ENTREGADO'`);

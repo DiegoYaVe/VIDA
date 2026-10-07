@@ -3,6 +3,7 @@
 // A diferencia de las promociones (que se aplican solas), el cupón requiere que
 // el cliente ingrese un CÓDIGO y tiene límites de uso (global y por cliente).
 import { getPool, sql } from '../db/sqlserver.js';
+import { fechaCaracas, fechaISO } from '../services/fechas.service.js';
 
 const TIPOS    = ['DESCUENTO_PCT', 'DESCUENTO_USD'];
 const ALCANCES = ['TODO', 'CATEGORIA', 'PRODUCTO'];
@@ -37,10 +38,13 @@ export function evaluarCupon(cupon, { subtotal, canal, items } = {}) {
   if (!cupon) return { ok: false, descuento: 0, motivo: 'Cupón no encontrado' };
   if (cupon.Status !== 'ACTIVO') return { ok: false, descuento: 0, motivo: 'Cupón inactivo' };
 
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  if (cupon.FechaInicio && new Date(cupon.FechaInicio) > hoy)
+  // Vigencia por día de negocio de Caracas: FechaInicio/FechaFin son días
+  // completos y no dependen de la zona horaria del servidor.
+  const hoy = fechaCaracas();
+  const inicio = fechaISO(cupon.FechaInicio), fin = fechaISO(cupon.FechaFin);
+  if (inicio && inicio > hoy)
     return { ok: false, descuento: 0, motivo: 'El cupón aún no está vigente' };
-  if (cupon.FechaFin && new Date(cupon.FechaFin) < hoy)
+  if (fin && fin < hoy)
     return { ok: false, descuento: 0, motivo: 'El cupón está vencido' };
 
   if (cupon.Canal && cupon.Canal !== 'TODO' && canal && cupon.Canal !== canal)
@@ -399,7 +403,7 @@ export async function aplicarCuponPedido(request, reply) {
       .input('Descuento',  sql.Decimal(18,4),descuento)
       .input('NuevoTotal', sql.Decimal(18,4),nuevoTotal)
       .query(`UPDATE VIDA_PEDIDOS
-                SET TotalUSD=@NuevoTotal, CuponCodigo=@Codigo, CuponDescuentoUSD=@Descuento, FechaMod=GETDATE()
+                SET TotalUSD=@NuevoTotal, CuponCodigo=@Codigo, CuponDescuentoUSD=@Descuento, FechaMod=GETUTCDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
                 AND CuponCodigo IS NULL`);
     if (updR.rowsAffected[0] === 0) {

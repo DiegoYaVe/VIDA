@@ -6,6 +6,7 @@ import {
   Receipt, DollarSign, CreditCard, Layers, Printer,
   Search, ChevronDown, TrendingUp, X,
 } from 'lucide-react';
+import { hoyCaracas } from '../utils/fechas.js';
 
 const LABEL_METODO = {
   EFECTIVO: 'Efectivo',
@@ -77,7 +78,7 @@ function TicketPrint({ venta }) {
 
 // ── Página principal ─────────────────────────────────────────────────────────
 export default function Ventas() {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyCaracas();
 
   const [ventas,      setVentas]      = useState([]);
   const [resumen,     setResumen]     = useState(null);

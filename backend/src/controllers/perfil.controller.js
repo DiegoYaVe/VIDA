@@ -86,7 +86,7 @@ export async function updatePerfil(request, reply) {
       .query(`UPDATE VIDA_CUENTA_USUARIOS SET
                 Nombre=@Nombre, Apellidos=@Apellidos, NomComercial=@NomComercial,
                 Telefono=@Telefono, Puesto=@Puesto, FechaNacimiento=@FechaNacimiento,
-                FechaMod=GETDATE(), UsuMod=@UsuMod
+                FechaMod=GETUTCDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
 
     return reply.send({ message: 'Perfil actualizado correctamente' });
@@ -137,7 +137,7 @@ export async function uploadFoto(request, reply) {
       .input('ImagenUsuario',sql.VarChar(300), urlFoto)
       .input('UsuMod',       sql.VarChar(50),  String(idUsuario))
       .query(`UPDATE VIDA_CUENTA_USUARIOS SET
-                ImagenUsuario=@ImagenUsuario, FechaMod=GETDATE(), UsuMod=@UsuMod
+                ImagenUsuario=@ImagenUsuario, FechaMod=GETUTCDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
 
     return reply.send({ message: 'Foto actualizada correctamente', url: urlFoto });
@@ -184,7 +184,7 @@ export async function cambiarPassPerfil(request, reply) {
       .input('Pass',      sql.VarChar(255), hash)
       .input('UsuMod',    sql.VarChar(50),  String(idUsuario))
       .query(`UPDATE VIDA_CUENTA_USUARIOS SET
-                Pass=@Pass, CambiarPass=0, FechaMod=GETDATE(), UsuMod=@UsuMod
+                Pass=@Pass, CambiarPass=0, FechaMod=GETUTCDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
 
     return reply.send({ message: 'Contraseña actualizada correctamente' });

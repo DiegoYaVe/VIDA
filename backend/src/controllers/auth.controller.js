@@ -141,7 +141,7 @@ export async function refresh(request, reply) {
           ON u.idBranch = s.idBranch AND u.idCuenta = s.idCuenta AND u.idUsuario = s.idUsuario
         WHERE s.RefreshToken = @RefreshToken
           AND s.Status = 'ACTIVO'
-          AND s.FechaExpira > GETDATE()
+          AND s.FechaExpira > GETUTCDATE()
       `);
 
     const sesion = result.recordset[0];

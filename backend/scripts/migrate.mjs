@@ -69,7 +69,7 @@ async function ensureTable(pool) {
       Checksum    VARCHAR(64)  NULL,
       Baseline    BIT          NOT NULL DEFAULT 0,
       DurationMs  INT          NULL,
-      AppliedAt   DATETIME     NOT NULL DEFAULT GETDATE(),
+      AppliedAt   DATETIME     NOT NULL DEFAULT GETUTCDATE(),
       AppliedBy   VARCHAR(60)  NULL,
       CONSTRAINT PK_${TABLE} PRIMARY KEY (Filename)
     );`);

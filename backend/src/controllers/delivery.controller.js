@@ -11,6 +11,7 @@ import { prepararMoneda,leerMoneda } from '../services/moneda.service.js';
 import { calcularPagoDelivery } from '../services/pagoDelivery.service.js';
 import { calcularCobroEfectivoRepartidor, cobroSeguro } from '../services/liquidacionRepartidor.service.js';
 import { plazoPagoMinutos, SQL_SEGUNDOS_SIN_PAGO } from '../services/pagoMovil.service.js';
+import { fechaCaracas } from '../services/fechas.service.js';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import path from 'path';
@@ -285,7 +286,7 @@ export async function confirmarEmailCliente(request, reply) {
       .query(`SELECT idBranch, idCuenta, idCliente, Nombre
               FROM VIDA_APP_CLIENTES
               WHERE TokenConfirmacion=@token
-                AND TokenExpira > GETDATE()
+                AND TokenExpira > GETUTCDATE()
                 AND Status='ACTIVO'`);
 
     if (!r.recordset.length) {
@@ -644,7 +645,7 @@ export async function subirComprobanteCliente(request, reply) {
 
     await new sql.Request(transaction)
       .input('idBranch',sql.BigInt,idBranch).input('idCuenta',sql.BigInt,idCuenta).input('idPedido',sql.BigInt,idPedido)
-      .query(`UPDATE VIDA_PEDIDOS SET StatusPago='PENDIENTE', FechaMod=GETDATE()
+      .query(`UPDATE VIDA_PEDIDOS SET StatusPago='PENDIENTE', FechaMod=GETUTCDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido AND Status='ESPERANDO_PAGO'`);
     await transaction.commit();
     transaction = null;
@@ -1096,7 +1097,7 @@ export async function crearPedidoApp(request, reply) {
                 VALUES
                   (@idBranch,@idCuenta,@idPedido,@idPuntoVenta,@idCliente,@Canal,@Status,
                    @MetodoPago,@StatusPago,@TotalUSD,@PagoMonedaJSON,@CuponCodigo,@CuponDescuentoUSD,@DescuentoPuntosUSD,@PuntosUsados,@DireccionEntrega,
-                   @UbicacionEntregaLat,@UbicacionEntregaLon,@NotasCliente,GETDATE())`);
+                   @UbicacionEntregaLat,@UbicacionEntregaLon,@NotasCliente,GETUTCDATE())`);
 
       // ── Debitar puntos usados (atómico: solo si el saldo alcanza) ────────
       if (puntosUsados > 0) {
@@ -1177,7 +1178,7 @@ export async function crearPedidoApp(request, reply) {
       .input('idCuenta', sql.BigInt, idCuenta)
       .input('idPedido', sql.BigInt, idPedido)
       .input('min',      sql.Int,    cancelMin)
-      .query(`UPDATE VIDA_PEDIDOS SET FechaLimiteBusqueda = DATEADD(MINUTE, @min, GETDATE())
+      .query(`UPDATE VIDA_PEDIDOS SET FechaLimiteBusqueda = DATEADD(MINUTE, @min, GETUTCDATE())
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
 
     // ── Buscar repartidores disponibles ───────────────────────────────────
@@ -1301,7 +1302,7 @@ export async function estadoPedidoCliente(request, reply) {
                     THEN p.OrdenRuta - 1 ELSE 0 END AS ParadasAntes,
                DATEDIFF(MINUTE, GETUTCDATE(), p.ETAEntrega) AS MinutosRestantes,
                p.FechaLimiteBusqueda, p.AvisoSinRepartidor,
-               DATEDIFF(SECOND, GETDATE(), p.FechaLimiteBusqueda) AS SegundosBusquedaRestantes,
+               DATEDIFF(SECOND, GETUTCDATE(), p.FechaLimiteBusqueda) AS SegundosBusquedaRestantes,
                ${SQL_SEGUNDOS_SIN_PAGO} AS SegundosSinPago,
                (SELECT COUNT(*) FROM VIDA_PEDIDOS_COMPROBANTES c
                 WHERE c.idBranch=p.idBranch AND c.idCuenta=p.idCuenta AND c.idPedido=p.idPedido
@@ -1517,9 +1518,9 @@ export async function obtenerHidratacion(request, reply) {
       .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
       .query(`SELECT CONVERT(varchar(10),Fecha,23) AS F, Vasos FROM VIDA_CLIENTE_HIDRATACION_DIA
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente
-                AND Fecha >= DATEADD(DAY,-40, CAST(GETDATE() AS DATE))
+                AND Fecha >= DATEADD(DAY,-40, CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE))
               ORDER BY Fecha`);
-    const tR = await pool.request().query(`SELECT CONVERT(varchar(10),CAST(GETDATE() AS DATE),23) AS T`);
+    const tR = await pool.request().query(`SELECT CONVERT(varchar(10),CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE),23) AS T`);
     const hoyStr = tR.recordset[0].T;
     const mapa = new Map(logR.recordset.map(r => [r.F, r.Vasos]));
     const vasosHoy = mapa.get(hoyStr) || 0;
@@ -1574,18 +1575,18 @@ export async function registrarVaso(request, reply) {
     await pool.request()
       .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
       .query(`MERGE VIDA_CLIENTE_HIDRATACION_DIA AS t
-              USING (SELECT @idBranch AS idBranch, @idCuenta AS idCuenta, @idCliente AS idCliente, CAST(GETDATE() AS DATE) AS Fecha) AS s
+              USING (SELECT @idBranch AS idBranch, @idCuenta AS idCuenta, @idCliente AS idCliente, CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE) AS Fecha) AS s
                 ON (t.idBranch=s.idBranch AND t.idCuenta=s.idCuenta AND t.idCliente=s.idCliente AND t.Fecha=s.Fecha)
-              WHEN MATCHED THEN UPDATE SET Vasos = t.Vasos + 1, FechaMod=GETDATE()
-              WHEN NOT MATCHED THEN INSERT (idBranch,idCuenta,idCliente,Fecha,Vasos) VALUES (@idBranch,@idCuenta,@idCliente,CAST(GETDATE() AS DATE),1);`);
+              WHEN MATCHED THEN UPDATE SET Vasos = t.Vasos + 1, FechaMod=GETUTCDATE()
+              WHEN NOT MATCHED THEN INSERT (idBranch,idCuenta,idCliente,Fecha,Vasos) VALUES (@idBranch,@idCuenta,@idCliente,CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE),1);`);
 
     // Releer estado + racha
     const logR = await pool.request()
       .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
       .query(`SELECT CONVERT(varchar(10),Fecha,23) AS F, Vasos FROM VIDA_CLIENTE_HIDRATACION_DIA
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente
-                AND Fecha >= DATEADD(DAY,-40, CAST(GETDATE() AS DATE))`);
-    const tR = await pool.request().query(`SELECT CONVERT(varchar(10),CAST(GETDATE() AS DATE),23) AS T`);
+                AND Fecha >= DATEADD(DAY,-40, CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE))`);
+    const tR = await pool.request().query(`SELECT CONVERT(varchar(10),CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE),23) AS T`);
     const hoyStr = tR.recordset[0].T;
     const mapa = new Map(logR.recordset.map(r => [r.F, r.Vasos]));
     const vasosHoy = mapa.get(hoyStr) || 0;
@@ -1621,7 +1622,7 @@ export async function registrarVaso(request, reply) {
           .input('idCliente', sql.BigInt, idCliente).input('Pts', sql.Int, pts)
           .query(`UPDATE VIDA_CLIENTE_HIDRATACION_DIA SET BonusPuntos=@Pts
                   WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente
-                    AND Fecha=CAST(GETDATE() AS DATE) AND ISNULL(BonusPuntos,0)=0;
+                    AND Fecha=CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE) AND ISNULL(BonusPuntos,0)=0;
                   SELECT @@ROWCOUNT AS Filas;`);
         if ((claim.recordset[0]?.Filas ?? 0) === 1) {
           await acreditarPuntosCliente(pool, idBranch, idCuenta, idCliente, pts, `Racha de ${racha} días de hidratación 💧`);
@@ -1648,13 +1649,13 @@ export async function quitarVaso(request, reply) {
     const pool = await getPool();
     await pool.request()
       .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
-      .query(`UPDATE VIDA_CLIENTE_HIDRATACION_DIA SET Vasos = CASE WHEN Vasos > 0 THEN Vasos - 1 ELSE 0 END, FechaMod=GETDATE()
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente AND Fecha=CAST(GETDATE() AS DATE)`);
+      .query(`UPDATE VIDA_CLIENTE_HIDRATACION_DIA SET Vasos = CASE WHEN Vasos > 0 THEN Vasos - 1 ELSE 0 END, FechaMod=GETUTCDATE()
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente AND Fecha=CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE)`);
     const cfg = await leerCfgHidratacion(pool, idBranch, idCuenta, idCliente);
     const hoyR = await pool.request()
       .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
       .query(`SELECT ISNULL(Vasos,0) AS Vasos FROM VIDA_CLIENTE_HIDRATACION_DIA
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente AND Fecha=CAST(GETDATE() AS DATE)`);
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente AND Fecha=CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE)`);
     const vasosHoy = hoyR.recordset[0]?.Vasos ?? 0;
     return reply.send({ vasosHoy, meta: cfg.meta, mlHoy: vasosHoy * cfg.mlVaso });
   } catch (err) {
@@ -1816,7 +1817,7 @@ export async function toggleDisponible(request, reply) {
               SET StatusRepartidor=@status,
                   UltimaLatitud = COALESCE(@lat, UltimaLatitud),
                   UltimaLongitud = COALESCE(@lon, UltimaLongitud),
-                  UltimaUbicacion = CASE WHEN @lat IS NOT NULL THEN GETDATE() ELSE UltimaUbicacion END
+                  UltimaUbicacion = CASE WHEN @lat IS NOT NULL THEN GETUTCDATE() ELSE UltimaUbicacion END
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
 
     broadcast(idBranch, idCuenta, {
@@ -1850,7 +1851,7 @@ export async function actualizarUbicacion(request, reply) {
       .input('lat',          sql.Decimal(10,7), Latitud)
       .input('lon',          sql.Decimal(10,7), Longitud)
       .query(`UPDATE VIDA_REPARTIDORES
-              SET UltimaLatitud=@lat, UltimaLongitud=@lon, UltimaUbicacion=GETDATE()
+              SET UltimaLatitud=@lat, UltimaLongitud=@lon, UltimaUbicacion=GETUTCDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
 
     broadcast(idBranch, idCuenta, {
@@ -1964,7 +1965,7 @@ export async function aceptarPedido(request, reply) {
       .input('idPedido',     sql.BigInt,      idPedido)
       .input('idRepartidor', sql.BigInt,      idRepartidor)
       .query(`UPDATE VIDA_PEDIDOS
-              SET idRepartidor=@idRepartidor, Status='REPARTIDOR_ASIGNADO', FechaMod=GETDATE()
+              SET idRepartidor=@idRepartidor, Status='REPARTIDOR_ASIGNADO', FechaMod=GETUTCDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
                 AND Status='BUSCANDO_REPARTIDOR'`);
 
@@ -2166,7 +2167,7 @@ export async function actualizarStatusPedido(request, reply) {
     const setMotivo = nuevoStatus === 'CANCELADO' ? ', MotivoCancelacion=@motivo' : '';
 
     const updR = await updReq.query(`UPDATE VIDA_PEDIDOS
-            SET Status=@nuevoStatus, FechaMod=GETDATE() ${setComision}${setMotivo}
+            SET Status=@nuevoStatus, FechaMod=GETUTCDATE() ${setComision}${setMotivo}
             WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
               AND Status=@statusActual`);
 
@@ -2196,7 +2197,7 @@ export async function actualizarStatusPedido(request, reply) {
           .query(`UPDATE VIDA_INVENTARIO_STOCK WITH (UPDLOCK, HOLDLOCK) SET
                     Cantidad = CASE WHEN ISNULL(Cantidad,0) - @Cantidad < 0 THEN 0
                                     ELSE ISNULL(Cantidad,0) - @Cantidad END,
-                    FechaMod = GETDATE()
+                    FechaMod = GETUTCDATE()
                   OUTPUT ISNULL(deleted.Cantidad,0) AS CantidadAntes,
                          ISNULL(inserted.Cantidad,0) AS CantidadDespues
                   WHERE idBranch=@idBranch AND idCuenta=@idCuenta
@@ -2439,10 +2440,10 @@ export async function liberarPedido(request, reply) {
       .query(`UPDATE VIDA_PEDIDOS
               SET Status='BUSCANDO_REPARTIDOR',
                   idRepartidor=NULL,
-                  FechaLimiteBusqueda=DATEADD(MINUTE, @prorroga, GETDATE()),
+                  FechaLimiteBusqueda=DATEADD(MINUTE, @prorroga, GETUTCDATE()),
                   VecesLiberado=ISNULL(VecesLiberado,0)+1,
                   OrdenRuta=NULL, DistanciaKm=NULL, ETAEntrega=NULL,
-                  FechaMod=GETDATE()
+                  FechaMod=GETUTCDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
                 AND Status=@statusActual AND idRepartidor=@idRepartidor`);
 
@@ -2588,7 +2589,7 @@ export async function subirEvidenciaEntrega(request, reply) {
       .input('idCuenta', sql.BigInt,       idCuenta)
       .input('idPedido', sql.BigInt,       idPedido)
       .input('url',      sql.VarChar(300), url)
-      .query(`UPDATE VIDA_PEDIDOS SET EvidenciaEntregaURL=@url, FechaMod=GETDATE()
+      .query(`UPDATE VIDA_PEDIDOS SET EvidenciaEntregaURL=@url, FechaMod=GETUTCDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
 
     return reply.code(201).send({ url });
@@ -3241,7 +3242,7 @@ export async function resumenRepartidores(request, reply) {
   const { desde, hasta } = request.query;
 
   // Rango por defecto: el día de hoy
-  const fDesde = desde || new Date().toISOString().slice(0, 10);
+  const fDesde = desde || fechaCaracas();
   const fHasta = hasta || fDesde;
 
   try {
@@ -3520,7 +3521,7 @@ export async function extenderBusquedaPedido(request, reply) {
       .input('idCliente', sql.BigInt, idCliente)
       .input('min',       sql.Int,    extMin)
       .query(`UPDATE VIDA_PEDIDOS
-              SET FechaLimiteBusqueda = DATEADD(MINUTE, @min, GETDATE()), FechaMod = GETDATE()
+              SET FechaLimiteBusqueda = DATEADD(MINUTE, @min, GETUTCDATE()), FechaMod = GETUTCDATE()
               OUTPUT inserted.FechaLimiteBusqueda
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta
                 AND idPedido=@idPedido AND idCliente=@idCliente
@@ -3593,7 +3594,7 @@ export async function cancelarPedidoCliente(request, reply) {
       .input('idCuenta',  sql.BigInt, idCuenta)
       .input('idPedido',  sql.BigInt, idPedido)
       .input('StatusAnterior', sql.VarChar(40), statusAnterior)
-      .query(`UPDATE VIDA_PEDIDOS SET Status='CANCELADO', FechaMod=GETDATE()
+      .query(`UPDATE VIDA_PEDIDOS SET Status='CANCELADO', FechaMod=GETUTCDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
                 AND Status=@StatusAnterior`);
 

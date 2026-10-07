@@ -16,12 +16,18 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
 - [ ] Flujo E2E verde (auditoría + día-en-la-tienda) — ver `AUDITORIA-VIDA.md`.
 - [ ] **Backup de la BD de producción** tomado y verificado (restaurable). Las migraciones no tienen rollback automático.
 - [ ] Ventana de mantenimiento acordada si habrá downtime.
-- [ ] El migrador **sí lleva tabla de control** (`VIDA_SCHEMA_MIGRATIONS`); `npm run migrate:status` te dice qué falta. Aun así, revisa el rango de migraciones nuevas (hoy el repo llega a **48**, 49 archivos — hay dos con prefijo `12`).
+- [ ] El migrador **sí lleva tabla de control** (`VIDA_SCHEMA_MIGRATIONS`); `npm run migrate:status` te dice qué falta. Aun así, revisa el rango de migraciones nuevas (hoy el repo llega a **49**, 50 archivos — hay dos con prefijo `12`).
 - [ ] `cd backend && npm install` y `cd frontend && npm install` — esta versión suma deps nuevas (frontend: `exceljs`, `xlsx`, `jspdf`, `jspdf-autotable`, `quill`, `dompurify`, `qrcode`; backend: `qrcode`). Un deploy que solo copia archivos sin `npm install` romperá exportaciones PDF/Excel y el editor de Academia.
 
 ---
 
 ## 1. Base de datos (SQL Server de producción)
+
+> ⚠️ **Migración `49_fechas_utc.sql` (fechas a UTC): requiere ventana de mantenimiento.**
+> - **Detén el backend antes de migrar** y despliega el backend nuevo enseguida: el backend anterior seguiría guardando fechas en la hora local del servidor y quedarían mezcladas.
+> - Convierte una sola vez (marca `FECHAS_UTC` en `VIDA_SISTEMA_MARCAS`) las columnas que estaban en hora local, sumando el desfase que tenga el reloj del servidor de BD **al momento de migrar**. Si ese servidor usa horario de verano, las filas guardadas en el otro período quedarán corridas una hora: revisa la zona del servidor antes de aplicarla en una BD con historia larga.
+> - `VIDA_AUDIT_LOG` no se toca (es inmutable por trigger); la API de auditoría muestra la hora UTC firmada en `_ts`.
+> - Backup previo obligatorio. En QA se aplicó con respaldo en tablas `ZZ_BK49_*`.
 
 - [ ] Confirmar a qué servidor/BD apunta producción (puede **diferir** de QA `db_a3fa0b_vidaqa` en `sql5065.site4now.net`). El migrador usa el `backend/.env`, así que confirma que ese `.env` apunte a **producción** antes de correrlo.
 
@@ -125,4 +131,4 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
 - Integración **real de telco/pagos**: validar credenciales propias de prod.
 - **Google Maps key de producción** (`VITE_GOOGLE_MAPS_KEY`): validar la key propia de prod, restringida a Maps JavaScript API y a los dominios del panel.
 - **Factura fiscal:** decisión de negocio pendiente (qué formato/impresión fiscal se requiere en Venezuela).
-- `INSTALACION.md` puede mencionar un rango viejo de migraciones — el rango real hoy es **01..48** (49 archivos).
+- `INSTALACION.md` puede mencionar un rango viejo de migraciones — el rango real hoy es **01..49** (50 archivos).

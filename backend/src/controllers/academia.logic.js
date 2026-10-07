@@ -2,6 +2,7 @@
 // Lógica PURA del LMS de Academia (sin BD): visibilidad/targeting, "fuera de
 // tiempo", % de progreso y calificación de quiz. Importable por el controller
 // y por los tests (backend/tests/academia.test.js) sin abrir conexión.
+import { fechaCaracas, fechaISO, diasEntre } from '../services/fechas.service.js';
 
 // ── Visibilidad / targeting ─────────────────────────────────────────────────
 // Decide si `user` puede ver un curso según su Visibilidad y las asignaciones.
@@ -22,6 +23,16 @@ export function parseFechaLocal(v) {
   if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   const d = new Date(s);
   return isNaN(d.getTime()) ? null : d;
+}
+
+// Fecha límite como 'YYYY-MM-DD': una columna DATE llega de mssql como Date a
+// medianoche UTC; un texto se toma tal cual. Así no depende de la zona del servidor.
+function fechaLimiteISO(v) {
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v.toISOString().slice(0, 10);
+  const iso = fechaISO(v);
+  if (iso) return iso;
+  const d = parseFechaLocal(v);
+  return d ? fechaCaracas(d) : null;
 }
 
 export function puedeVerCurso(curso, rolesAsignados, usuariosAsignados, user) {
@@ -48,22 +59,18 @@ export function estaFueraDeTiempo({ Obligatorio, FechaLimite, Completado }, ahor
   if (!Obligatorio) return false;
   if (Completado) return false;
   if (!FechaLimite) return false;
-  const limite = parseFechaLocal(FechaLimite);
+  const limite = fechaLimiteISO(FechaLimite);
   if (!limite) return false;
-  // El día límite cuenta completo: vencido a partir del día siguiente.
-  const finDelDia = new Date(limite.getFullYear(), limite.getMonth(), limite.getDate(), 23, 59, 59, 999);
-  return ahora.getTime() > finDelDia.getTime();
+  // El día límite cuenta completo (día de Caracas): vencido desde el siguiente.
+  return fechaCaracas(ahora) > limite;
 }
 
 // Días restantes hasta la fecha límite (negativo si ya venció). null si no aplica.
 export function diasRestantes(FechaLimite, ahora = new Date()) {
   if (!FechaLimite) return null;
-  const limite = parseFechaLocal(FechaLimite);
+  const limite = fechaLimiteISO(FechaLimite);
   if (!limite) return null;
-  const MS_DIA = 86400000;
-  const a = Date.UTC(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
-  const b = Date.UTC(limite.getFullYear(), limite.getMonth(), limite.getDate());
-  return Math.round((b - a) / MS_DIA);
+  return diasEntre(fechaCaracas(ahora), limite);
 }
 
 // ── Progreso ────────────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ import {
   User, Phone, RefreshCw, Check, X, ArrowRight, Eye, AlertCircle,
   Wifi, WifiOff, AlertTriangle,
 } from 'lucide-react';
+import { hoyCaracas } from '../utils/fechas.js';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
@@ -374,7 +375,7 @@ function ModalPedido({ idPedido, idBranch, idCuenta, puedeEscribir, repartidores
 
 // ── Modal resumen de repartidores: pedidos activos, comisiones, generado ──
 function ModalResumenRepartidores({ onClose }) {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = hoyCaracas();
   const [desde, setDesde] = useState(hoy);
   const [hasta, setHasta] = useState(hoy);
   const [datos, setDatos] = useState(null);

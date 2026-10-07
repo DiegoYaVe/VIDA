@@ -5,6 +5,7 @@ import {tablasPagoMovil} from './filasPagoMovil.mjs';
 // Exportación a Excel usando SheetJS (xlsx)
 // npm install xlsx
 import * as XLSX from 'xlsx';
+import { hoyCaracas } from './fechas.js';
 
 const USD = (v) => `$${Number(v || 0).toFixed(2)}`;
 const NUM = (v) => Number(v || 0).toLocaleString('es-VE', { minimumFractionDigits: 2 });
@@ -207,7 +208,7 @@ export function exportarInventarioExcel({ filas, resumen }) {
   const datos = [...encabezado, ...filasDatos];
   const anchos = [12, 12, 12, 22, 28, 12, 16, 8, 8, 8, 12, 12, 12];
   const wb = crearLibro([{ nombre: 'Inventario', datos, anchos }]);
-  descargar(wb, `inventario_${new Date().toISOString().split('T')[0]}.xlsx`);
+  descargar(wb, `inventario_${hoyCaracas()}.xlsx`);
 }
 
 export function exportarMovimientosExcel({ filas, resumen, fechaInicio, fechaFin }) {

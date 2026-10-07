@@ -4,6 +4,7 @@ import { getPool, sql } from '../db/sqlserver.js';
 import { broadcast } from '../ws/ws.manager.js';
 import { enviarPush } from '../services/push.service.js';
 import { registrarAuditoria } from '../services/audit.service.js';
+import { fechaCaracas } from '../services/fechas.service.js';
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
@@ -252,7 +253,7 @@ export async function crearPedido(request, reply) {
         .input('Cantidad',    sql.Decimal(18,4), parseFloat(item.Cantidad))
         .query(`UPDATE VIDA_INVENTARIO_STOCK WITH (UPDLOCK, HOLDLOCK) SET
                   StockReservado = ISNULL(StockReservado, 0) + @Cantidad,
-                  FechaMod = GETDATE()
+                  FechaMod = GETUTCDATE()
                 WHERE idBranch = @idBranch AND idCuenta = @idCuenta
                   AND idPuntoVenta = @idPuntoVenta AND idProducto = @idProducto
                   AND ISNULL(Cantidad, 0) - ISNULL(StockReservado, 0) >= @Cantidad`);
@@ -308,7 +309,7 @@ export async function crearPedido(request, reply) {
               VALUES
                 (@idBranch, @idCuenta, @idPedido, @idPuntoVenta, @idCliente,
                  @Canal, @MetodoPago, @TotalUSD, @MontoEfectivo, @MontoTarjeta, @MontoCambio,
-                 @Notas, GETDATE(), DATEADD(MINUTE, @Minutos, GETDATE()), @UsuAlta)`);
+                 @Notas, GETUTCDATE(), DATEADD(MINUTE, @Minutos, GETUTCDATE()), @UsuAlta)`);
 
     // Detalle
     for (let i = 0; i < items.length; i++) {
@@ -478,7 +479,7 @@ async function procesarVentaOffline(pool, { venta, idBranch, idCuenta, idUsuario
         .query(`UPDATE VIDA_INVENTARIO_STOCK WITH (UPDLOCK, HOLDLOCK) SET
                   Cantidad = CASE WHEN ISNULL(Cantidad,0) - @Cantidad < 0 THEN 0
                                   ELSE ISNULL(Cantidad,0) - @Cantidad END,
-                  FechaMod = GETDATE()
+                  FechaMod = GETUTCDATE()
                 OUTPUT ISNULL(deleted.Cantidad,0) AS CantidadAntes,
                        ISNULL(inserted.Cantidad,0) AS CantidadDespues
                 WHERE idBranch=@idBranch AND idCuenta=@idCuenta
@@ -715,7 +716,7 @@ export async function cambiarStatusPedido(request, reply) {
     }
 
     const updR = await updReq.query(`UPDATE VIDA_PEDIDOS SET
-                          Status = @Status, FechaMod = GETDATE() ${setExtra}
+                          Status = @Status, FechaMod = GETUTCDATE() ${setExtra}
                         WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
                           AND Status = @StatusAnterior`);
 
@@ -748,7 +749,7 @@ export async function cambiarStatusPedido(request, reply) {
                                     ELSE ISNULL(Cantidad,0) - @Cantidad END,
                     StockReservado = CASE WHEN ISNULL(StockReservado,0) - @Cantidad < 0 THEN 0
                                           ELSE ISNULL(StockReservado,0) - @Cantidad END,
-                    FechaMod = GETDATE()
+                    FechaMod = GETUTCDATE()
                   OUTPUT ISNULL(deleted.Cantidad,0) AS CantidadAntes,
                          ISNULL(inserted.Cantidad,0) AS CantidadDespues
                   WHERE idBranch=@idBranch AND idCuenta=@idCuenta
@@ -801,7 +802,7 @@ export async function cambiarStatusPedido(request, reply) {
           .query(`UPDATE VIDA_INVENTARIO_STOCK SET
                     StockReservado = CASE WHEN ISNULL(StockReservado,0) - @Cantidad < 0 THEN 0
                                           ELSE ISNULL(StockReservado,0) - @Cantidad END,
-                    FechaMod = GETDATE()
+                    FechaMod = GETUTCDATE()
                   WHERE idBranch=@idBranch AND idCuenta=@idCuenta
                     AND idPuntoVenta=@idPuntoVenta AND idProducto=@idProducto`);
       }
@@ -871,7 +872,7 @@ export async function resolverRevisionStock(request, reply) {
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
       .input('idPedido', sql.BigInt, idPedido)
-      .query(`UPDATE VIDA_PEDIDOS SET RequiereRevision = 0, FechaMod = GETDATE()
+      .query(`UPDATE VIDA_PEDIDOS SET RequiereRevision = 0, FechaMod = GETUTCDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
                 AND RequiereRevision = 1`);
 
@@ -909,7 +910,7 @@ export async function expirarPedidosVencidos(pool, log) {
       FROM VIDA_PEDIDOS
       WHERE Status IN ('NUEVO')
         AND StatusPago = 'PENDIENTE'
-        AND FechaExpiracion < GETDATE()
+        AND FechaExpiracion < GETUTCDATE()
     `);
 
     for (const pedido of r.recordset) {
@@ -931,7 +932,7 @@ export async function expirarPedidosVencidos(pool, log) {
           .query(`UPDATE VIDA_INVENTARIO_STOCK SET
                     StockReservado = CASE WHEN ISNULL(StockReservado,0) - @Cantidad < 0 THEN 0
                                          ELSE ISNULL(StockReservado,0) - @Cantidad END,
-                    FechaMod = GETDATE()
+                    FechaMod = GETUTCDATE()
                   WHERE idBranch=@idBranch AND idCuenta=@idCuenta
                     AND idPuntoVenta=@idPuntoVenta AND idProducto=@idProducto`);
       }
@@ -941,7 +942,7 @@ export async function expirarPedidosVencidos(pool, log) {
         .input('idBranch', sql.BigInt,     pedido.idBranch)
         .input('idCuenta', sql.BigInt,     pedido.idCuenta)
         .input('idPedido', sql.BigInt,     pedido.idPedido)
-        .query(`UPDATE VIDA_PEDIDOS SET Status='CANCELADO', FechaMod=GETDATE()
+        .query(`UPDATE VIDA_PEDIDOS SET Status='CANCELADO', FechaMod=GETUTCDATE()
                 WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
 
       // Historial
@@ -980,7 +981,7 @@ export async function asignarRepartidor(request, reply) {
       .input('idCuenta',    sql.BigInt, idCuenta)
       .input('idPedido',    sql.BigInt, idPedido)
       .input('idRepartidor',sql.BigInt, idRepartidor)
-      .query(`UPDATE VIDA_PEDIDOS SET idRepartidor=@idRepartidor, FechaMod=GETDATE()
+      .query(`UPDATE VIDA_PEDIDOS SET idRepartidor=@idRepartidor, FechaMod=GETUTCDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
 
     // Push al repartidor asignado manualmente desde el panel
@@ -1109,15 +1110,15 @@ export async function revisarComprobante(request, reply) {
         .input('minutos',sql.Int,minutos)
         .query(`UPDATE VIDA_PEDIDOS
                 SET StatusPago='PAGADO',Status='BUSCANDO_REPARTIDOR',
-                    FechaInicioBusqueda=GETDATE(),FechaLimiteBusqueda=DATEADD(MINUTE,@minutos,GETDATE()),
-                    AvisoSinRepartidor=0,FechaMod=GETDATE()
+                    FechaInicioBusqueda=GETUTCDATE(),FechaLimiteBusqueda=DATEADD(MINUTE,@minutos,GETUTCDATE()),
+                    AvisoSinRepartidor=0,FechaMod=GETUTCDATE()
                 WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido AND Status='ESPERANDO_PAGO'`);
     } else if (flujoRetenido) {
       // Si el cliente ya mandó otro comprobante que sigue en revisión, el pago
       // no está rechazado: se conserva PENDIENTE y no se le pide uno nuevo.
       const rech = await new sql.Request(transaction)
         .input('idBranch',sql.BigInt,idBranch).input('idCuenta',sql.BigInt,idCuenta).input('idPedido',sql.BigInt,idPedido)
-        .query(`UPDATE VIDA_PEDIDOS SET StatusPago='RECHAZADO',FechaMod=GETDATE()
+        .query(`UPDATE VIDA_PEDIDOS SET StatusPago='RECHAZADO',FechaMod=GETUTCDATE()
                 WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido AND Status='ESPERANDO_PAGO'
                   AND NOT EXISTS (SELECT 1 FROM VIDA_PEDIDOS_COMPROBANTES c
                                   WHERE c.idBranch=@idBranch AND c.idCuenta=@idCuenta AND c.idPedido=@idPedido
@@ -1128,7 +1129,7 @@ export async function revisarComprobante(request, reply) {
       // retenido: se valida el pago sin retroceder ni reiniciar su despacho.
       await new sql.Request(transaction)
         .input('idBranch',sql.BigInt,idBranch).input('idCuenta',sql.BigInt,idCuenta).input('idPedido',sql.BigInt,idPedido)
-        .query(`UPDATE VIDA_PEDIDOS SET StatusPago='PAGADO',FechaMod=GETDATE()
+        .query(`UPDATE VIDA_PEDIDOS SET StatusPago='PAGADO',FechaMod=GETUTCDATE()
                 WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
     }
 
@@ -1247,7 +1248,7 @@ export async function listarVentasPOS(request, reply) {
   const idPuntoVenta = esRed ? request.query.idPuntoVenta : pvUsuario;
 
   // Por defecto: hoy
-  const fechaFiltro = fecha || new Date().toISOString().slice(0, 10);
+  const fechaFiltro = fecha || fechaCaracas();
 
   try {
     const pool = await getPool();
@@ -1276,7 +1277,7 @@ export async function listarVentasPOS(request, reply) {
       WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
         AND p.Canal = 'POS'
         AND p.Status = 'ENTREGADO'
-        AND p.FechaAlta BETWEEN @fechaInicio AND @fechaFin
+        AND DATEADD(HOUR,-4,p.FechaAlta) BETWEEN @fechaInicio AND @fechaFin
         ${whereExtra}
       ORDER BY p.FechaAlta DESC
     `);

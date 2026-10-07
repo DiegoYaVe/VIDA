@@ -200,7 +200,7 @@ export async function editarProveedor(request, reply) {
                 Nombre = @Nombre, RIF = @RIF, Contacto = @Contacto,
                 Email = @Email, Telefono = @Telefono, Direccion = @Direccion,
                 Ciudad = @Ciudad, Notas = @Notas,
-                FechaMod = GETDATE(), UsuMod = @UsuMod
+                FechaMod = GETUTCDATE(), UsuMod = @UsuMod
               WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idProveedor = @idProveedor`);
 
     return reply.send({ message: 'Proveedor actualizado' });
@@ -228,7 +228,7 @@ export async function toggleProveedor(request, reply) {
       .input('Status',      sql.VarChar(20), status)
       .input('UsuMod',      sql.VarChar(20), String(idUsuario))
       .query(`UPDATE VIDA_PROVEEDORES SET
-                Status = @Status, FechaMod = GETDATE(), UsuMod = @UsuMod
+                Status = @Status, FechaMod = GETUTCDATE(), UsuMod = @UsuMod
               WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idProveedor = @idProveedor`);
 
     return reply.send({ message: `Proveedor ${status === 'ACTIVO' ? 'activado' : 'desactivado'}` });
@@ -745,7 +745,7 @@ export async function cambiarEstadoOrden(request, reply) {
                     ON target.idBranch=src.idBranch AND target.idCuenta=src.idCuenta
                    AND target.idPuntoVenta=src.idPuntoVenta AND target.idProducto=src.idProducto
                   WHEN MATCHED THEN
-                    UPDATE SET Cantidad = ISNULL(target.Cantidad,0) + @Cantidad, FechaMod = GETDATE()
+                    UPDATE SET Cantidad = ISNULL(target.Cantidad,0) + @Cantidad, FechaMod = GETUTCDATE()
                   WHEN NOT MATCHED THEN
                     INSERT (idBranch, idCuenta, idPuntoVenta, idProducto, Cantidad)
                     VALUES (@idBranch, @idCuenta, @idPuntoVenta, @idProducto, @Cantidad)
@@ -809,7 +809,7 @@ export async function cambiarEstadoOrden(request, reply) {
       .input('Status',   sql.VarChar(30), StatusNuevo)
       .input('UsuMod',   sql.VarChar(20), String(idUsuario))
       .query(`UPDATE VIDA_ORDENES_COMPRA
-              SET Status=@Status, FechaMod=GETDATE(), UsuMod=@UsuMod
+              SET Status=@Status, FechaMod=GETUTCDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idOrden=@idOrden`);
 
     const idHist = await nextIdTx(tx, 'VIDA_ORDENES_COMPRA_HISTORIAL', 'idHistorial', idBranch, idCuenta);

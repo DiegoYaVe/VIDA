@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { CheckCircle2, RefreshCw, ShieldCheck, TriangleAlert, WalletCards } from 'lucide-react';
 import api from '../services/api.js';
 import { useToast } from './Toast.jsx';
+import { hoyCaracas } from '../utils/fechas.js';
 
 export default function MonedaCuentas() {
   const toast = useToast();
   const [cfg,setCfg]=useState(null);
   const [t,setT]=useState('');
-  const [fecha,setFecha]=useState(new Date().toISOString().slice(0,10));
+  const [fecha,setFecha]=useState(hoyCaracas());
   const [fuente,setFuente]=useState('');
   const [aviso,setAviso]=useState(null);
   const [busy,setBusy]=useState(false);

@@ -162,7 +162,7 @@ export async function cambiarEstadoCanje(request, reply) {
 
     await pool.request()
       .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCanje', sql.BigInt, idCanje).input('Status', sql.VarChar(20), Status)
-      .query(`UPDATE VIDA_PREMIOS_CANJES SET Status=@Status, FechaMod=GETDATE() WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCanje=@idCanje`);
+      .query(`UPDATE VIDA_PREMIOS_CANJES SET Status=@Status, FechaMod=GETUTCDATE() WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCanje=@idCanje`);
 
     // Si se cancela, devolver puntos y reponer stock
     if (Status === 'CANCELADO') {
@@ -251,7 +251,7 @@ export async function expirarPuntosInactivosCore(pool, idBranch, idCuenta) {
             WHERE c.idBranch=@idBranch AND c.idCuenta=@idCuenta AND ISNULL(c.PuntosSaldo,0) > 0
               AND ISNULL((SELECT MAX(FechaAlta) FROM VIDA_CLIENTE_PUNTOS p
                           WHERE p.idBranch=c.idBranch AND p.idCuenta=c.idCuenta AND p.idCliente=c.idCliente),
-                         '1900-01-01') < DATEADD(MONTH, -@meses, GETDATE())`);
+                         '1900-01-01') < DATEADD(MONTH, -@meses, GETUTCDATE())`);
   let expirados = 0;
   for (const cli of cR.recordset) {
     await movPuntos(pool, idBranch, idCuenta, cli.idCliente, -cli.Saldo, 'VENCIDO', `Vencimiento por ${meses} meses de inactividad`);

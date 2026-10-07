@@ -51,12 +51,12 @@ export async function tableroExpansion(request, reply) {
     const crecimiento = await pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
-      .query(`SELECT FORMAT(ISNULL(FechaActivacion, FechaAlta), 'yyyy-MM') AS Mes,
+      .query(`SELECT FORMAT(DATEADD(HOUR,-4,ISNULL(FechaActivacion, FechaAlta)), 'yyyy-MM') AS Mes,
                      COUNT(*) AS Total
               FROM VIDA_CUENTA_PUNTOS_VENTA
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'
-                AND ISNULL(FechaActivacion, FechaAlta) >= DATEADD(MONTH, -11, CAST(GETDATE() AS DATE))
-              GROUP BY FORMAT(ISNULL(FechaActivacion, FechaAlta), 'yyyy-MM')
+                AND DATEADD(HOUR,-4,ISNULL(FechaActivacion, FechaAlta)) >= DATEADD(MONTH, -11, CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE))
+              GROUP BY FORMAT(DATEADD(HOUR,-4,ISNULL(FechaActivacion, FechaAlta)), 'yyyy-MM')
               ORDER BY Mes`);
 
     const estados = {};
@@ -182,8 +182,8 @@ export async function cambiarEstadoOnboarding(request, reply) {
       .query(`UPDATE VIDA_CUENTA_PUNTOS_VENTA
               SET EstadoOnboarding=@EstadoOnboarding,
                   FechaActivacion = CASE WHEN @EstadoOnboarding='ACTIVA' AND FechaActivacion IS NULL
-                                         THEN GETDATE() ELSE FechaActivacion END,
-                  FechaMod = GETDATE()
+                                         THEN GETUTCDATE() ELSE FechaActivacion END,
+                  FechaMod = GETUTCDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta`);
     return reply.send({ ok: true, EstadoOnboarding });
   } catch (err) {

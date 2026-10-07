@@ -102,7 +102,7 @@ export async function reporteVentas(request, reply) {
       FROM VIDA_PEDIDOS p JOIN VIDA_CUENTA_PUNTOS_VENTA pv
         ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.Canal='POS' AND p.Status='ENTREGADO'
-        AND p.FechaAlta>=@fechaInicio AND p.FechaAlta<DATEADD(day,1,@fechaFin)
+        AND p.FechaAlta>=DATEADD(HOUR,4,CAST(@fechaInicio AS DATETIME)) AND p.FechaAlta<DATEADD(HOUR,4,DATEADD(day,1,CAST(@fechaFin AS DATETIME)))
         ${geoFilter}
       ORDER BY p.FechaAlta,p.idPedido
     `);
@@ -140,7 +140,7 @@ export async function reporteCaja(request, reply) {
     const geoFilter = buildGeoFilter(request.user, request.query, req);
     const joinPV = `JOIN VIDA_CUENTA_PUNTOS_VENTA pv
         ON pv.idBranch=t.idBranch AND pv.idCuenta=t.idCuenta AND pv.idPuntoVenta=t.idPuntoVenta`;
-    const enRango = `t.Status='CERRADO' AND t.FechaCierre>=@fechaInicio AND t.FechaCierre<DATEADD(day,1,@fechaFin)`;
+    const enRango = `t.Status='CERRADO' AND t.FechaCierre>=DATEADD(HOUR,4,CAST(@fechaInicio AS DATETIME)) AND t.FechaCierre<DATEADD(HOUR,4,DATEADD(day,1,CAST(@fechaFin AS DATETIME)))`;
 
     const r = await req.query(`
       SELECT TOP (20001) t.idTurno,t.idPuntoVenta,pv.NomComercial AS NombrePuntoVenta,pv.Pais,pv.Estado,pv.Ciudad,
@@ -197,7 +197,7 @@ export async function reportePagoMovil(request, reply) {
       JOIN VIDA_CUENTA_PUNTOS_VENTA pv
         ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.MetodoPago='PAGO_MOVIL'
-        AND p.FechaAlta>=@fechaInicio AND p.FechaAlta<DATEADD(day,1,@fechaFin) ${geoFilter}`;
+        AND p.FechaAlta>=DATEADD(HOUR,4,CAST(@fechaInicio AS DATETIME)) AND p.FechaAlta<DATEADD(HOUR,4,DATEADD(day,1,CAST(@fechaFin AS DATETIME))) ${geoFilter}`;
 
     const r = await req.query(`
       SELECT TOP (20001) p.idPedido,p.FechaAlta,p.Status,p.StatusPago,p.TotalUSD,p.PagoMonedaJSON,
@@ -270,7 +270,7 @@ export async function reporteProductos(request, reply) {
       WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
         AND p.Canal  = 'POS'
         AND p.Status = 'ENTREGADO'
-        AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        AND CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) BETWEEN @fechaInicio AND @fechaFin
         ${geoFilter}
       GROUP BY d.idProducto, prod.Nombre, cat.Nombre, prod.UnidadMedida, prod.PrecioUSD
       ORDER BY TotalRevenue DESC
@@ -415,7 +415,7 @@ export async function reporteMovimientos(request, reply) {
         ON cat.idBranch = p.idBranch AND cat.idCuenta = p.idCuenta
        AND cat.idCategoria = p.idCategoria
       WHERE m.idBranch = @idBranch AND m.idCuenta = @idCuenta
-        AND CAST(m.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        AND CAST(DATEADD(HOUR,-4,m.FechaAlta) AS DATE) BETWEEN @fechaInicio AND @fechaFin
         ${tipoFilter}
         ${geoFilter}
       ORDER BY m.FechaAlta DESC
@@ -468,7 +468,7 @@ export async function reporteDelivery(request, reply) {
     const { r: reqDia, geo: geoDia } = mkReq();
     const grafica = await reqDia.query(`
       SELECT
-        CAST(p.FechaAlta AS DATE)  AS Fecha,
+        CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE)  AS Fecha,
         COUNT(p.idPedido)          AS NumPedidos,
         SUM(p.TotalUSD)            AS TotalUSD
       FROM VIDA_PEDIDOS p
@@ -478,10 +478,10 @@ export async function reporteDelivery(request, reply) {
       WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
         AND p.Canal  = 'APP'
         AND p.Status = 'ENTREGADO'
-        AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        AND CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) BETWEEN @fechaInicio AND @fechaFin
         ${geoDia}
-      GROUP BY CAST(p.FechaAlta AS DATE)
-      ORDER BY CAST(p.FechaAlta AS DATE)
+      GROUP BY CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE)
+      ORDER BY CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE)
     `);
 
     // ── Desempeño por repartidor ──────────────────────────────────────────
@@ -506,7 +506,7 @@ export async function reporteDelivery(request, reply) {
       WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
         AND p.Canal  = 'APP'
         AND p.Status = 'ENTREGADO'
-        AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        AND CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) BETWEEN @fechaInicio AND @fechaFin
         ${geoRep}
       GROUP BY rep.idRepartidor, rep.Nombre, rep.Vehiculo, rep.Calificacion
       ORDER BY SUM(p.TotalUSD) DESC
@@ -526,7 +526,7 @@ export async function reporteDelivery(request, reply) {
       WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
         AND p.Canal  = 'APP'
         AND p.Status = 'ENTREGADO'
-        AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        AND CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) BETWEEN @fechaInicio AND @fechaFin
         ${geoMet}
       GROUP BY p.MetodoPago
       ORDER BY SUM(p.TotalUSD) DESC
@@ -543,7 +543,7 @@ export async function reporteDelivery(request, reply) {
       WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
         AND p.Canal  = 'APP'
         AND p.Status = 'CANCELADO'
-        AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        AND CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) BETWEEN @fechaInicio AND @fechaFin
         ${geoCanc}
     `);
 
@@ -606,7 +606,7 @@ export async function reporteRed(request, reply) {
       LEFT JOIN VIDA_PEDIDOS p
         ON p.idBranch=pv.idBranch AND p.idCuenta=pv.idCuenta AND p.idPuntoVenta=pv.idPuntoVenta
        AND p.Status='ENTREGADO' AND p.Canal IN ('POS','APP')
-       AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+       AND CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) BETWEEN @fechaInicio AND @fechaFin
       WHERE pv.idBranch=@idBranch AND pv.idCuenta=@idCuenta AND pv.Status='ACTIVO'
         ${geoTiendas}
       GROUP BY pv.idPuntoVenta, pv.NomComercial, pv.Ciudad, pv.Estado, pv.Pais, pv.EstadoOnboarding
@@ -621,7 +621,7 @@ export async function reporteRed(request, reply) {
       .input('fechaFin',    sql.Date,   new Date(fechaFin));
     const geoDia = buildGeoFilter(request.user, request.query, reqDia);
     const grafica = await reqDia.query(`
-      SELECT CAST(p.FechaAlta AS DATE) AS Fecha,
+      SELECT CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) AS Fecha,
              SUM(CASE WHEN p.Canal='POS' THEN p.TotalUSD ELSE 0 END) AS TotalPOS,
              SUM(CASE WHEN p.Canal='APP' THEN p.TotalUSD ELSE 0 END) AS TotalDelivery,
              SUM(p.TotalUSD) AS TotalUSD
@@ -630,10 +630,10 @@ export async function reporteRed(request, reply) {
         ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
         AND p.Status='ENTREGADO' AND p.Canal IN ('POS','APP')
-        AND CAST(p.FechaAlta AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        AND CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) BETWEEN @fechaInicio AND @fechaFin
         ${geoDia}
-      GROUP BY CAST(p.FechaAlta AS DATE)
-      ORDER BY CAST(p.FechaAlta AS DATE)
+      GROUP BY CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE)
+      ORDER BY CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE)
     `);
 
     const rows = tiendas.recordset;

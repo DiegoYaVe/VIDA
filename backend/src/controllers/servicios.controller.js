@@ -200,7 +200,7 @@ export async function cambiarEstadoServicio(request, reply) {
     await pool.request()
       .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
       .input('idOrden', sql.BigInt, idOrden).input('Status', sql.VarChar(20), Status)
-      .query(`UPDATE VIDA_SERVICIOS_ORDENES SET Status=@Status, FechaMod=GETDATE()
+      .query(`UPDATE VIDA_SERVICIOS_ORDENES SET Status=@Status, FechaMod=GETUTCDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idOrden=@idOrden`);
 
     // Si se rechaza, revertir los puntos otorgados al crear

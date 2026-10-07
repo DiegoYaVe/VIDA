@@ -6,6 +6,7 @@ import {tablasPagoMovil} from './filasPagoMovil.mjs';
 // npm install jspdf jspdf-autotable
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { hoyCaracas } from './fechas.js';
 
 // ─── Paleta de colores VIDA ───────────────────────────────────────────────────
 const AZUL   = [13,  43,  69];   // #0D2B45 — fondo header
@@ -308,7 +309,7 @@ export function exportarInventarioPDF({ filas, resumen }) {
 
   autoTable(doc, opts);
   agregarPiePagina(doc);
-  doc.save(`inventario_${new Date().toISOString().split('T')[0]}.pdf`);
+  doc.save(`inventario_${hoyCaracas()}.pdf`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

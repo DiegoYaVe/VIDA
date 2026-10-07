@@ -25,12 +25,13 @@ import {
   exportarDeliveryPDF, exportarRedPDF, exportarCajaPDF, exportarPagoMovilPDF,
 } from '../utils/exportPDF.js';
 import { useAuthStore } from '../store/authStore.js';
+import { hoyCaracas } from '../utils/fechas.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const USD  = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const FMT  = (v) => Number(v || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const HOY  = () => new Date().toISOString().split('T')[0];
-const HACE7 = () => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().split('T')[0]; };
+const HOY  = () => hoyCaracas();
+const HACE7 = () => hoyCaracas(-6);
 
 const TIPO_BADGE = {
   ENTRADA: 'bg-green-100 text-green-700 border-green-200',

@@ -166,7 +166,7 @@ export async function editarPuntoVenta(request, reply) {
                 Calle=@Calle, NumExt=@NumExt, NumInt=@NumInt, Colonia=@Colonia,
                 CP=@CP, Ciudad=@Ciudad, idEstado=@idEstado, idPais=@idPais,
                 Latitud=COALESCE(@Latitud, Latitud), Longitud=COALESCE(@Longitud, Longitud),
-                FechaMod=GETDATE(), UsuMod=@UsuMod
+                FechaMod=GETUTCDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta`);
 
     return reply.send({ message: 'Punto de venta actualizado' });
@@ -195,7 +195,7 @@ export async function togglePuntoVenta(request, reply) {
       .input('UsuMod',       sql.VarChar(20), String(idUsuario))
       .query(`UPDATE VIDA_CUENTA_PUNTOS_VENTA SET
                 StatusPuntoVenta=@Status,
-                FechaMod=GETDATE(), UsuMod=@UsuMod
+                FechaMod=GETUTCDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta`);
 
     return reply.send({ message: `Punto de venta ${status === 'ACTIVO' ? 'activado' : 'desactivado'}` });

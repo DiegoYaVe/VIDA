@@ -79,7 +79,7 @@ async function cancelarPorTimeout(pool, p, log) {
       .input('idBranch', sql.BigInt, p.idBranch)
       .input('idCuenta', sql.BigInt, p.idCuenta)
       .input('idPedido', sql.BigInt, p.idPedido)
-      .query(`UPDATE VIDA_PEDIDOS SET Status='CANCELADO', FechaMod=GETDATE()
+      .query(`UPDATE VIDA_PEDIDOS SET Status='CANCELADO', FechaMod=GETUTCDATE()
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido
                 AND Status='BUSCANDO_REPARTIDOR'`);
     if (upd.rowsAffected[0] === 0) { await transaction.rollback(); return false; }
@@ -122,8 +122,8 @@ export async function procesarBusquedas(log) {
     SELECT p.idBranch, p.idCuenta, p.idPedido, p.idCliente, p.idPuntoVenta,
            p.FechaAlta, p.FechaInicioBusqueda, p.FechaLimiteBusqueda, p.AvisoSinRepartidor,
            p.TotalUSD, p.DireccionEntrega, p.MetodoPago, p.PagoMonedaJSON,
-           DATEDIFF(SECOND, COALESCE(p.FechaInicioBusqueda,p.FechaAlta), GETDATE()) / 60.0 AS MinutosBuscando,
-           CASE WHEN p.FechaLimiteBusqueda IS NOT NULL AND GETDATE() > p.FechaLimiteBusqueda
+           DATEDIFF(SECOND, COALESCE(p.FechaInicioBusqueda,p.FechaAlta), GETUTCDATE()) / 60.0 AS MinutosBuscando,
+           CASE WHEN p.FechaLimiteBusqueda IS NOT NULL AND GETUTCDATE() > p.FechaLimiteBusqueda
                 THEN 1 ELSE 0 END AS Vencido,
            pv.NomComercial AS NombreSucursal,
            pv.Latitud AS LatSucursal, pv.Longitud AS LonSucursal,

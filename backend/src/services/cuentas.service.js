@@ -136,8 +136,8 @@ export async function emitirCuenta(tx, {
             VALUES
               (@idBranch, @idCuenta, @idDocumento, @Tipo, @idProveedor, @idPuntoVenta,
                @idPuntoVentaEmisor, @OrigenTipo, @idOrigen, @Folio, @TotalUSD,
-               CAST(GETUTCDATE() AS DATE), @DiasPlazo,
-               DATEADD(DAY, @DiasPlazo, CAST(GETUTCDATE() AS DATE)),
+               CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE), @DiasPlazo,
+               DATEADD(DAY, @DiasPlazo, CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE)),
                'ABIERTA', @Notas, @UsuAlta,@TasaEmisionJSON)`);
 
   return { idDocumento, TotalUSD: total, yaExistia: false };
@@ -255,7 +255,7 @@ export async function registrarAbono(pool, {
                  MetodoPago, Referencia, Notas, UsuAlta,MonedaOriginal,MontoOriginal,MontoVES,TasaVESporUSD,idTasa,ReversoDe)
               VALUES
                 (@idBranch, @idCuenta, @idAbono, @idDocumento, @MontoUSD,
-                 CAST(GETUTCDATE() AS DATE), @MetodoPago, @Referencia, @Notas, @UsuAlta,@MonedaOriginal,@MontoOriginal,@MontoVES,@TasaVESporUSD,@idTasa,@ReversoDe)`);
+                 CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE), @MetodoPago, @Referencia, @Notas, @UsuAlta,@MonedaOriginal,@MontoOriginal,@MontoVES,@TasaVESporUSD,@idTasa,@ReversoDe)`);
 
     const nuevoAbonado = dec(abonado + monto);
     const nuevoStatus  = statusPorSaldo(total, nuevoAbonado, acreditado);
@@ -364,7 +364,7 @@ export async function emitirNotaCredito(pool, {
                  CancelaCuenta, FechaNota, UsuAlta)
               VALUES
                 (@idBranch, @idCuenta, @idNota, @idDocumento, @MontoUSD, @Motivo,
-                 @CancelaCuenta, CAST(GETUTCDATE() AS DATE), @UsuAlta)`);
+                 @CancelaCuenta, CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE), @UsuAlta)`);
 
     // Devolución de lo ya cobrado: abono en negativo, no un DELETE de los abonos
     let reintegrado = 0;
@@ -382,7 +382,7 @@ export async function emitirNotaCredito(pool, {
                   (idBranch, idCuenta, idAbono, idDocumento, MontoUSD, FechaAbono, Notas, UsuAlta)
                 VALUES
                   (@idBranch, @idCuenta, @idAbono, @idDocumento, @MontoUSD,
-                   CAST(GETUTCDATE() AS DATE), @Notas, @UsuAlta)`);
+                   CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE), @Notas, @UsuAlta)`);
       reintegrado = abonado;
     }
 
@@ -428,9 +428,9 @@ export const SELECT_CUENTA = `
          CASE WHEN c.Status IN ('ABIERTA','PARCIAL')
                AND c.TotalUSD - ISNULL(ab.Abonado,0) - ISNULL(nc.Acreditado,0) > 0
                AND c.FechaVencimiento IS NOT NULL
-               AND c.FechaVencimiento < CAST(GETUTCDATE() AS DATE)
+               AND c.FechaVencimiento < CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE)
               THEN 1 ELSE 0 END AS Vencida,
-         DATEDIFF(DAY, CAST(GETUTCDATE() AS DATE), c.FechaVencimiento) AS DiasParaVencer,
+         DATEDIFF(DAY, CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE), c.FechaVencimiento) AS DiasParaVencer,
          pr.Nombre        AS NombreProveedor,
          pv.NomComercial  AS NombreSucursal
   FROM VIDA_CUENTAS c

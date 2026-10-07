@@ -114,7 +114,7 @@ export async function editarEstado(request, reply) {
       .input('UsuMod',       sql.VarChar(20), String(idUsuario))
       .query(`UPDATE VIDA_CUENTA_ESTADOS SET
                 idPais = @idPais, NombreEstado = @NombreEstado,
-                FechaMod = GETDATE(), UsuMod = @UsuMod
+                FechaMod = GETUTCDATE(), UsuMod = @UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idEstado=@idEstado`);
 
     return reply.send({ message: 'Estado actualizado' });
@@ -142,7 +142,7 @@ export async function toggleEstado(request, reply) {
       .input('Status',   sql.VarChar(20), status)
       .input('UsuMod',   sql.VarChar(20), String(idUsuario))
       .query(`UPDATE VIDA_CUENTA_ESTADOS SET
-                Status = @Status, FechaMod = GETDATE(), UsuMod = @UsuMod
+                Status = @Status, FechaMod = GETUTCDATE(), UsuMod = @UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idEstado=@idEstado`);
 
     return reply.send({ message: `Estado ${status === 'ACTIVO' ? 'activado' : 'desactivado'}` });

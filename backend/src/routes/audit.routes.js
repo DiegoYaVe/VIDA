@@ -44,16 +44,23 @@ export async function auditRoutes(fastify) {
 
       // Verificación de integridad: si alguien alteró una fila directamente
       // en la BD (saltándose el trigger), la firma no coincide → valida: false
-      const data = r.recordset.map(fila => ({
-        idAudit:    fila.idAudit,
-        EntityType: fila.EntityType,
-        EntityId:   fila.EntityId,
-        Accion:     fila.Accion,
-        Actor:      fila.Actor,
-        Data:       JSON.parse(fila.DataJSON),
-        FechaAlta:  fila.FechaAlta,
-        integra:    verificarFila(fila),
-      }));
+      // La hora se toma del sello UTC _ts, que va dentro de DataJSON y por lo
+      // tanto está firmado. FechaAlta de las filas anteriores a la migración 49
+      // quedó en hora local del servidor: la tabla es inmutable y no se convirtió.
+      const data = r.recordset.map(fila => {
+        const datos = JSON.parse(fila.DataJSON);
+        const ts = datos?._ts ? new Date(datos._ts) : null;
+        return {
+          idAudit:    fila.idAudit,
+          EntityType: fila.EntityType,
+          EntityId:   fila.EntityId,
+          Accion:     fila.Accion,
+          Actor:      fila.Actor,
+          Data:       datos,
+          FechaAlta:  ts && !Number.isNaN(ts.getTime()) ? ts : fila.FechaAlta,
+          integra:    verificarFila(fila),
+        };
+      });
 
       const totalR = await pool.request()
         .input('idBranch', sql.BigInt, idBranch)
