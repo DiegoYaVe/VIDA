@@ -169,6 +169,7 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
     StockMinimo:     data?.StockMinimo     ?? 0,
     Notas:           data?.Notas           || '',
     EsProductoPlus:  !!data?.EsProductoPlus,
+    AlicuotaIVA:     data?.AlicuotaIVA     || 'GENERAL',
   });
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
@@ -321,6 +322,15 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
         <InputField label="Precio Matriz → Tienda USD (solo Matriz)" type="number" min="0" step="0.0001"
           value={form.PrecioSuministroUSD} onChange={e => f('PrecioSuministroUSD', e.target.value)}
           placeholder="Vacío: costo + margen configurado" />
+        <label className="block">
+          <span className="block text-xs font-semibold text-gray-600 mb-1">IVA (incluido en el precio de venta)</span>
+          <select value={form.AlicuotaIVA} onChange={e => f('AlicuotaIVA', e.target.value)}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-vida-blue">
+            <option value="GENERAL">Alícuota general</option>
+            <option value="REDUCIDA">Alícuota reducida</option>
+            <option value="EXENTO">Exento</option>
+          </select>
+        </label>
         {/* Producto PLUS — alta rentabilidad */}
         <button type="button" onClick={() => f('EsProductoPlus', !form.EsProductoPlus)}
           className={`w-full flex items-center justify-between rounded-xl px-4 py-3 border transition text-left

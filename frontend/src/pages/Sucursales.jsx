@@ -5,8 +5,9 @@ import api from '../services/api.js';
 import { useToast } from '../components/Toast.jsx';
 import {
   Plus, Edit2, Power, Store, MapPin, Phone, Mail,
-  User, X, CheckCircle,
+  User, X, CheckCircle, FileText,
 } from 'lucide-react';
+import ModalDatosFiscales from '../components/DatosFiscales.jsx';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN'];
 const TIPOS = ['TIENDA', 'ALMACEN', 'KIOSCO', 'FRANQUICIA', 'OTRO'];
@@ -342,6 +343,7 @@ export default function Sucursales() {
   const [sucursales, setSucursales] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [modal, setModal]           = useState(null);
+  const [fiscal, setFiscal]         = useState(null); // idPuntoVenta
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -481,6 +483,10 @@ export default function Sucursales() {
                     className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-vida-blue hover:bg-blue-50 rounded-lg py-1.5 transition">
                     <Edit2 size={13}/> Editar
                   </button>
+                  <button onClick={() => setFiscal(s.idPuntoVenta)}
+                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-vida-blue hover:bg-blue-50 rounded-lg py-1.5 transition">
+                    <FileText size={13}/> Fiscal
+                  </button>
                   <button onClick={() => toggleStatus(s)}
                     className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold rounded-lg py-1.5 transition ${
                       s.StatusPuntoVenta === 'ACTIVO'
@@ -499,6 +505,8 @@ export default function Sucursales() {
         </div>
       )}
       </div>
+
+      {fiscal !== null && <ModalDatosFiscales idPuntoVenta={fiscal} onCerrar={() => setFiscal(null)} />}
 
       {modal !== null && (
         <ModalSucursal

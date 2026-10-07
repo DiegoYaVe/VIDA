@@ -9,6 +9,8 @@ import {
   Wifi, WifiOff, AlertTriangle,
 } from 'lucide-react';
 import { hoyCaracas } from '../utils/fechas.js';
+import { ModalFacturar, VistaFactura, puedeFacturar } from '../components/Factura.jsx';
+import { numeroDoc } from '../utils/libroVentas.mjs';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
@@ -80,6 +82,9 @@ function ModalPedido({ idPedido, idBranch, idCuenta, puedeEscribir, repartidores
   const [notas, setNotas] = useState('');
   const [idRepAsignar, setIdRepAsignar] = useState('');
   const [error, setError] = useState('');
+  const [facturando, setFacturando] = useState(false);
+  const [verFactura, setVerFactura] = useState(null);
+  const { usuario } = useAuthStore();
 
   const cargar = useCallback(async () => {
     try {
@@ -254,6 +259,26 @@ function ModalPedido({ idPedido, idBranch, idCuenta, puedeEscribir, repartidores
               </a>
             </div>
           )}
+
+          {/* Factura fiscal */}
+          {(pedido.idFactura || (pedido.ModalidadFiscal && pedido.ModalidadFiscal !== 'NINGUNA' && puedeFacturar(usuario)
+            && pedido.Status !== 'CANCELADO' && (pedido.Status === 'ENTREGADO' || pedido.StatusPago === 'PAGADO'))) && (
+            <div className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2">
+              <span className="text-xs font-semibold text-gray-500 uppercase">Factura</span>
+              {pedido.idFactura
+                ? <button onClick={() => setVerFactura(pedido.idFactura)} className="text-sm font-bold text-vida-blue hover:underline">
+                    N° {numeroDoc(pedido.NumeroFactura)}{pedido.StatusFactura === 'PENDIENTE_CONTROL' ? ' · sin n° de control' : ''}
+                  </button>
+                : <button onClick={() => setFacturando(true)} className="text-sm font-bold text-vida-blue hover:underline">Emitir factura</button>}
+            </div>
+          )}
+          {facturando && (
+            <ModalFacturar idPedido={pedido.idPedido}
+              receptorInicial={{ Nombre: pedido.NombreCliente || '', Domicilio: pedido.DireccionCliente || '' }}
+              onCerrar={() => setFacturando(false)}
+              onEmitida={(id) => { setFacturando(false); setVerFactura(id); cargar(); }} />
+          )}
+          {verFactura && <VistaFactura idFactura={verFactura} onCerrar={() => setVerFactura(null)} onCambio={cargar} />}
 
           {/* Productos */}
           <div>

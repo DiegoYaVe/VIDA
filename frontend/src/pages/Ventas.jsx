@@ -4,9 +4,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../services/api.js';
 import {
   Receipt, DollarSign, CreditCard, Layers, Printer,
-  Search, ChevronDown, TrendingUp, X,
+  Search, ChevronDown, TrendingUp, X, FileText,
 } from 'lucide-react';
 import { hoyCaracas } from '../utils/fechas.js';
+import { useAuthStore } from '../store/authStore.js';
+import { ModalFacturar, VistaFactura, puedeFacturar } from '../components/Factura.jsx';
+import LibroVentas from '../components/LibroVentas.jsx';
+import { numeroDoc } from '../utils/libroVentas.mjs';
 
 const LABEL_METODO = {
   EFECTIVO: 'Efectivo',
@@ -88,6 +92,10 @@ export default function Ventas() {
   const [idPuntoVenta,setIdPuntoVenta]= useState('');
   const [busqueda,    setBusqueda]    = useState('');
   const [ventaImpr,   setVentaImpr]   = useState(null); // para reimprimir
+  const [pestana,     setPestana]     = useState('ventas'); // 'ventas' | 'libro'
+  const [facturarId,  setFacturarId]  = useState(null);
+  const [verFactura,  setVerFactura]  = useState(null);
+  const { usuario } = useAuthStore();
 
   // Cargar sucursales al montar
   useEffect(() => {
@@ -113,6 +121,24 @@ export default function Ventas() {
     setTimeout(() => window.print(), 200);
   }
 
+  // Botón de factura: ver la emitida, o emitirla si la tienda factura
+  function botonFactura(v, compacto = false) {
+    if (v.idFactura) return (
+      <button onClick={() => setVerFactura(v.idFactura)} title="Ver factura"
+        className="flex items-center gap-1 text-xs font-semibold text-vida-blue hover:underline">
+        <FileText size={compacto ? 15 : 12}/>{!compacto && `Fact. ${numeroDoc(v.NumeroFactura)}`}
+        {v.idNotaCredito && <span className="text-red-500">{compacto ? '' : ' · NC'}</span>}
+      </button>
+    );
+    if (!v.ModalidadFiscal || v.ModalidadFiscal === 'NINGUNA' || !puedeFacturar(usuario)) return null;
+    return (
+      <button onClick={() => setFacturarId(v.idPedido)} title="Emitir factura"
+        className="flex items-center gap-1 text-xs text-gray-400 hover:text-vida-blue">
+        <FileText size={compacto ? 15 : 12}/>{!compacto && 'Facturar'}
+      </button>
+    );
+  }
+
   // Filtro de búsqueda local (por # pedido o producto)
   const ventasFiltradas = busqueda.trim()
     ? ventas.filter(v =>
@@ -124,14 +150,29 @@ export default function Ventas() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
 
-      {/* Ticket invisible para impresión */}
-      <TicketPrint venta={ventaImpr} />
+      {/* Ticket invisible para impresión (no mientras se ve una factura) */}
+      {!verFactura && <TicketPrint venta={ventaImpr} />}
+      {facturarId && (
+        <ModalFacturar idPedido={facturarId} onCerrar={() => setFacturarId(null)}
+          onEmitida={(id) => { setFacturarId(null); setVerFactura(id); cargar(); }} />
+      )}
+      {verFactura && <VistaFactura idFactura={verFactura} onCerrar={() => setVerFactura(null)} onCambio={cargar} />}
 
       {/* ── Encabezado ── */}
       <div className="mb-6">
         <h1 className="text-2xl font-black text-gray-900">Historial de Ventas</h1>
-        <p className="text-gray-500 text-sm mt-1">Ventas en tienda · reimpresión de tickets</p>
+        <p className="text-gray-500 text-sm mt-1">Ventas en tienda · reimpresión de tickets · facturación</p>
+        <div className="flex gap-1 mt-4 bg-gray-100 rounded-xl p-1 w-fit">
+          {[['ventas', 'Ventas del día'], ['libro', 'Libro de ventas']].map(([k, l]) => (
+            <button key={k} onClick={() => setPestana(k)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-semibold ${pestana === k ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
+              {l}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {pestana === 'libro' ? <LibroVentas sucursales={sucursales} /> : <>
 
       {/* ── Filtros ── */}
       <div className="flex flex-wrap gap-3 mb-5">
@@ -254,6 +295,7 @@ export default function Ventas() {
                       className="mt-1.5 flex items-center gap-1 text-xs text-gray-400 hover:text-vida-blue transition-colors ml-auto">
                       <Printer size={12}/> Reimprimir
                     </button>
+                    <div className="mt-1.5 flex justify-end">{botonFactura(v)}</div>
                   </div>
                 </div>
 
@@ -279,7 +321,8 @@ export default function Ventas() {
                       {v.MontoCambio   > 0 && <span className="text-gray-400">C.${parseFloat(v.MontoCambio).toFixed(2)}</span>}
                     </div>
                   </div>
-                  <div className="col-span-1 flex justify-end">
+                  <div className="col-span-1 flex justify-end items-center gap-1">
+                    {botonFactura(v, true)}
                     <button onClick={() => reimprimir(v)}
                       title="Reimprimir ticket"
                       className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-vida-blue hover:bg-blue-50 transition-colors">
@@ -292,6 +335,7 @@ export default function Ventas() {
           </div>
         )}
       </div>
+      </>}
     </div>
   );
 }

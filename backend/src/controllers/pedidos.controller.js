@@ -148,14 +148,17 @@ export async function obtenerPedido(request, reply) {
                p.RequiereRevision, p.EsOffline, p.EvidenciaEntregaURL,
                p.OrdenRuta, p.DistanciaKm, p.ETAEntrega,
                DATEDIFF(MINUTE, GETUTCDATE(), p.ETAEntrega) AS MinutosRestantes,
-               pv.NomComercial AS NombreSucursal,
+               pv.NomComercial AS NombreSucursal, pv.ModalidadFiscal,
                cl.Nombre AS NombreCliente, cl.Telefono AS TelefonoCliente,
                cl.Direccion AS DireccionCliente,
                rep.Nombre AS NombreRepartidor, rep.Telefono AS TelefonoRepartidor,
-               rep.FotoURL AS FotoRepartidor
+               rep.FotoURL AS FotoRepartidor,
+               fa.idFactura, fa.Numero AS NumeroFactura, fa.Status AS StatusFactura
         FROM VIDA_PEDIDOS p
         LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA pv
           ON pv.idBranch = p.idBranch AND pv.idCuenta = p.idCuenta AND pv.idPuntoVenta = p.idPuntoVenta
+        LEFT JOIN VIDA_FACTURAS fa
+          ON fa.idBranch = p.idBranch AND fa.idCuenta = p.idCuenta AND fa.idPedido = p.idPedido AND fa.TipoDocumento = 'FACTURA'
         LEFT JOIN VIDA_CLIENTES cl
           ON cl.idBranch = p.idBranch AND cl.idCuenta = p.idCuenta AND cl.idCliente = p.idCliente
         LEFT JOIN VIDA_REPARTIDORES rep
@@ -1276,11 +1279,17 @@ export async function listarVentasPOS(request, reply) {
     const pedidosR = await req.query(`
       SELECT p.idPedido, p.FechaAlta, p.MetodoPago, p.StatusPago,
              p.TotalUSD, p.MontoEfectivo, p.MontoTarjeta, p.MontoCambio, p.PagoMonedaJSON,
-             p.Status, pv.NomComercial AS NombreSucursal
+             p.Status, pv.NomComercial AS NombreSucursal, pv.ModalidadFiscal,
+             fa.idFactura, fa.Numero AS NumeroFactura, fa.Status AS StatusFactura,
+             nc.idFactura AS idNotaCredito
       FROM VIDA_PEDIDOS p
       LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA pv
         ON pv.idBranch = p.idBranch AND pv.idCuenta = p.idCuenta
        AND pv.idPuntoVenta = p.idPuntoVenta
+      LEFT JOIN VIDA_FACTURAS fa
+        ON fa.idBranch = p.idBranch AND fa.idCuenta = p.idCuenta AND fa.idPedido = p.idPedido AND fa.TipoDocumento = 'FACTURA'
+      LEFT JOIN VIDA_FACTURAS nc
+        ON nc.idBranch = fa.idBranch AND nc.idCuenta = fa.idCuenta AND nc.idFacturaAfectada = fa.idFactura AND nc.TipoDocumento = 'NOTA_CREDITO'
       WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
         AND p.Canal = 'POS'
         AND p.Status = 'ENTREGADO'

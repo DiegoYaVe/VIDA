@@ -1,3 +1,4 @@
+import {filasLibroVentas} from './libroVentas.mjs';
 import {tablasMonedas} from './filasMonedas.mjs';
 import {tablasCaja} from './filasCaja.mjs';
 import {tablasPagoMovil} from './filasPagoMovil.mjs';
@@ -270,4 +271,21 @@ export function exportarPagoMovilExcel(datos) {
   const { fechaInicio, fechaFin } = datos;
   const hojas = hojasDeTablas(tablasPagoMovil(datos), 'CONCILIACIÓN PAGO MÓVIL', `Período (alta del pedido): ${fechaInicio} al ${fechaFin}`);
   descargar(crearLibro(hojas), `pago_movil_${fechaInicio}_${fechaFin}.xlsx`);
+}
+
+// ─── LIBRO DE VENTAS (facturas y notas de crédito) ───────────────────────────
+export function exportarLibroVentasExcel({ documentos, desde, hasta, tienda }) {
+  const { encabezado, filas, totales } = filasLibroVentas(documentos);
+  const hoja = {
+    nombre: 'Libro de ventas',
+    datos: [
+      ['LIBRO DE VENTAS'],
+      [`Período: ${desde} al ${hasta}${tienda ? ` · ${tienda}` : ''}`],
+      ['Montos en bolívares; las notas de crédito restan. "PENDIENTE": sin número de control.'],
+      [],
+      encabezado, ...filas, totales,
+    ],
+    anchos: encabezado.map((h, i) => ([4].includes(i) ? 28 : Math.max(10, h.length + 2))),
+  };
+  descargar(crearLibro([hoja]), `libro_ventas_${desde}_${hasta}.xlsx`);
 }
