@@ -162,6 +162,11 @@ function ModalVentasTurno({ turno, onClose }) {
           <div><p className="text-xs text-gray-400">Total vendido</p><p className="font-bold text-vida-blue">{fmt(data?.ventas?.TotalVentas??turno.TotalVentas)}</p></div>
           <div><p className="text-xs text-gray-400">Estado</p><StatusBadge status={turno.Status}/></div>
         </div>
+        {data?.tardias?.NumTransacciones>0&&<div className="px-6 py-3 border-b bg-amber-50 text-sm text-amber-800">
+          <p className="font-semibold">{data.tardias.NumTransacciones} venta(s) sincronizada(s) después del cierre · {fmt(data.tardias.TotalUSD)}</p>
+          <p className="text-xs">No están en las cifras guardadas del turno. Su efectivo ya estaba en la caja al contarla: {Number(data.tardias.EfectivoUSD).toFixed(2)} USD y {Number(data.tardias.EfectivoVES).toFixed(2)} VES.
+            {data.tardias.DiferenciaConciliadaUSD!=null&&<> Diferencia conciliada: <b>{Number(data.tardias.DiferenciaConciliadaUSD).toFixed(2)} USD</b> · <b>{Number(data.tardias.DiferenciaConciliadaVES).toFixed(2)} VES</b>.</>}</p>
+        </div>}
         <div className="px-6 py-3 border-b bg-white flex items-center gap-3">
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
@@ -173,7 +178,7 @@ function ModalVentasTurno({ turno, onClose }) {
         <div className="min-h-0 overflow-y-auto overflow-x-auto overscroll-contain flex-1">
           {error&&<p className="m-4 rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>}
           {!data&&!error?<div className="py-16 flex justify-center text-gray-400"><Loader2 className="animate-spin"/></div>:lista.length===0?<div className="py-16 text-center text-gray-400"><Receipt size={40} className="mx-auto mb-2 opacity-30"/>Este turno no tiene ventas</div>:visibles.length===0?<div className="py-16 text-center text-gray-400"><Search size={40} className="mx-auto mb-2 opacity-30"/><p className="font-medium text-gray-500">No hay ventas que coincidan</p><button onClick={()=>setBusqueda('')} className="mt-2 text-sm font-semibold text-vida-blue hover:underline">Limpiar búsqueda</button></div>:
-          <table className="w-full text-sm min-w-[780px]"><thead className="sticky top-0 bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-3 text-left">Pedido</th><th className="p-3 text-left">Hora</th><th className="p-3 text-left">Realizada por</th><th className="p-3 text-left">Método</th><th className="p-3 text-right">Monto</th><th className="p-3 text-right">Ticket</th></tr></thead><tbody className="divide-y">{visibles.map(p=><tr key={p.idPedido} className="hover:bg-gray-50"><td className="p-3 font-semibold">#{p.idPedido}</td><td className="p-3 text-gray-500">{formatHora(p.FechaAlta)}</td><td className="p-3"><span className="font-medium">{p.RealizadaPor}</span>{p.UsuarioCve&&<span className="block text-xs text-gray-400">@{p.UsuarioCve}</span>}</td><td className="p-3"><MetodoBadge metodo={p.MetodoPago}/></td><td className="p-3 text-right font-bold">{fmt(p.TotalUSD)}</td><td className="p-3 text-right"><button disabled={cargandoTicket===p.idPedido} onClick={()=>verTicket(p)} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold text-vida-blue hover:bg-blue-50 disabled:opacity-50">{cargandoTicket===p.idPedido?<Loader2 size={14} className="animate-spin"/>:<Receipt size={14}/>} Ver ticket</button></td></tr>)}</tbody></table>}
+          <table className="w-full text-sm min-w-[780px]"><thead className="sticky top-0 bg-gray-50 text-xs uppercase text-gray-500"><tr><th className="p-3 text-left">Pedido</th><th className="p-3 text-left">Hora</th><th className="p-3 text-left">Realizada por</th><th className="p-3 text-left">Método</th><th className="p-3 text-right">Monto</th><th className="p-3 text-right">Ticket</th></tr></thead><tbody className="divide-y">{visibles.map(p=><tr key={p.idPedido} className="hover:bg-gray-50"><td className="p-3 font-semibold">#{p.idPedido}{p.VentaTardia&&<span title="Sincronizada después del cierre: no está en las cifras guardadas del turno" className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">TARDÍA</span>}</td><td className="p-3 text-gray-500">{formatHora(p.FechaAlta)}</td><td className="p-3"><span className="font-medium">{p.RealizadaPor}</span>{p.UsuarioCve&&<span className="block text-xs text-gray-400">@{p.UsuarioCve}</span>}</td><td className="p-3"><MetodoBadge metodo={p.MetodoPago}/></td><td className="p-3 text-right font-bold">{fmt(p.TotalUSD)}</td><td className="p-3 text-right"><button disabled={cargandoTicket===p.idPedido} onClick={()=>verTicket(p)} className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold text-vida-blue hover:bg-blue-50 disabled:opacity-50">{cargandoTicket===p.idPedido?<Loader2 size={14} className="animate-spin"/>:<Receipt size={14}/>} Ver ticket</button></td></tr>)}</tbody></table>}
         </div>
       </div>
     </div>
@@ -290,6 +295,7 @@ export default function CierreCaja() {
   const [historial, setHistorial]   = useState([]);
   const [histTotal, setHistTotal]   = useState(0);
   const [histPage, setHistPage]     = useState(1);
+  const [sinTurno, setSinTurno]     = useState(null);
   const HIST_LIMIT = 10;
 
   // UI
@@ -353,6 +359,7 @@ export default function CierreCaja() {
       });
       setHistorial(res.data.data || []);
       setHistTotal(res.data.total || 0);
+      setSinTurno(res.data.ventasSinTurno || null);
       setHistPage(page);
     } catch (err) {
       toast.error('Error al cargar historial');
@@ -810,6 +817,11 @@ export default function CierreCaja() {
             <div className="px-5 py-4 border-b">
               <h3 className="font-semibold text-gray-700">Historial de Turnos</h3>
             </div>
+            {sinTurno?.NumTransacciones>0&&(
+              <p className="mx-5 mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+                <b>{sinTurno.NumTransacciones} venta(s) fuera de turno</b> ({fmt(sinTurno.TotalUSD)}, la última el {formatFecha(sinTurno.Ultima)}): se cobraron sin caja abierta y no están en ningún arqueo. Revísalas en Ventas.
+              </p>
+            )}
             <div className="overflow-x-auto">
               {historial.length === 0 ? (
                 <p className="text-center text-gray-400 py-12 text-sm">Sin historial disponible</p>
@@ -849,6 +861,7 @@ export default function CierreCaja() {
                         </td>
                         <td className="px-4 py-3 text-center">
                           <StatusBadge status={t.Status} />
+                          {t.VentasTardias>0&&<span className="mt-1 block text-[10px] font-bold text-amber-700">+{t.VentasTardias} tardía(s)</span>}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <button onClick={()=>setTurnoDetalle(t)} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-vida-blue hover:bg-blue-50">

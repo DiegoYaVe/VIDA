@@ -81,6 +81,8 @@ export function pedidoFacturable(p) {
 export function pagoEnDivisasUSD(pagoMoneda, totalUSD) {
   const p = typeof pagoMoneda === 'string' ? JSON.parse(pagoMoneda || 'null') : pagoMoneda;
   if (!p) return 0;
+  // Venta cobrada con IGTF: el POS ya calculó la base (venta pagada en divisas)
+  if (p.IGTFBaseUSD != null) return centavos(Math.min(Number(p.IGTFBaseUSD), Number(totalUSD)));
   let usd = 0;
   if (p.Moneda === 'USD') usd = Number(p.TotalOriginal ?? p.TotalUSD ?? totalUSD);
   else if (p.Moneda === 'MIXTA') {
@@ -167,5 +169,91 @@ export function desglosarFactura({ lineas, totalUSD, tasa, porcentajes, contribu
     ExentoVES: neto.EXENTO,
     TotalVES: totalVES, IGTFBaseVES, IGTFVES, TotalPagarVES: centavos(totalVES + IGTFVES),
     TotalUSD: centavos(totalUSD), TasaVESporUSD: tc,
+  };
+}
+
+// ── Devoluciones y notas de crédito parciales ──────────────────────────────
+const EPS = 1e-9;
+
+// Monto a devolver de una venta. lineas: detalle del pedido [{ idDetalle,
+// idProducto, Cantidad, PrecioUnitario }]; devolver: [{ idDetalle, Cantidad }];
+// previo: { [idDetalle]: cantidad ya devuelta }; montoPrevioUSD: ya reembolsado.
+// El descuento del pedido (cupón / puntos) se aplica en proporción. La última
+// devolución (todo lo que quedaba) cierra exactamente al total cobrado.
+export function calcularDevolucion({ lineas, totalUSD, devolver, previo = {}, montoPrevioUSD = 0 }) {
+  if (!devolver?.length) error('Indica qué productos se devuelven');
+  const subtotal = lineas.reduce((s, l) => s + Number(l.Cantidad) * Number(l.PrecioUnitario), 0);
+  const factor = subtotal > 0 ? Number(totalUSD) / subtotal : 0;
+  const vistos = new Set();
+  const det = devolver.map(d => {
+    const l = lineas.find(x => String(x.idDetalle) === String(d.idDetalle));
+    if (!l) error('Producto que no está en la venta');
+    if (vistos.has(String(l.idDetalle))) error('Producto repetido en la devolución');
+    vistos.add(String(l.idDetalle));
+    const q = Number(d.Cantidad);
+    const resta = Number(l.Cantidad) - Number(previo[l.idDetalle] || 0);
+    if (!(q > 0) || q > resta + EPS) error(`Cantidad a devolver inválida (quedan ${resta} del producto #${l.idProducto})`);
+    return { idDetalle: l.idDetalle, idProducto: l.idProducto, Cantidad: q, PrecioUnitarioUSD: Number(l.PrecioUnitario),
+             MontoUSD: centavos(q * Number(l.PrecioUnitario) * factor) };
+  });
+  const final = lineas.every(l => {
+    const q = det.find(d => String(d.idDetalle) === String(l.idDetalle))?.Cantidad || 0;
+    return Number(l.Cantidad) - Number(previo[l.idDetalle] || 0) - q <= EPS;
+  });
+  let monto = centavos(det.reduce((s, d) => s + d.MontoUSD, 0));
+  if (final) monto = centavos(Number(totalUSD) - Number(montoPrevioUSD));
+  return { lineas: det, MontoUSD: Math.max(0, monto), final };
+}
+
+const CAMPOS_NC = ['SubtotalVES', 'DescuentoVES', 'BaseGeneralVES', 'IVAGeneralVES', 'BaseReducidaVES', 'IVAReducidaVES',
+  'ExentoVES', 'TotalVES', 'IGTFBaseVES', 'IGTFVES', 'TotalPagarVES', 'TotalUSD'];
+
+// Nota de crédito (total o parcial) sobre una factura.
+// orig: cabecera; lineas: sus líneas; devolver: [{ Linea, Cantidad }] (vacío =
+// todo lo que queda); previas: cabeceras de NC anteriores; previoLineas:
+// { [Linea]: { Cantidad, TotalVES } } ya acreditado. La NC que acredita todo
+// lo restante usa "original menos lo ya acreditado" para no perder céntimos.
+export function calcularNotaCredito({ orig, lineas, devolver, previas = [], previoLineas = {} }) {
+  const resta = l => Number(l.Cantidad) - Number(previoLineas[l.Linea]?.Cantidad || 0);
+  const pedidas = devolver?.length ? devolver
+    : lineas.filter(l => resta(l) > EPS).map(l => ({ Linea: l.Linea, Cantidad: resta(l) }));
+  if (!pedidas.length) error('La factura ya fue acreditada por completo');
+  const vistos = new Set();
+  const det = pedidas.map(d => {
+    const l = lineas.find(x => Number(x.Linea) === Number(d.Linea));
+    if (!l) error('Línea que no está en la factura');
+    if (vistos.has(Number(l.Linea))) error('Línea repetida en la nota de crédito');
+    vistos.add(Number(l.Linea));
+    const q = Number(d.Cantidad);
+    if (!(q > 0) || q > resta(l) + EPS) error(`Cantidad inválida para "${l.Descripcion}" (quedan ${resta(l)})`);
+    const ultima = resta(l) - q <= EPS;
+    const total = ultima ? centavos(Number(l.TotalVES) - Number(previoLineas[l.Linea]?.TotalVES || 0))
+                         : centavos(Number(l.TotalVES) * q / Number(l.Cantidad));
+    return { ...l, Cantidad: q, TotalVES: total, LineaAfectada: Number(l.Linea) };
+  });
+  const final = lineas.every(l => resta(l) - (det.find(d => d.LineaAfectada === Number(l.Linea))?.Cantidad || 0) <= EPS);
+  const lineasNC = det.map((l, i) => ({ ...l, Linea: i + 1 }));
+
+  if (final) {
+    const r = {};
+    for (const c of CAMPOS_NC) r[c] = centavos(Number(orig[c]) - previas.reduce((s, p) => s + Number(p[c]), 0));
+    return { ...r, PctGeneral: Number(orig.PctGeneral), PctReducida: Number(orig.PctReducida), lineas: lineasNC, final };
+  }
+  const SubtotalVES = centavos(det.reduce((s, l) => s + l.TotalVES, 0));
+  const DescuentoVES = Number(orig.SubtotalVES) > 0 ? centavos(Number(orig.DescuentoVES) * SubtotalVES / Number(orig.SubtotalVES)) : 0;
+  const TotalVES = centavos(SubtotalVES - DescuentoVES);
+  const pct = { GENERAL: Number(orig.PctGeneral), REDUCIDA: Number(orig.PctReducida), EXENTO: 0 };
+  const grupos = ALICUOTAS.map(a => centavos(det.filter(l => l.Alicuota === a).reduce((s, l) => s + l.TotalVES, 0)));
+  const desc = repartir(DescuentoVES, grupos);
+  const neto = Object.fromEntries(ALICUOTAS.map((a, i) => [a, centavos(grupos[i] - desc[i])]));
+  const base = a => centavos(neto[a] / (1 + pct[a] / 100));
+  const prop = c => (Number(orig.TotalVES) > 0 ? centavos(Number(orig[c]) * TotalVES / Number(orig.TotalVES)) : 0);
+  const IGTFVES = prop('IGTFVES');
+  return {
+    SubtotalVES, DescuentoVES, TotalVES,
+    PctGeneral: pct.GENERAL, BaseGeneralVES: base('GENERAL'), IVAGeneralVES: centavos(neto.GENERAL - base('GENERAL')),
+    PctReducida: pct.REDUCIDA, BaseReducidaVES: base('REDUCIDA'), IVAReducidaVES: centavos(neto.REDUCIDA - base('REDUCIDA')),
+    ExentoVES: neto.EXENTO, IGTFBaseVES: prop('IGTFBaseVES'), IGTFVES, TotalPagarVES: centavos(TotalVES + IGTFVES),
+    TotalUSD: prop('TotalUSD'), lineas: lineasNC, final,
   };
 }

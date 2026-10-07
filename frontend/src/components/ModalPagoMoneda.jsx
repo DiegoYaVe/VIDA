@@ -1,6 +1,6 @@
 import {useState,useEffect} from 'react';
 import api from '../services/api.js';
-import {calcularPagoPos} from '../../../backend/src/domain/pagoPos.mjs';
+import {calcularPagoPos,PCT_IGTF} from '../../../backend/src/domain/pagoPos.mjs';
 export default function ModalPagoMoneda({total,usuario,idPuntoVenta,onConfirmar,onCerrar,procesando}) {
  const [cot,setCot]=useState(null),[moneda,setMoneda]=useState('USD'),[metodo,setMetodo]=useState('EFECTIVO');
  const [ef,setEf]=useState(''),[tar,setTar]=useState(''),[error,setError]=useState(''),[cargando,setCargando]=useState(false),[offline,setOffline]=useState(false);
@@ -23,13 +23,15 @@ export default function ModalPagoMoneda({total,usuario,idPuntoVenta,onConfirmar,
  async function cargar(){setCargando(true);setError('');try {const c=await obtener();setCot(c);setMoneda(c.Modo==='VES'?'VES':'USD');}catch(e){setError(e.message);setCot(null);}finally{setCargando(false);}}
  useEffect(()=>{cargar();},[clave]);
  const tc=Number(cot?.tasa?.VESporUSD)||0;
- const importe=red(total*(moneda==='VES'?tc:1));
+ // Contribuyente especial: IGTF (3%) sobre lo pagado en divisas
+ const igtf=!!cot?.AplicaIGTF;
+ const importe=red((total+(igtf&&moneda==='USD'?red(total*PCT_IGTF/100):0))*(moneda==='VES'?tc:1));
  const efectivo=metodo==='TARJETA'?0:ef===''?(metodo==='EFECTIVO'?importe:0):Number(ef);
  const tarjeta=metodo==='TARJETA'?importe:metodo==='EFECTIVO'?0:Number(tar)||0;
  const cambio=red(efectivo+tarjeta-importe);
  const pago=moneda==='MIXTA'?{Moneda:'MIXTA',MonedaCambio:monedaCambio,Desglose:Object.fromEntries(['USD','VES'].map(m=>[m,{Efectivo:Number(partes[m].Efectivo||0),Tarjeta:Number(partes[m].Tarjeta||0)}]))}:{Moneda:moneda,Metodo:metodo,Efectivo:efectivo,Tarjeta:tarjeta};
  let resumen=null,validacion='';
- if(cot) {try {resumen=calcularPagoPos(total,pago,cot.tasa,cot.Modo);}catch(e){validacion=e.message;}}
+ if(cot) {try {resumen=calcularPagoPos(total,pago,cot.tasa,cot.Modo,igtf);}catch(e){validacion=e.message;}}
  const valido=!!resumen;
  async function confirmar(){
   setCargando(true);setError('');
@@ -38,7 +40,7 @@ export default function ModalPagoMoneda({total,usuario,idPuntoVenta,onConfirmar,
    if(String(nueva.tasa.idTasa)!==String(cot.tasa.idTasa)||nueva.Modo!==cot.Modo){setCot(nueva);setMoneda(nueva.Modo==='VES'?'VES':'USD');setEf('');setTar('');throw new Error('La tasa o moneda cambió. Revisa el importe y confirma de nuevo.');}
    const fecha=new Date(Math.max(Date.now(),Date.parse(nueva.EmitidaEn))).toISOString();
    if(Date.parse(fecha)>Date.parse(nueva.ExpiraEn)) throw new Error('La cotización venció. Actualiza la tasa.');
-   const confirmado=calcularPagoPos(total,pago,nueva.tasa,nueva.Modo);
+   const confirmado=calcularPagoPos(total,pago,nueva.tasa,nueva.Modo,!!nueva.AplicaIGTF);
    await onConfirmar({metodo:confirmado.Metodo,efectivo:confirmado.EfectivoUSD,tarjeta:confirmado.TarjetaUSD,cambio:confirmado.CambioUSD,FechaVenta:fecha,
     PagoMoneda:{...pago,idCotizacion:nueva.idCotizacion},resumen:confirmado});
   }catch(e){setError(e.message);}finally{setCargando(false);}
@@ -49,6 +51,7 @@ export default function ModalPagoMoneda({total,usuario,idPuntoVenta,onConfirmar,
  {cot&&<><p>1 USD = {tc} VES · {String(cot.tasa.FechaValor).slice(0,10)}</p>
  <label className="block">Moneda <select disabled={cargando||procesando} className="border rounded p-2" value={moneda} onChange={e=>{setMoneda(e.target.value);setEf('');setTar('');}}>{(cot.Modo==='AMBAS'?['USD','VES','MIXTA']:[cot.Modo]).map(m=><option key={m} value={m}>{m==='MIXTA'?'USD + bolívares':m}</option>)}</select></label>
  <p className="text-2xl font-bold">{importe.toFixed(2)} {moneda==='MIXTA'?'USD':moneda}</p><p className="text-xs">Equivalente: {total.toFixed(2)} USD · {red(total*tc).toFixed(2)} VES</p>
+ {igtf&&<p className="text-xs rounded-lg bg-amber-50 p-2 text-amber-800">Tienda contribuyente especial: se cobra IGTF {PCT_IGTF}% sobre lo pagado en divisas{resumen?.IGTFUSD?` (${resumen.IGTFUSD.toFixed(2)} USD; total a cobrar ${resumen.TotalCobradoUSD.toFixed(2)} USD)`:''}. En bolívares no aplica.</p>}
  <fieldset disabled={cargando||procesando}>
  {moneda==='MIXTA'?<div className="space-y-3">{['USD','VES'].map(m=><div key={m} className="rounded-xl bg-gray-50 p-3"><h3 className="font-semibold">Recibido en {m}</h3><div className="grid grid-cols-2 gap-2">{['Efectivo','Tarjeta'].map(k=><label key={k} className="text-sm">{k} ({m})<input type="number" min="0" step="0.01" className="border rounded p-2 w-full" placeholder="0.00" value={partes[m][k]} onChange={e=>setPartes(prev=>({...prev,[m]:{...prev[m],[k]:e.target.value}}))}/></label>)}</div></div>)}
  <label>Devolver cambio en <select className="border p-2 rounded" value={monedaCambio} onChange={e=>setMonedaCambio(e.target.value)}><option>USD</option><option>VES</option></select></label>

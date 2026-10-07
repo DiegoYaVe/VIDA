@@ -80,7 +80,7 @@ export default function ModalDatosFiscales({ idPuntoVenta, onCerrar }) {
                   <input type="checkbox" className="mt-1" checked={!!d.ContribuyenteEspecial} onChange={set('ContribuyenteEspecial')} />
                   <span>
                     <span className="font-semibold text-gray-700">Contribuyente especial</span>
-                    <span className="block text-xs text-gray-500">La factura agrega el IGTF (3%) sobre lo pagado en divisas.</span>
+                    <span className="block text-xs text-gray-500">El POS cobra el IGTF (3%) sobre lo pagado en divisas y la factura lo muestra. Los pedidos de delivery todavía no lo cobran.</span>
                   </span>
                 </label>
               </fieldset>

@@ -25,7 +25,6 @@
       },
       "package": "com.vida.cliente",
       "googleServicesFile": "./google-services.json",
-      "usesCleartextTraffic": true,
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyARju17HZImuM-k-CQklgPmS6u4vt2Vg2I"

@@ -4,14 +4,6 @@
 // completa o rechaza. El cliente gana puntos al crear (reversibles si se rechaza).
 import { getPool, sql } from '../db/sqlserver.js';
 
-async function nextId(pool, tabla, campo, idBranch, idCuenta) {
-  const r = await pool.request()
-    .input('idBranch', sql.BigInt, idBranch)
-    .input('idCuenta', sql.BigInt, idCuenta)
-    .query(`SELECT ISNULL(MAX(${campo}),0)+1 AS next FROM ${tabla} WITH (UPDLOCK, HOLDLOCK)
-            WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
-  return r.recordset[0].next;
-}
 
 async function puntosPorDolar(pool, idBranch, idCuenta) {
   const r = await pool.request()
@@ -20,20 +12,22 @@ async function puntosPorDolar(pool, idBranch, idCuenta) {
   return parseInt(r.recordset[0]?.Valor) || 10;
 }
 
+// Ledger + saldo en una transacción; id atómico en el mismo INSERT.
 async function movPuntos(pool, idBranch, idCuenta, idCliente, puntos, tipo, descripcion) {
   if (!puntos) return;
-  const movId = await nextId(pool, 'VIDA_CLIENTE_PUNTOS', 'idMovimiento', idBranch, idCuenta);
-  await pool.request()
-    .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
-    .input('idMovimiento', sql.BigInt, movId).input('idCliente', sql.BigInt, idCliente)
-    .input('Tipo', sql.VarChar(20), tipo).input('Puntos', sql.Int, puntos).input('Descripcion', sql.VarChar(200), descripcion)
-    .query(`INSERT INTO VIDA_CLIENTE_PUNTOS (idBranch,idCuenta,idMovimiento,idCliente,Tipo,Puntos,idPedido,Descripcion)
-            VALUES (@idBranch,@idCuenta,@idMovimiento,@idCliente,@Tipo,@Puntos,NULL,@Descripcion)`);
-  await pool.request()
-    .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
-    .input('idCliente', sql.BigInt, idCliente).input('Puntos', sql.Int, puntos)
-    .query(`UPDATE VIDA_APP_CLIENTES SET PuntosSaldo = ISNULL(PuntosSaldo,0) + @Puntos
-            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    await new sql.Request(tx)
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idCliente', sql.BigInt, idCliente)
+      .input('Tipo', sql.VarChar(20), tipo).input('Puntos', sql.Int, puntos).input('Descripcion', sql.VarChar(200), descripcion)
+      .query(`INSERT INTO VIDA_CLIENTE_PUNTOS (idBranch,idCuenta,idMovimiento,idCliente,Tipo,Puntos,idPedido,Descripcion)
+              SELECT @idBranch,@idCuenta,ISNULL(MAX(idMovimiento),0)+1,@idCliente,@Tipo,@Puntos,NULL,@Descripcion
+              FROM VIDA_CLIENTE_PUNTOS WITH (UPDLOCK, HOLDLOCK) WHERE idBranch=@idBranch AND idCuenta=@idCuenta;
+              UPDATE VIDA_APP_CLIENTES SET PuntosSaldo = ISNULL(PuntosSaldo,0) + @Puntos
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+    await tx.commit();
+  } catch (e) { try { await tx.rollback(); } catch { } throw e; }
 }
 
 // GET /delivery/cliente/servicios/operadoras
@@ -66,21 +60,25 @@ export async function crearOrdenServicio(request, reply) {
     if (!opR.recordset.length) return reply.code(404).send({ error: 'Operadora no encontrada' });
     const op = opR.recordset[0];
 
-    const idOrden = await nextId(pool, 'VIDA_SERVICIOS_ORDENES', 'idOrden', idBranch, idCuenta);
-    const referencia = `SVC-${idOrden}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+    const sufijo = Date.now().toString(36).slice(-4).toUpperCase();
     const ppd = await puntosPorDolar(pool, idBranch, idCuenta);
     const puntos = Math.round(monto * ppd);
 
-    await pool.request()
+    // id y referencia (SVC-<id>-<sufijo>) en la misma sentencia atómica
+    const ins = await pool.request()
       .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
-      .input('idOrden', sql.BigInt, idOrden).input('idCliente', sql.BigInt, idCliente)
+      .input('Sufijo', sql.VarChar(8), sufijo).input('idCliente', sql.BigInt, idCliente)
       .input('idOperadora', sql.BigInt, idOperadora).input('NombreOperadora', sql.VarChar(80), op.Nombre)
       .input('Tipo', sql.VarChar(30), op.Tipo).input('NumeroDestino', sql.VarChar(60), NumeroDestino.trim())
       .input('MontoUSD', sql.Decimal(18,2), monto).input('MetodoPago', sql.VarChar(20), (MetodoPago || 'PAGO_MOVIL'))
-      .input('Referencia', sql.VarChar(40), referencia).input('PuntosGanados', sql.Int, puntos)
+      .input('PuntosGanados', sql.Int, puntos)
       .query(`INSERT INTO VIDA_SERVICIOS_ORDENES
                 (idBranch,idCuenta,idOrden,idCliente,idOperadora,NombreOperadora,Tipo,NumeroDestino,MontoUSD,MetodoPago,Referencia,Status,PuntosGanados)
-              VALUES (@idBranch,@idCuenta,@idOrden,@idCliente,@idOperadora,@NombreOperadora,@Tipo,@NumeroDestino,@MontoUSD,@MetodoPago,@Referencia,'PROCESANDO',@PuntosGanados)`);
+              OUTPUT inserted.idOrden, inserted.Referencia
+              SELECT @idBranch,@idCuenta,ISNULL(MAX(idOrden),0)+1,@idCliente,@idOperadora,@NombreOperadora,@Tipo,@NumeroDestino,@MontoUSD,@MetodoPago,
+                     CONCAT('SVC-', ISNULL(MAX(idOrden),0)+1, '-', @Sufijo),'PROCESANDO',@PuntosGanados
+              FROM VIDA_SERVICIOS_ORDENES WITH (UPDLOCK, HOLDLOCK) WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+    const { idOrden, Referencia: referencia } = ins.recordset[0];
 
     if (puntos > 0) await movPuntos(pool, idBranch, idCuenta, idCliente, puntos, 'GANADO', `${op.Nombre} ${NumeroDestino.trim()} (${referencia})`);
 
@@ -120,15 +118,16 @@ export async function crearOperadora(request, reply) {
   if (!b.Nombre?.trim() || !b.Tipo?.trim()) return reply.code(400).send({ error: 'Nombre y tipo son obligatorios' });
   try {
     const pool = await getPool();
-    const id = await nextId(pool, 'VIDA_SERVICIOS_OPERADORAS', 'idOperadora', idBranch, idCuenta);
-    await pool.request()
-      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idOperadora', sql.BigInt, id)
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
       .input('Nombre', sql.VarChar(80), b.Nombre.trim()).input('Tipo', sql.VarChar(30), b.Tipo.trim())
       .input('Categoria', sql.VarChar(40), b.Categoria || null).input('Color', sql.VarChar(20), b.Color || null)
       .input('Orden', sql.Int, parseInt(b.Orden) || 0)
       .query(`INSERT INTO VIDA_SERVICIOS_OPERADORAS (idBranch,idCuenta,idOperadora,Nombre,Tipo,Categoria,Color,Activo,Orden)
-              VALUES (@idBranch,@idCuenta,@idOperadora,@Nombre,@Tipo,@Categoria,@Color,1,@Orden)`);
-    return reply.code(201).send({ idOperadora: id });
+              OUTPUT inserted.idOperadora
+              SELECT @idBranch,@idCuenta,ISNULL(MAX(idOperadora),0)+1,@Nombre,@Tipo,@Categoria,@Color,1,@Orden
+              FROM VIDA_SERVICIOS_OPERADORAS WITH (UPDLOCK, HOLDLOCK) WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+    return reply.code(201).send({ idOperadora: r.recordset[0].idOperadora });
   } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al crear operadora' }); }
 }
 export async function editarOperadora(request, reply) {

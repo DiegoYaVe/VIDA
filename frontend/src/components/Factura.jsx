@@ -158,6 +158,7 @@ export function VistaFactura({ idFactura, onCerrar, onCambio }) {
   const [accion, setAccion] = useState(null); // 'control' | 'nc'
   const [form, setForm] = useState({ NumeroControl: '', SerialMaquina: '', Motivo: '' });
   const [enviando, setEnviando] = useState(false);
+  const [ncCant, setNcCant] = useState({}); // { [Linea]: cantidad a acreditar }
 
   const cargar = (id) => api.get(`/facturas/${id}`).then(r => { setF(r.data); setError(null); })
     .catch(e => setError(errorDe(e, 'No se pudo cargar la factura')));
@@ -172,7 +173,9 @@ export function VistaFactura({ idFactura, onCerrar, onCambio }) {
         toast.success('Número de control registrado');
         await cargar(f.idFactura);
       } else {
-        const r = await api.post(`/facturas/${f.idFactura}/nota-credito`, { Motivo: form.Motivo });
+        // Sin cantidades = todo lo que falta por acreditar
+        const Lineas = f.lineas.filter(l => Number(ncCant[l.Linea]) > 0).map(l => ({ Linea: l.Linea, Cantidad: Number(ncCant[l.Linea]) }));
+        const r = await api.post(`/facturas/${f.idFactura}/nota-credito`, { Motivo: form.Motivo, Lineas });
         toast.success(`Nota de crédito N° ${numeroDoc(r.data.Numero)} emitida`, 'Queda pendiente del número de control');
         await cargar(r.data.idFactura);
       }
@@ -202,14 +205,19 @@ export function VistaFactura({ idFactura, onCerrar, onCambio }) {
                 <Hash size={14} /> Registrar n° de control
               </button>
             )}
-            {f.TipoDocumento === 'FACTURA' && f.Status === 'EMITIDA' && !f.idNotaCredito && ROLES_ANULAN.includes(rol) && (
-              <button onClick={() => setAccion('nc')} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-200 text-red-600 text-sm font-semibold">
+            {f.TipoDocumento === 'FACTURA' && f.Status === 'EMITIDA' && !f.acreditadaCompleta && ROLES_ANULAN.includes(rol) && (
+              <button onClick={() => { setNcCant({}); setAccion('nc'); }} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-red-200 text-red-600 text-sm font-semibold">
                 <Undo2 size={14} /> Nota de crédito
               </button>
             )}
-            {f.idNotaCredito && (
-              <button onClick={() => cargar(f.idNotaCredito)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold">
-                <FileText size={14} /> Ver nota de crédito N° {numeroDoc(f.NumeroNotaCredito)}
+            {(f.notasCredito || []).map(n => (
+              <button key={n.idFactura} onClick={() => cargar(n.idFactura)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold">
+                <FileText size={14} /> NC N° {numeroDoc(n.Numero)} · {bs(n.TotalVES)}
+              </button>
+            ))}
+            {f.idFacturaAfectada && (
+              <button onClick={() => cargar(f.idFacturaAfectada)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold">
+                <FileText size={14} /> Ver factura N° {numeroDoc(f.NumeroAfectada)}
               </button>
             )}
           </div>
@@ -225,7 +233,22 @@ export function VistaFactura({ idFactura, onCerrar, onCambio }) {
                 <p className="text-xs text-gray-500">Se registra una sola vez y no se puede corregir.</p>
               </> : <>
                 <p className="flex gap-2 text-xs text-red-700"><AlertTriangle size={14} className="shrink-0" />
-                  Anula fiscalmente la factura completa. No devuelve inventario ni dinero: eso se hace aparte.</p>
+                  Acredita fiscalmente lo que indiques (vacío = todo lo pendiente). No devuelve inventario ni dinero:
+                  si el cliente devuelve mercancía, usa “Devolver” en la venta, que hace las tres cosas.</p>
+                <div className="divide-y divide-gray-200 border border-gray-200 rounded-xl bg-white">
+                  {f.lineas.map(l => {
+                    const resta = Number(l.Cantidad) - Number(l.CantidadAcreditada || 0);
+                    return (
+                      <div key={l.Linea} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                        <span className="flex-1 truncate">{l.Descripcion}</span>
+                        <span className="text-gray-400">quedan {resta}</span>
+                        <input type="number" min="0" max={resta} step="any" disabled={resta <= 0} placeholder="0"
+                          value={ncCant[l.Linea] ?? ''} onChange={e => setNcCant({ ...ncCant, [l.Linea]: e.target.value })}
+                          className="w-16 border border-gray-200 rounded-lg px-2 py-1 text-right" />
+                      </div>
+                    );
+                  })}
+                </div>
                 <input className={input} placeholder="Motivo (ej. devolución del cliente)" value={form.Motivo}
                   onChange={e => setForm({ ...form, Motivo: e.target.value })} required minLength={5} maxLength={300} />
               </>}

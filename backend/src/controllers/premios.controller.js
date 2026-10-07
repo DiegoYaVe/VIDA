@@ -3,13 +3,6 @@
 // inactividad. Reutiliza el ledger VIDA_CLIENTE_PUNTOS (decoupled de delivery).
 import { getPool, sql } from '../db/sqlserver.js';
 
-async function nextId(pool, tabla, campo, idBranch, idCuenta) {
-  const r = await pool.request()
-    .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
-    .query(`SELECT ISNULL(MAX(${campo}),0)+1 AS next FROM ${tabla} WITH (UPDLOCK, HOLDLOCK)
-            WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
-  return r.recordset[0].next;
-}
 async function nextIdTx(tx, tabla, campo, idBranch, idCuenta) {
   const r = await new sql.Request(tx)
     .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
@@ -23,19 +16,23 @@ async function getConfigVal(pool, idBranch, idCuenta, clave, def) {
     .query(`SELECT Valor FROM VIDA_CONFIG_DELIVERY WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Clave='${clave}'`);
   return r.recordset[0]?.Valor ?? def;
 }
-// Movimiento de puntos con pool (ledger + saldo)
+// Movimiento de puntos (ledger + saldo) en una transacción; el id se toma en
+// la misma sentencia del INSERT (atómico, sin carrera de MAX()+1).
 async function movPuntos(pool, ib, ic, cli, puntos, tipo, desc) {
   if (!puntos) return;
-  const movId = await nextId(pool, 'VIDA_CLIENTE_PUNTOS', 'idMovimiento', ib, ic);
-  await pool.request()
-    .input('idBranch', sql.BigInt, ib).input('idCuenta', sql.BigInt, ic).input('idMovimiento', sql.BigInt, movId)
-    .input('idCliente', sql.BigInt, cli).input('Tipo', sql.VarChar(20), tipo).input('Puntos', sql.Int, puntos).input('Desc', sql.VarChar(200), desc)
-    .query(`INSERT INTO VIDA_CLIENTE_PUNTOS (idBranch,idCuenta,idMovimiento,idCliente,Tipo,Puntos,idPedido,Descripcion)
-            VALUES (@idBranch,@idCuenta,@idMovimiento,@idCliente,@Tipo,@Puntos,NULL,@Desc)`);
-  await pool.request()
-    .input('idBranch', sql.BigInt, ib).input('idCuenta', sql.BigInt, ic).input('idCliente', sql.BigInt, cli).input('Puntos', sql.Int, puntos)
-    .query(`UPDATE VIDA_APP_CLIENTES SET PuntosSaldo = ISNULL(PuntosSaldo,0) + @Puntos
-            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    await new sql.Request(tx)
+      .input('idBranch', sql.BigInt, ib).input('idCuenta', sql.BigInt, ic)
+      .input('idCliente', sql.BigInt, cli).input('Tipo', sql.VarChar(20), tipo).input('Puntos', sql.Int, puntos).input('Desc', sql.VarChar(200), desc)
+      .query(`INSERT INTO VIDA_CLIENTE_PUNTOS (idBranch,idCuenta,idMovimiento,idCliente,Tipo,Puntos,idPedido,Descripcion)
+              SELECT @idBranch,@idCuenta,ISNULL(MAX(idMovimiento),0)+1,@idCliente,@Tipo,@Puntos,NULL,@Desc
+              FROM VIDA_CLIENTE_PUNTOS WITH (UPDLOCK, HOLDLOCK) WHERE idBranch=@idBranch AND idCuenta=@idCuenta;
+              UPDATE VIDA_APP_CLIENTES SET PuntosSaldo = ISNULL(PuntosSaldo,0) + @Puntos
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+    await tx.commit();
+  } catch (e) { try { await tx.rollback(); } catch { } throw e; }
 }
 
 // GET /delivery/cliente/premios
@@ -195,15 +192,16 @@ export async function crearPremio(request, reply) {
   if (!b.Nombre?.trim()) return reply.code(400).send({ error: 'El nombre es obligatorio' });
   try {
     const pool = await getPool();
-    const id = await nextId(pool, 'VIDA_PREMIOS', 'idPremio', idBranch, idCuenta);
-    await pool.request()
-      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idPremio', sql.BigInt, id)
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
       .input('Nombre', sql.VarChar(150), b.Nombre.trim()).input('Descripcion', sql.VarChar(500), b.Descripcion || null)
       .input('CostoPuntos', sql.Int, parseInt(b.CostoPuntos) || 0).input('Stock', sql.Int, b.Stock === '' || b.Stock == null ? -1 : parseInt(b.Stock))
       .input('ImagenUrl', sql.VarChar(400), b.ImagenUrl || null).input('Orden', sql.Int, parseInt(b.Orden) || 0)
       .query(`INSERT INTO VIDA_PREMIOS (idBranch,idCuenta,idPremio,Nombre,Descripcion,CostoPuntos,Stock,ImagenUrl,Orden,Status)
-              VALUES (@idBranch,@idCuenta,@idPremio,@Nombre,@Descripcion,@CostoPuntos,@Stock,@ImagenUrl,@Orden,'ACTIVO')`);
-    return reply.code(201).send({ idPremio: id });
+              OUTPUT inserted.idPremio
+              SELECT @idBranch,@idCuenta,ISNULL(MAX(idPremio),0)+1,@Nombre,@Descripcion,@CostoPuntos,@Stock,@ImagenUrl,@Orden,'ACTIVO'
+              FROM VIDA_PREMIOS WITH (UPDLOCK, HOLDLOCK) WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+    return reply.code(201).send({ idPremio: r.recordset[0].idPremio });
   } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al crear premio' }); }
 }
 // PUT /delivery/admin/premios/:idPremio

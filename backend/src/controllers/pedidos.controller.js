@@ -1,11 +1,13 @@
 import { calcularPagoPos, validarVigenciaCotizacion } from '../services/pagoPos.service.js';
 // src/controllers/pedidos.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
+import { conIdUnico } from '../db/idUnico.js';
 import { broadcast } from '../ws/ws.manager.js';
 import { enviarPush } from '../services/push.service.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 import { fechaCaracas } from '../services/fechas.service.js';
 import { tiendaEnAlcance, filtroTiendasRed } from '../services/alcance.service.js';
+import { turnoDeLaVenta } from '../services/turnoVenta.service.js';
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
@@ -423,12 +425,15 @@ async function procesarVentaOffline(pool, { venta, idBranch, idCuenta, idUsuario
           WHERE q.idCotizacion=@id AND q.idBranch=@b AND q.idCuenta=@c`);
       const cot=c.recordset[0];
       validarVigenciaCotizacion(cot,{idBranch,idCuenta,idUsuario,idPuntoVenta:venta.idPuntoVenta},fechaVenta);
-      pagoMoneda=calcularPagoPos(totalUSD,venta.PagoMoneda,cot,cot.Modo);
+      pagoMoneda=calcularPagoPos(totalUSD,venta.PagoMoneda,cot,cot.Modo,!!cot.AplicaIGTF);
       venta={...venta,MetodoPago:pagoMoneda.Metodo,MontoEfectivo:pagoMoneda.EfectivoUSD,MontoTarjeta:pagoMoneda.TarjetaUSD,MontoCambio:pagoMoneda.CambioUSD};
     } else {
       const corte=await new sql.Request(transaction).query('SELECT FechaInicio FROM VIDA_POS_MONEDA_VERSION WHERE id=1');
       if(!fechaVenta || fechaVenta>=corte.recordset[0].FechaInicio) throw new Error('Actualiza el POS y consulta una tasa antes de cobrar');
     }
+
+    // Turno de caja que cubrió la venta (tardía si ya cerró o si no hay)
+    const { idTurno: idTurnoVenta, ventaTardia } = await turnoDeLaVenta(transaction, { idBranch, idCuenta }, venta.idPuntoVenta, fechaVenta);
 
 
     await new sql.Request(transaction)
@@ -448,14 +453,18 @@ async function procesarVentaOffline(pool, { venta, idBranch, idCuenta, idUsuario
       .input('CuponCodigo',   sql.VarChar(40),  cuponCodigo)
       .input('CuponDescuentoUSD', sql.Decimal(18,4), cuponCodigo ? descuentoCupon : null)
       .input('UsuAlta',       sql.VarChar(20),  String(idUsuario))
+      .input('idTurno',       sql.BigInt,       idTurnoVenta)
+      .input('VentaTardia',   sql.Bit,          ventaTardia ? 1 : 0)
       .query(`INSERT INTO VIDA_PEDIDOS
                 (idBranch, idCuenta, idPedido, idPuntoVenta, Canal, Status,
                  MetodoPago, StatusPago, TotalUSD, MontoEfectivo, MontoTarjeta, MontoCambio,
-                 Notas, ClienteUUID, PagoMonedaJSON, EsOffline, CuponCodigo, CuponDescuentoUSD, FechaAlta, UsuAlta)
+                 Notas, ClienteUUID, PagoMonedaJSON, EsOffline, CuponCodigo, CuponDescuentoUSD, FechaAlta, UsuAlta,
+                 idTurno, VentaTardia)
               VALUES
                 (@idBranch, @idCuenta, @idPedido, @idPuntoVenta, 'POS', 'ENTREGADO',
                  @MetodoPago, 'PAGADO', @TotalUSD, @MontoEfectivo, @MontoTarjeta, @MontoCambio,
-                 @Notas, @ClienteUUID, @PagoMonedaJSON, 1, @CuponCodigo, @CuponDescuentoUSD, ISNULL(@FechaVenta, GETUTCDATE()), @UsuAlta)`);
+                 @Notas, @ClienteUUID, @PagoMonedaJSON, 1, @CuponCodigo, @CuponDescuentoUSD, ISNULL(@FechaVenta, GETUTCDATE()), @UsuAlta,
+                 @idTurno, @VentaTardia)`);
 
     let requiereRevision = false;
 
@@ -582,11 +591,12 @@ async function procesarVentaOffline(pool, { venta, idBranch, idCuenta, idUsuario
         ClienteUUID: venta.ClienteUUID, idPuntoVenta: venta.idPuntoVenta,
         TotalUSD: totalUSD, MetodoPago: venta.MetodoPago || null,
         FechaVenta: venta.FechaVenta || null, requiereRevision,
+        idTurno: idTurnoVenta, ventaTardia,
       },
     });
 
     await transaction.commit();
-    return { idPedido, requiereRevision };
+    return { idPedido, requiereRevision, idTurno: idTurnoVenta, ventaTardia };
   } catch (err) {
     try { await transaction.rollback(); } catch {}
     throw err;
@@ -637,7 +647,7 @@ export async function sincronizarVentasOffline(request, reply) {
       }
 
       const res = await procesarVentaOffline(pool, { venta: { ...venta, ClienteUUID: uuid }, idBranch, idCuenta, idUsuario });
-      synced.push({ ClienteUUID: uuid, idPedido: res.idPedido, requiereRevision: res.requiereRevision });
+      synced.push({ ClienteUUID: uuid, idPedido: res.idPedido, requiereRevision: res.requiereRevision, ventaTardia: res.ventaTardia });
 
       broadcast(idBranch, idCuenta, {
         tipo: 'pedido:nuevo',
@@ -888,17 +898,21 @@ export async function resolverRevisionStock(request, reply) {
       return reply.code(404).send({ error: 'El pedido no existe o ya fue revisado' });
     }
 
-    const histId = await nextId(pool, 'VIDA_PEDIDOS_HISTORIAL', 'idHistorial', idBranch, idCuenta);
-    await pool.request()
-      .input('idBranch',    sql.BigInt,      idBranch)
-      .input('idCuenta',    sql.BigInt,      idCuenta)
-      .input('idHistorial', sql.BigInt,      histId)
-      .input('idPedido',    sql.BigInt,      idPedido)
-      .input('Notas',       sql.VarChar(500), Notas ? `Revisión de stock resuelta: ${Notas}`.slice(0, 500) : 'Revisión de stock resuelta')
-      .input('UsuAlta',     sql.VarChar(20), String(idUsuario))
-      .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL
-                (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, Notas, UsuAlta)
-              VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, 'ENTREGADO', 'ENTREGADO', @Notas, @UsuAlta)`);
+    // id con MAX()+1: si otra alta concurrente toma el mismo, se reintenta
+    const histId = await conIdUnico(async () => {
+      const histId = await nextId(pool, 'VIDA_PEDIDOS_HISTORIAL', 'idHistorial', idBranch, idCuenta);
+      await pool.request()
+        .input('idBranch',    sql.BigInt,      idBranch)
+        .input('idCuenta',    sql.BigInt,      idCuenta)
+        .input('idHistorial', sql.BigInt,      histId)
+        .input('idPedido',    sql.BigInt,      idPedido)
+        .input('Notas',       sql.VarChar(500), Notas ? `Revisión de stock resuelta: ${Notas}`.slice(0, 500) : 'Revisión de stock resuelta')
+        .input('UsuAlta',     sql.VarChar(20), String(idUsuario))
+        .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL
+                  (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, Notas, UsuAlta)
+                VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido, 'ENTREGADO', 'ENTREGADO', @Notas, @UsuAlta)`);
+      return histId;
+    });
 
     return reply.send({ message: 'Revisión resuelta' });
   } catch (err) {
@@ -954,16 +968,19 @@ export async function expirarPedidosVencidos(pool, log) {
                 WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedido=@idPedido`);
 
       // Historial
-      const histId = await nextId(pool, 'VIDA_PEDIDOS_HISTORIAL', 'idHistorial', pedido.idBranch, pedido.idCuenta);
-      await pool.request()
-        .input('idBranch',    sql.BigInt,     pedido.idBranch)
-        .input('idCuenta',    sql.BigInt,     pedido.idCuenta)
-        .input('idHistorial', sql.BigInt,     histId)
-        .input('idPedido',    sql.BigInt,     pedido.idPedido)
-        .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL
-                  (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, Notas, UsuAlta)
-                VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido,
-                        'NUEVO', 'CANCELADO', 'Expirado por falta de pago (10 min)', 'SISTEMA')`);
+      // id con MAX()+1: si otra alta concurrente toma el mismo, se reintenta
+      await conIdUnico(async () => {
+        const histId = await nextId(pool, 'VIDA_PEDIDOS_HISTORIAL', 'idHistorial', pedido.idBranch, pedido.idCuenta);
+        await pool.request()
+          .input('idBranch',    sql.BigInt,     pedido.idBranch)
+          .input('idCuenta',    sql.BigInt,     pedido.idCuenta)
+          .input('idHistorial', sql.BigInt,     histId)
+          .input('idPedido',    sql.BigInt,     pedido.idPedido)
+          .query(`INSERT INTO VIDA_PEDIDOS_HISTORIAL
+                    (idBranch, idCuenta, idHistorial, idPedido, StatusAnterior, StatusNuevo, Notas, UsuAlta)
+                  VALUES (@idBranch, @idCuenta, @idHistorial, @idPedido,
+                          'NUEVO', 'CANCELADO', 'Expirado por falta de pago (10 min)', 'SISTEMA')`);
+      });
 
       if (log) log.info(`Pedido ${pedido.idPedido} expirado y cancelado`);
     }
@@ -1281,15 +1298,16 @@ export async function listarVentasPOS(request, reply) {
              p.TotalUSD, p.MontoEfectivo, p.MontoTarjeta, p.MontoCambio, p.PagoMonedaJSON,
              p.Status, pv.NomComercial AS NombreSucursal, pv.ModalidadFiscal,
              fa.idFactura, fa.Numero AS NumeroFactura, fa.Status AS StatusFactura,
-             nc.idFactura AS idNotaCredito
+             (SELECT COUNT(*) FROM VIDA_FACTURAS nc WHERE nc.idBranch = fa.idBranch AND nc.idCuenta = fa.idCuenta
+                AND nc.idFacturaAfectada = fa.idFactura AND nc.TipoDocumento = 'NOTA_CREDITO') AS NotasCredito,
+             (SELECT ISNULL(SUM(d.MontoUSD), 0) FROM VIDA_DEVOLUCIONES d WHERE d.idBranch = p.idBranch AND d.idCuenta = p.idCuenta
+                AND d.idPedido = p.idPedido) AS DevueltoUSD
       FROM VIDA_PEDIDOS p
       LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA pv
         ON pv.idBranch = p.idBranch AND pv.idCuenta = p.idCuenta
        AND pv.idPuntoVenta = p.idPuntoVenta
       LEFT JOIN VIDA_FACTURAS fa
         ON fa.idBranch = p.idBranch AND fa.idCuenta = p.idCuenta AND fa.idPedido = p.idPedido AND fa.TipoDocumento = 'FACTURA'
-      LEFT JOIN VIDA_FACTURAS nc
-        ON nc.idBranch = fa.idBranch AND nc.idCuenta = fa.idCuenta AND nc.idFacturaAfectada = fa.idFactura AND nc.TipoDocumento = 'NOTA_CREDITO'
       WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
         AND p.Canal = 'POS'
         AND p.Status = 'ENTREGADO'

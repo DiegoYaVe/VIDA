@@ -11,6 +11,7 @@ import {
 import { hoyCaracas } from '../utils/fechas.js';
 import { ModalFacturar, VistaFactura, puedeFacturar } from '../components/Factura.jsx';
 import { numeroDoc } from '../utils/libroVentas.mjs';
+import { ModalDevolucion, ROLES_DEVUELVEN } from '../components/Devolucion.jsx';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
@@ -84,6 +85,7 @@ function ModalPedido({ idPedido, idBranch, idCuenta, puedeEscribir, repartidores
   const [error, setError] = useState('');
   const [facturando, setFacturando] = useState(false);
   const [verFactura, setVerFactura] = useState(null);
+  const [devolviendo, setDevolviendo] = useState(false);
   const { usuario } = useAuthStore();
 
   const cargar = useCallback(async () => {
@@ -279,6 +281,13 @@ function ModalPedido({ idPedido, idBranch, idCuenta, puedeEscribir, repartidores
               onEmitida={(id) => { setFacturando(false); setVerFactura(id); cargar(); }} />
           )}
           {verFactura && <VistaFactura idFactura={verFactura} onCerrar={() => setVerFactura(null)} onCambio={cargar} />}
+          {pedido.Status === 'ENTREGADO' && ROLES_DEVUELVEN.includes(usuario?.TipoUsuario) && (
+            <button onClick={() => setDevolviendo(true)} className="w-full text-sm font-bold text-red-600 border border-red-200 rounded-xl py-2 hover:bg-red-50">
+              Registrar devolución
+            </button>
+          )}
+          {devolviendo && <ModalDevolucion idPedido={pedido.idPedido} onCerrar={() => setDevolviendo(false)}
+            onHecha={() => { setDevolviendo(false); cargar(); onActualizado(); }} />}
 
           {/* Productos */}
           <div>

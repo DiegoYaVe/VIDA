@@ -38,12 +38,6 @@ async function insertarConId(req, { tabla, idCol, columnas, valores }) {
   return r.recordset[0].nuevoId;
 }
 
-async function nextId(pool, tabla, campo, idBranch, idCuenta) {
-  const r = await pool.request().input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta)
-    .query(`SELECT ISNULL(MAX(${campo}),0)+1 AS next FROM ${tabla} WITH (UPDLOCK, HOLDLOCK) WHERE idBranch=@b AND idCuenta=@c`);
-  return r.recordset[0].next;
-}
-
 // ── Targeting (roles + usuarios) de un curso — solo aplica a empresarios ────
 async function targetingCurso(pool, idBranch, idCuenta, idCurso) {
   const [roles, usuarios] = await Promise.all([
@@ -65,16 +59,20 @@ async function acreditarPuntosCliente(pool, idBranch, idCuenta, idCliente, idCur
     .query(`SELECT TOP 1 idMovimiento FROM VIDA_CLIENTE_PUNTOS
             WHERE idBranch=@b AND idCuenta=@c AND idCliente=@cl AND Tipo='GANADO' AND Descripcion LIKE @m`);
   if (ya.recordset.length) return; // ya acreditado
-  const movId = await nextId(pool, 'VIDA_CLIENTE_PUNTOS', 'idMovimiento', idBranch, idCuenta);
-  await pool.request()
-    .input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('mid', sql.BigInt, movId)
-    .input('cl', sql.BigInt, idCliente).input('p', sql.Int, puntos)
-    .input('d', sql.NVarChar(200), `Academia: ${titulo || 'curso'} (${marcador})`)
-    .query(`INSERT INTO VIDA_CLIENTE_PUNTOS (idBranch,idCuenta,idMovimiento,idCliente,Tipo,Puntos,idPedido,Descripcion)
-            VALUES (@b,@c,@mid,@cl,'GANADO',@p,NULL,@d)`);
-  await pool.request()
-    .input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('cl', sql.BigInt, idCliente).input('p', sql.Int, puntos)
-    .query(`UPDATE VIDA_APP_CLIENTES SET PuntosSaldo=ISNULL(PuntosSaldo,0)+@p WHERE idBranch=@b AND idCuenta=@c AND idCliente=@cl`);
+  // Ledger + saldo en una transacción; id atómico en el mismo INSERT
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  try {
+    await new sql.Request(tx)
+      .input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta)
+      .input('cl', sql.BigInt, idCliente).input('p', sql.Int, puntos)
+      .input('d', sql.NVarChar(200), `Academia: ${titulo || 'curso'} (${marcador})`)
+      .query(`INSERT INTO VIDA_CLIENTE_PUNTOS (idBranch,idCuenta,idMovimiento,idCliente,Tipo,Puntos,idPedido,Descripcion)
+              SELECT @b,@c,ISNULL(MAX(idMovimiento),0)+1,@cl,'GANADO',@p,NULL,@d
+              FROM VIDA_CLIENTE_PUNTOS WITH (UPDLOCK, HOLDLOCK) WHERE idBranch=@b AND idCuenta=@c;
+              UPDATE VIDA_APP_CLIENTES SET PuntosSaldo=ISNULL(PuntosSaldo,0)+@p WHERE idBranch=@b AND idCuenta=@c AND idCliente=@cl`);
+    await tx.commit();
+  } catch (e) { try { await tx.rollback(); } catch { } throw e; }
 }
 
 // ── Emite constancia (idempotente por actor+curso). Devuelve { idDiploma, nueva }

@@ -150,3 +150,53 @@ test('libro de ventas: las notas de crédito restan y los totales cuadran', () =
   assert.equal(docFront('J000029610'), 'J-00002961-0');
   assert.equal(docFront('V12345678'), 'V-12345678');
 });
+
+import { calcularDevolucion, calcularNotaCredito } from '../src/domain/fiscal.mjs';
+const lineasPed = [
+  { idDetalle: 1, idProducto: 10, Cantidad: 2, PrecioUnitario: 5 },
+  { idDetalle: 2, idProducto: 20, Cantidad: 1, PrecioUnitario: 10 },
+];
+test('devolución: aplica el descuento en proporción y la última cierra al total', () => {
+  const a = calcularDevolucion({ lineas: lineasPed, totalUSD: 15, devolver: [{ idDetalle: 1, Cantidad: 1 }] });
+  assert.equal(a.MontoUSD, 3.75); // 5 × 15/20
+  assert.equal(a.final, false);
+  const b = calcularDevolucion({ lineas: lineasPed, totalUSD: 15, devolver: [{ idDetalle: 1, Cantidad: 1 }, { idDetalle: 2, Cantidad: 1 }],
+    previo: { 1: 1 }, montoPrevioUSD: 3.75 });
+  assert.equal(b.final, true);
+  assert.equal(b.MontoUSD, 11.25);
+  assert.throws(() => calcularDevolucion({ lineas: lineasPed, totalUSD: 15, devolver: [{ idDetalle: 1, Cantidad: 2 }], previo: { 1: 1 } }));
+  assert.throws(() => calcularDevolucion({ lineas: lineasPed, totalUSD: 15, devolver: [{ idDetalle: 9, Cantidad: 1 }] }));
+  assert.throws(() => calcularDevolucion({ lineas: lineasPed, totalUSD: 15, devolver: [] }));
+});
+
+test('nota de crédito parcial y luego la restante: suman exactamente la factura', () => {
+  const lineas = [
+    { idProducto: 1, Cantidad: 3, PrecioUnitarioUSD: 1.37, Alicuota: 'GENERAL' },
+    { idProducto: 2, Cantidad: 2, PrecioUnitarioUSD: 4.99, Alicuota: 'REDUCIDA' },
+    { idProducto: 3, Cantidad: 1, PrecioUnitarioUSD: 0.89, Alicuota: 'EXENTO' },
+  ];
+  const f = desglosarFactura({ lineas, totalUSD: 13.5, tasa: 41.1234, porcentajes: PCT, contribuyenteEspecial: true, divisasUSD: 5 });
+  const fl = f.lineas;
+  const nc1 = calcularNotaCredito({ orig: f, lineas: fl, devolver: [{ Linea: 1, Cantidad: 1 }, { Linea: 2, Cantidad: 2 }] });
+  assert.equal(nc1.final, false);
+  assert.equal(nc1.lineas.length, 2);
+  assert.equal(nc1.lineas[0].LineaAfectada, 1);
+  assert.equal(suma(nc1), nc1.TotalVES);
+  const previoLineas = Object.fromEntries(nc1.lineas.map(l => [l.LineaAfectada, { Cantidad: l.Cantidad, TotalVES: l.TotalVES }]));
+  const nc2 = calcularNotaCredito({ orig: f, lineas: fl, devolver: [], previas: [nc1], previoLineas });
+  assert.equal(nc2.final, true);
+  for (const c of ['TotalVES', 'BaseGeneralVES', 'IVAGeneralVES', 'BaseReducidaVES', 'IVAReducidaVES', 'ExentoVES', 'IGTFVES', 'TotalUSD'])
+    assert.equal(Math.round((nc1[c] + nc2[c]) * 100) / 100, f[c], c);
+  assert.deepEqual(nc2.lineas.map(l => [l.LineaAfectada, l.Cantidad]), [[1, 2], [3, 1]]);
+  const todo = Object.fromEntries(fl.map(l => [l.Linea, { Cantidad: l.Cantidad, TotalVES: l.TotalVES }]));
+  assert.throws(() => calcularNotaCredito({ orig: f, lineas: fl, devolver: [], previas: [f], previoLineas: todo }));
+  assert.throws(() => calcularNotaCredito({ orig: f, lineas: fl, devolver: [{ Linea: 1, Cantidad: 4 }] }));
+});
+
+test('nota de crédito total de una sola vez = la factura', () => {
+  const f = desglosarFactura({ lineas: [{ idProducto: 1, Cantidad: 2, PrecioUnitarioUSD: 5.8, Alicuota: 'GENERAL' }], totalUSD: 11.6, tasa: 40, porcentajes: PCT });
+  const nc = calcularNotaCredito({ orig: f, lineas: f.lineas, devolver: [] });
+  assert.equal(nc.TotalVES, 464);
+  assert.equal(nc.IVAGeneralVES, 64);
+  assert.equal(nc.final, true);
+});

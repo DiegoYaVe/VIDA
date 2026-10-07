@@ -162,3 +162,17 @@ export async function alcanceCuentas(user, pool = null) {
   if (['ADMIN_PAIS', 'ADMIN_ESTADO'].includes(user?.TipoUsuario)) return { verTodo: false, region: true, soloCxcDe: null };
   return { verTodo: false, region: false, soloCxcDe: user.idPuntoVenta ?? null };
 }
+
+// ¿Puede este usuario ubicar una tienda en { idPais, idEstado }? Para crear o
+// mover tiendas: ADMIN_ESTADO solo dentro de su estado, ADMIN_PAIS dentro de
+// su país (sin país asignado: cualquiera), SUPER_ADMIN en cualquiera. Los
+// roles de tienda no ubican tiendas.
+export function ubicacionEnAlcance(user, { idPais, idEstado } = {}) {
+  const { TipoUsuario } = user || {};
+  if (TipoUsuario === 'SUPER_ADMIN') return true;
+  if (TipoUsuario === 'ADMIN_ESTADO')
+    return user.idEstado != null && idEstado != null && String(idEstado) === String(user.idEstado);
+  if (TipoUsuario === 'ADMIN_PAIS')
+    return user.idPais == null || (idPais != null && String(idPais) === String(user.idPais));
+  return false;
+}

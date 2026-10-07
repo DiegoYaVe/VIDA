@@ -53,3 +53,19 @@ export function calcularArqueo(turno,totales,contado,movimientos) {
   }
   return resultado;
 }
+
+// Ventas offline que se sincronizaron cuando su turno YA estaba cerrado. No
+// cambian el cierre guardado; explican la diferencia: su efectivo estaba en la
+// caja al contarla (sobrante), así que la diferencia conciliada lo descuenta.
+export function conciliarTardias(arqueoGuardado, ventasTardias) {
+  const efectivo = efectivoPorMoneda(ventasTardias || []);
+  const res = {
+    NumTransacciones: (ventasTardias || []).length,
+    TotalUSD: centavos((ventasTardias || []).reduce((s, v) => s + Number(v.TotalUSD || 0), 0)),
+    EfectivoUSD: efectivo.USD, EfectivoVES: efectivo.VES,
+    DiferenciaConciliadaUSD: null, DiferenciaConciliadaVES: null,
+  };
+  if (arqueoGuardado?.USD) res.DiferenciaConciliadaUSD = centavos(Number(arqueoGuardado.USD.Diferencia) - efectivo.USD);
+  if (arqueoGuardado?.VES) res.DiferenciaConciliadaVES = centavos(Number(arqueoGuardado.VES.Diferencia) - efectivo.VES);
+  return res;
+}

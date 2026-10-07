@@ -1,5 +1,6 @@
 // src/controllers/estados.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
+import { conIdUnico } from '../db/idUnico.js';
 
 async function nextId(pool, idBranch, idCuenta) {
   const r = await pool.request()
@@ -73,19 +74,22 @@ export async function crearEstado(request, reply) {
     if (!paisExiste.recordset.length)
       return reply.code(404).send({ error: 'País no encontrado' });
 
-    const nuevoId = await nextId(pool, idBranch, idCuenta);
-
-    await pool.request()
-      .input('idBranch',     sql.BigInt,     idBranch)
-      .input('idCuenta',     sql.BigInt,     idCuenta)
-      .input('idEstado',     sql.BigInt,     nuevoId)
-      .input('idPais',       sql.BigInt,     idPais)
-      .input('NombreEstado', sql.VarChar(100), NombreEstado.trim())
-      .input('UsuAlta',      sql.VarChar(20), String(idUsuario))
-      .query(`INSERT INTO VIDA_CUENTA_ESTADOS
-                (idBranch, idCuenta, idEstado, idPais, NombreEstado, UsuAlta)
-              VALUES
-                (@idBranch, @idCuenta, @idEstado, @idPais, @NombreEstado, @UsuAlta)`);
+    // id con MAX()+1: si otra alta concurrente toma el mismo, se reintenta
+    const nuevoId = await conIdUnico(async () => {
+      const nuevoId = await nextId(pool, idBranch, idCuenta);
+      await pool.request()
+        .input('idBranch',     sql.BigInt,     idBranch)
+        .input('idCuenta',     sql.BigInt,     idCuenta)
+        .input('idEstado',     sql.BigInt,     nuevoId)
+        .input('idPais',       sql.BigInt,     idPais)
+        .input('NombreEstado', sql.VarChar(100), NombreEstado.trim())
+        .input('UsuAlta',      sql.VarChar(20), String(idUsuario))
+        .query(`INSERT INTO VIDA_CUENTA_ESTADOS
+                  (idBranch, idCuenta, idEstado, idPais, NombreEstado, UsuAlta)
+                VALUES
+                  (@idBranch, @idCuenta, @idEstado, @idPais, @NombreEstado, @UsuAlta)`);
+      return nuevoId;
+    });
 
     return reply.code(201).send({ message: 'Estado creado', idEstado: nuevoId });
   } catch (err) {

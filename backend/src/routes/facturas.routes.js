@@ -4,6 +4,7 @@ import {
   obtenerDatosFiscales, guardarDatosFiscales, crearFactura, registrarNumeroControl,
   crearNotaCredito, verFactura, listarFacturas,
 } from '../controllers/facturas.controller.js';
+import { verDevoluciones, crearDevolucion } from '../controllers/devoluciones.controller.js';
 
 // Consultan (cada uno en su alcance): toda la red y las tiendas.
 const LEEN = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR', 'CAJERO', 'CASHIER'];
@@ -24,4 +25,12 @@ export async function facturasRoutes(fastify) {
   fastify.post('/facturas',                      pre(EMITEN), crearFactura);
   fastify.post('/facturas/:idFactura/control',   pre(EMITEN), registrarNumeroControl);
   fastify.post('/facturas/:idFactura/nota-credito', pre(ANULAN), crearNotaCredito);
+}
+
+// Devoluciones de ventas (inventario + reembolso + nota de crédito). Las
+// emite quien puede anular fiscalmente; las consultan todos en su alcance.
+export async function devolucionesRoutes(fastify) {
+  const pre = roles => ({ preHandler: [authenticate, requireRole(...roles)] });
+  fastify.get('/pedidos/:idPedido/devoluciones', pre(LEEN), verDevoluciones);
+  fastify.post('/pedidos/:idPedido/devolucion', pre(ANULAN), crearDevolucion);
 }

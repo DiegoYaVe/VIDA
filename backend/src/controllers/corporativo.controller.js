@@ -4,6 +4,7 @@
 // onboarding y cambio de estado. El empresario (usuario dueño) se crea
 // reutilizando el endpoint de usuarios existente.
 import { getPool, sql } from '../db/sqlserver.js';
+import { conIdUnico } from '../db/idUnico.js';
 
 // Meta de expansión de la red hacia 2035 (ajustable)
 export const META_TIENDAS = 16291;
@@ -127,33 +128,37 @@ export async function crearTiendaRed(request, reply) {
 
   try {
     const pool = await getPool();
-    const idPuntoVenta = await nextId(pool, idBranch, idCuenta);
-    await pool.request()
-      .input('idBranch',        sql.BigInt,       idBranch)
-      .input('idCuenta',        sql.BigInt,       idCuenta)
-      .input('idPuntoVenta',    sql.BigInt,       idPuntoVenta)
-      .input('Nombre',          sql.VarChar(200), (Nombre || NomComercial).trim())
-      .input('NomComercial',    sql.VarChar(200), (NomComercial || Nombre).trim())
-      .input('RazonSocial',     sql.VarChar(200), RazonSocial?.trim() || null)
-      .input('Encargado',       sql.VarChar(200), Encargado?.trim() || null)
-      .input('Correo',          sql.VarChar(100), Correo?.trim() || null)
-      .input('Telefono',        sql.VarChar(50),  Telefono?.trim() || null)
-      .input('Calle',           sql.VarChar(200), Calle?.trim() || null)
-      .input('Ciudad',          sql.VarChar(200), Ciudad?.trim() || null)
-      .input('idCiudad',        sql.BigInt,       idCiudad || null)
-      .input('idEstado',        sql.BigInt,       idEstado || null)
-      .input('idPais',          sql.BigInt,       idPais || null)
-      .input('EstadoOnboarding',sql.VarChar(20),  estadoInicial)
-      .input('FechaActivacion', sql.DateTime,     estadoInicial === 'ACTIVA' ? new Date() : null)
-      .input('UsuAlta',         sql.VarChar(20),  String(idUsuario))
-      .query(`INSERT INTO VIDA_CUENTA_PUNTOS_VENTA
-                (idBranch,idCuenta,idPuntoVenta,Nombre,NomComercial,RazonSocial,TipoPuntoVenta,
-                 Encargado,Correo,Telefono,Calle,Ciudad,idCiudad,idEstado,idPais,
-                 EstadoOnboarding,FechaActivacion,StatusPuntoVenta,Status,UsuAlta)
-              VALUES
-                (@idBranch,@idCuenta,@idPuntoVenta,@Nombre,@NomComercial,@RazonSocial,'TIENDA',
-                 @Encargado,@Correo,@Telefono,@Calle,@Ciudad,@idCiudad,@idEstado,@idPais,
-                 @EstadoOnboarding,@FechaActivacion,'ACTIVO','ACTIVO',@UsuAlta)`);
+    // id con MAX()+1: si otra alta concurrente toma el mismo, se reintenta
+    const idPuntoVenta = await conIdUnico(async () => {
+      const idPuntoVenta = await nextId(pool, idBranch, idCuenta);
+      await pool.request()
+        .input('idBranch',        sql.BigInt,       idBranch)
+        .input('idCuenta',        sql.BigInt,       idCuenta)
+        .input('idPuntoVenta',    sql.BigInt,       idPuntoVenta)
+        .input('Nombre',          sql.VarChar(200), (Nombre || NomComercial).trim())
+        .input('NomComercial',    sql.VarChar(200), (NomComercial || Nombre).trim())
+        .input('RazonSocial',     sql.VarChar(200), RazonSocial?.trim() || null)
+        .input('Encargado',       sql.VarChar(200), Encargado?.trim() || null)
+        .input('Correo',          sql.VarChar(100), Correo?.trim() || null)
+        .input('Telefono',        sql.VarChar(50),  Telefono?.trim() || null)
+        .input('Calle',           sql.VarChar(200), Calle?.trim() || null)
+        .input('Ciudad',          sql.VarChar(200), Ciudad?.trim() || null)
+        .input('idCiudad',        sql.BigInt,       idCiudad || null)
+        .input('idEstado',        sql.BigInt,       idEstado || null)
+        .input('idPais',          sql.BigInt,       idPais || null)
+        .input('EstadoOnboarding',sql.VarChar(20),  estadoInicial)
+        .input('FechaActivacion', sql.DateTime,     estadoInicial === 'ACTIVA' ? new Date() : null)
+        .input('UsuAlta',         sql.VarChar(20),  String(idUsuario))
+        .query(`INSERT INTO VIDA_CUENTA_PUNTOS_VENTA
+                  (idBranch,idCuenta,idPuntoVenta,Nombre,NomComercial,RazonSocial,TipoPuntoVenta,
+                   Encargado,Correo,Telefono,Calle,Ciudad,idCiudad,idEstado,idPais,
+                   EstadoOnboarding,FechaActivacion,StatusPuntoVenta,Status,UsuAlta)
+                VALUES
+                  (@idBranch,@idCuenta,@idPuntoVenta,@Nombre,@NomComercial,@RazonSocial,'TIENDA',
+                   @Encargado,@Correo,@Telefono,@Calle,@Ciudad,@idCiudad,@idEstado,@idPais,
+                   @EstadoOnboarding,@FechaActivacion,'ACTIVO','ACTIVO',@UsuAlta)`);
+      return idPuntoVenta;
+    });
     return reply.code(201).send({ idPuntoVenta, EstadoOnboarding: estadoInicial });
   } catch (err) {
     request.log.error(err);

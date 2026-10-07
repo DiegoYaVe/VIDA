@@ -1,7 +1,7 @@
 // src/controllers/caja.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
 import { registrarAuditoria } from '../services/audit.service.js';
-import {efectivoPorMoneda,calcularArqueo,efectoMovimientos} from '../services/arqueo.service.js';
+import {efectivoPorMoneda,calcularArqueo,efectoMovimientos,conciliarTardias} from '../services/arqueo.service.js';
 import {importeCaja} from '../services/pagoPos.service.js';
 import { tiendaEnAlcance, filtroTiendasRed } from '../services/alcance.service.js';
 
@@ -34,14 +34,24 @@ function esRed(user) {
   return ROLES_RED.includes(user.TipoUsuario);
 }
 
+// Ventas de un turno: las ligadas a él (idTurno) y, para filas sin turno
+// (ventas anteriores a la migración 51 o pedidos POS que no pasan por la
+// sincronización), la ventana de fechas de la tienda. Las tardías nunca
+// suman al cierre.
+function condicionTurno(fechaCondicion, incluirTardias = false) {
+  return `AND (p.idTurno = @idTurno ${incluirTardias ? '' : 'AND p.VentaTardia = 0'}
+           OR (p.idTurno IS NULL AND p.VentaTardia = 0 ${fechaCondicion}))`;
+}
+
 // ── Calcular totales del turno desde VIDA_PEDIDOS ───────────────────────────
-async function calcularTotales(pool, idBranch, idCuenta, idPuntoVenta, fechaApertura, fechaCierre) {
+export async function calcularTotales(pool, idBranch, idCuenta, idPuntoVenta, fechaApertura, fechaCierre, idTurno) {
   const fechaHasta = fechaCierre || null;
 
   const req = new sql.Request(pool)
     .input('idBranch',      sql.BigInt,  idBranch)
     .input('idCuenta',      sql.BigInt,  idCuenta)
     .input('idPuntoVenta',  sql.BigInt,  idPuntoVenta)
+    .input('idTurno',       sql.BigInt,  idTurno)
     .input('fechaApertura', sql.DateTime, new Date(fechaApertura));
 
   let fechaCondicion = 'AND p.FechaAlta >= @fechaApertura';
@@ -66,10 +76,10 @@ async function calcularTotales(pool, idBranch, idCuenta, idPuntoVenta, fechaAper
       AND p.idPuntoVenta  = @idPuntoVenta
       AND p.Canal         = 'POS'
       AND p.Status        = 'ENTREGADO'
-      ${fechaCondicion};
+      ${condicionTurno(fechaCondicion)};
     SELECT p.TotalUSD,p.MetodoPago,p.MontoEfectivo,p.MontoCambio,p.PagoMonedaJSON FROM VIDA_PEDIDOS p
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.idPuntoVenta=@idPuntoVenta
-      AND p.Canal='POS' AND p.Status='ENTREGADO' AND p.MetodoPago IN ('EFECTIVO','MIXTO') ${fechaCondicion}
+      AND p.Canal='POS' AND p.Status='ENTREGADO' AND p.MetodoPago IN ('EFECTIVO','MIXTO') ${condicionTurno(fechaCondicion)}
   `);
 
   const originales=efectivoPorMoneda(r.recordsets[1] || []);
@@ -300,7 +310,7 @@ export async function resumenTurno(request, reply) {
       TotalTarjeta:turno.TotalVentasTarjeta,NumTransacciones:turno.NumTransacciones,
       EfectivoOriginalUSD:arqueoGuardado?.USD.VentasNetas??null,
       EfectivoOriginalVES:arqueoGuardado?.VES.VentasNetas??null,
-    } : await calcularTotales(pool,idBranch,idCuenta,turno.idPuntoVenta,turno.FechaApertura,null);
+    } : await calcularTotales(pool,idBranch,idCuenta,turno.idPuntoVenta,turno.FechaApertura,null,turno.idTurno);
 
     // Pedidos del turno. La vista del turno actual muestra solo los 10 más
     // recientes; el historial utiliza la colección completa para auditarlo.
@@ -308,6 +318,7 @@ export async function resumenTurno(request, reply) {
       .input('idBranch',      sql.BigInt,  idBranch)
       .input('idCuenta',      sql.BigInt,  idCuenta)
       .input('idPuntoVenta',  sql.BigInt,  turno.idPuntoVenta)
+      .input('idTurno',       sql.BigInt,  turno.idTurno)
       .input('fechaApertura', sql.DateTime, new Date(turno.FechaApertura));
 
     let fechaCond = 'AND p.FechaAlta >= @fechaApertura';
@@ -320,7 +331,8 @@ export async function resumenTurno(request, reply) {
 
     const pedidosR = await req2.query(`
       SELECT
-        p.idPedido, p.FechaAlta, p.TotalUSD, p.MetodoPago,
+        p.idPedido, p.FechaAlta, p.TotalUSD, p.MetodoPago, p.VentaTardia,
+        p.MontoEfectivo, p.MontoCambio, p.PagoMonedaJSON,
         COALESCE(
           NULLIF(LTRIM(RTRIM(CONCAT(u.Nombre, ' ', u.Apellidos))), ''),
           NULLIF(u.Cve, ''),
@@ -334,7 +346,7 @@ export async function resumenTurno(request, reply) {
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
         AND p.idPuntoVenta=@idPuntoVenta
         AND p.Canal='POS' AND p.Status='ENTREGADO'
-        ${fechaCond}
+        ${condicionTurno(fechaCond, true)}
       ORDER BY p.FechaAlta DESC
     `);
 
@@ -369,7 +381,9 @@ export async function resumenTurno(request, reply) {
       efectivoEsperadoVES:arqueoGuardado?.VES.Esperado??(turno.Status==='ABIERTO'?Number(turno.MontoAperturaVES||0)+totales.EfectivoOriginalVES+efectoMov.VES:null),
       movimientos,
       movimientosPorMoneda: efectoMov,
-      pedidos: pedidosR.recordset,
+      // Sincronizadas después del cierre: no están en las cifras guardadas
+      tardias: conciliarTardias(arqueoGuardado, pedidosR.recordset.filter(p => p.VentaTardia)),
+      pedidos: pedidosR.recordset.map(({ MontoEfectivo, MontoCambio, PagoMonedaJSON, ...p }) => p),
     });
   } catch (err) {
     request.log.error(err);
@@ -425,7 +439,7 @@ export async function cerrarCaja(request, reply) {
     // Recalcular totales
     const totales = await calcularTotales(
       transaction, idBranch, idCuenta,
-      turno.idPuntoVenta, turno.FechaApertura, fechaCierre
+      turno.idPuntoVenta, turno.FechaApertura, fechaCierre, turno.idTurno
     );
 
     const montoAp  = parseFloat(turno.MontoApertura);
@@ -544,7 +558,9 @@ export async function historialTurnos(request, reply) {
         t.MontoApertura, t.MontoAperturaVES, t.ArqueoMonedasJSON, t.MontoCierre,
         t.TotalVentas, t.TotalVentasEfectivo, t.TotalVentasTarjeta,
         t.NumTransacciones, t.Diferencia,
-        t.Observaciones, t.Status
+        t.Observaciones, t.Status,
+        (SELECT COUNT(*) FROM VIDA_PEDIDOS p WHERE p.idBranch=t.idBranch AND p.idCuenta=t.idCuenta
+           AND p.idTurno=t.idTurno AND p.VentaTardia=1 AND p.Status='ENTREGADO') AS VentasTardias
       FROM VIDA_CAJA_TURNOS t
       WHERE t.idBranch=@idBranch AND t.idCuenta=@idCuenta
         ${whereExtra}
@@ -566,8 +582,23 @@ export async function historialTurnos(request, reply) {
         ${whereExtra}
     `);
 
+    // Ventas sincronizadas que ningún turno cubría (vendidas con la caja
+    // cerrada): no están en ningún arqueo y hay que revisarlas a mano.
+    const sinReq = pool.request()
+      .input('idBranch', sql.BigInt, idBranch)
+      .input('idCuenta', sql.BigInt, idCuenta);
+    let sinFiltro = '';
+    if (pvFiltro) { sinReq.input('idPuntoVenta', sql.BigInt, pvFiltro); sinFiltro += ' AND p.idPuntoVenta=@idPuntoVenta'; }
+    if (esRed({ TipoUsuario })) sinFiltro += filtroTiendasRed(request.user, 'p.idPuntoVenta', sinReq);
+    const sinR = await sinReq.query(`
+      SELECT COUNT(*) AS NumTransacciones, ISNULL(SUM(p.TotalUSD), 0) AS TotalUSD, MAX(p.FechaAlta) AS Ultima
+      FROM VIDA_PEDIDOS p
+      WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.Canal='POS' AND p.Status='ENTREGADO'
+        AND p.idTurno IS NULL AND p.VentaTardia=1 ${sinFiltro}`);
+
     return reply.send({
       data:  r.recordset,
+      ventasSinTurno: sinR.recordset[0],
       total: countR.recordset[0].total,
       page:  parseInt(page),
       limit: parseInt(limit),
@@ -698,7 +729,7 @@ export async function anularMovimiento(request, reply) {
       .input('idBranch',     sql.BigInt, idBranch)
       .input('idCuenta',     sql.BigInt, idCuenta)
       .input('idMovimiento', sql.BigInt, BigInt(idMovimiento))
-      .query(`SELECT TOP 1 m.idMovimiento, m.idTurno, m.idPuntoVenta, m.Status, t.Status AS TurnoStatus
+      .query(`SELECT TOP 1 m.idMovimiento, m.idTurno, m.idPuntoVenta, m.Status, m.idDevolucion, t.Status AS TurnoStatus
               FROM VIDA_CAJA_MOVIMIENTOS m WITH (UPDLOCK, HOLDLOCK)
               JOIN VIDA_CAJA_TURNOS t
                 ON t.idBranch=m.idBranch AND t.idCuenta=m.idCuenta AND t.idTurno=m.idTurno
@@ -706,6 +737,7 @@ export async function anularMovimiento(request, reply) {
     const mov = movR.recordset[0];
     if (!mov) throw Object.assign(new Error('Movimiento no encontrado'), { statusCode: 404 });
     if (mov.Status !== 'ACTIVO') throw Object.assign(new Error('El movimiento ya está anulado'), { statusCode: 409 });
+    if (mov.idDevolucion != null) throw Object.assign(new Error('Es el reembolso de una devolución; no se anula desde la caja'), { statusCode: 409 });
     if (mov.TurnoStatus !== 'ABIERTO') throw Object.assign(new Error('La caja ya está cerrada; no se puede anular'), { statusCode: 409 });
     if (!(await tiendaEnAlcance(request.user, mov.idPuntoVenta, pool))) {
       throw Object.assign(new Error('No tienes permiso para operar la caja de este turno'), { statusCode: 403 });

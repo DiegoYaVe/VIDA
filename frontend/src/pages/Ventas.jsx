@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../services/api.js';
 import {
   Receipt, DollarSign, CreditCard, Layers, Printer,
-  Search, ChevronDown, TrendingUp, X, FileText,
+  Search, ChevronDown, TrendingUp, X, FileText, Undo2,
 } from 'lucide-react';
 import { hoyCaracas } from '../utils/fechas.js';
 import { useAuthStore } from '../store/authStore.js';
 import { ModalFacturar, VistaFactura, puedeFacturar } from '../components/Factura.jsx';
 import LibroVentas from '../components/LibroVentas.jsx';
+import { ModalDevolucion, ROLES_DEVUELVEN } from '../components/Devolucion.jsx';
 import { numeroDoc } from '../utils/libroVentas.mjs';
 
 const LABEL_METODO = {
@@ -95,6 +96,7 @@ export default function Ventas() {
   const [pestana,     setPestana]     = useState('ventas'); // 'ventas' | 'libro'
   const [facturarId,  setFacturarId]  = useState(null);
   const [verFactura,  setVerFactura]  = useState(null);
+  const [devolverId,  setDevolverId]  = useState(null);
   const { usuario } = useAuthStore();
 
   // Cargar sucursales al montar
@@ -127,7 +129,7 @@ export default function Ventas() {
       <button onClick={() => setVerFactura(v.idFactura)} title="Ver factura"
         className="flex items-center gap-1 text-xs font-semibold text-vida-blue hover:underline">
         <FileText size={compacto ? 15 : 12}/>{!compacto && `Fact. ${numeroDoc(v.NumeroFactura)}`}
-        {v.idNotaCredito && <span className="text-red-500">{compacto ? '' : ' · NC'}</span>}
+        {v.NotasCredito > 0 && <span className="text-red-500">{compacto ? '' : ' · NC'}</span>}
       </button>
     );
     if (!v.ModalidadFiscal || v.ModalidadFiscal === 'NINGUNA' || !puedeFacturar(usuario)) return null;
@@ -136,6 +138,23 @@ export default function Ventas() {
         className="flex items-center gap-1 text-xs text-gray-400 hover:text-vida-blue">
         <FileText size={compacto ? 15 : 12}/>{!compacto && 'Facturar'}
       </button>
+    );
+  }
+
+  // Devolver (total o parcial) y lo ya devuelto
+  function botonDevolver(v, compacto = false) {
+    const devuelto = Number(v.DevueltoUSD || 0);
+    const queda = devuelto < Number(v.TotalUSD) - 0.004;
+    return (
+      <span className="flex items-center gap-1 text-xs">
+        {devuelto > 0 && !compacto && <span className="font-semibold text-red-500">Dev. ${devuelto.toFixed(2)}</span>}
+        {queda && ROLES_DEVUELVEN.includes(usuario?.TipoUsuario) && (
+          <button onClick={() => setDevolverId(v.idPedido)} title="Registrar devolución"
+            className={`flex items-center gap-1 ${devuelto > 0 && compacto ? 'text-red-500' : 'text-gray-400'} hover:text-red-600`}>
+            <Undo2 size={compacto ? 15 : 12}/>{!compacto && 'Devolver'}
+          </button>
+        )}
+      </span>
     );
   }
 
@@ -157,6 +176,8 @@ export default function Ventas() {
           onEmitida={(id) => { setFacturarId(null); setVerFactura(id); cargar(); }} />
       )}
       {verFactura && <VistaFactura idFactura={verFactura} onCerrar={() => setVerFactura(null)} onCambio={cargar} />}
+      {devolverId && <ModalDevolucion idPedido={devolverId} onCerrar={() => setDevolverId(null)}
+        onHecha={() => { setDevolverId(null); cargar(); }} />}
 
       {/* ── Encabezado ── */}
       <div className="mb-6">
@@ -295,7 +316,7 @@ export default function Ventas() {
                       className="mt-1.5 flex items-center gap-1 text-xs text-gray-400 hover:text-vida-blue transition-colors ml-auto">
                       <Printer size={12}/> Reimprimir
                     </button>
-                    <div className="mt-1.5 flex justify-end">{botonFactura(v)}</div>
+                    <div className="mt-1.5 flex justify-end gap-3">{botonDevolver(v)}{botonFactura(v)}</div>
                   </div>
                 </div>
 
@@ -322,6 +343,7 @@ export default function Ventas() {
                     </div>
                   </div>
                   <div className="col-span-1 flex justify-end items-center gap-1">
+                    {botonDevolver(v, true)}
                     {botonFactura(v, true)}
                     <button onClick={() => reimprimir(v)}
                       title="Reimprimir ticket"

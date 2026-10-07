@@ -281,21 +281,14 @@ export async function crearUsuario(request, reply) {
       }
     }
 
-    const maxId = await pool.request()
-      .input('idBranch', sql.BigInt, idBranch)
-      .input('idCuenta', sql.BigInt, idCuenta)
-      .query(`SELECT ISNULL(MAX(idUsuario),0)+1 AS nextId FROM VIDA_CUENTA_USUARIOS WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
-
-    const nuevoId = maxId.recordset[0].nextId;
-
     // Generar password temporal
     const passwordTemporal = generarPasswordTemporal();
     const hash = await bcrypt.hash(passwordTemporal, 12);
 
-    await pool.request()
+    // id en la misma sentencia del INSERT (atómico, sin carrera de MAX()+1)
+    const ins = await pool.request()
       .input('idBranch',       sql.BigInt,       idBranch)
       .input('idCuenta',       sql.BigInt,       idCuenta)
-      .input('idUsuario',      sql.BigInt,       nuevoId)
       .input('Nombre',         sql.VarChar(200), Nombre)
       .input('Apellidos',      sql.VarChar(200), Apellidos || null)
       .input('NomComercial',   sql.VarChar(200), NomComercial || null)
@@ -315,10 +308,12 @@ export async function crearUsuario(request, reply) {
                 (idBranch, idCuenta, idUsuario, Nombre, Apellidos, NomComercial,
                  Correo, Telefono, Cve, TipoUsuario, Puesto, FechaNacimiento,
                  idPuntoVenta, idEstado, idPais, NivelAcceso, Pass, CambiarPass, UsuAlta, Status)
-              VALUES
-                (@idBranch, @idCuenta, @idUsuario, @Nombre, @Apellidos, @NomComercial,
+              OUTPUT inserted.idUsuario
+              SELECT @idBranch, @idCuenta, ISNULL(MAX(idUsuario),0)+1, @Nombre, @Apellidos, @NomComercial,
                  @Correo, @Telefono, @Cve, @TipoUsuario, @Puesto, @FechaNacimiento,
-                 @idPuntoVenta, @idEstado, @idPais, @NivelAcceso, @Pass, 1, @UsuAlta, 'ACTIVO')`);
+                 @idPuntoVenta, @idEstado, @idPais, @NivelAcceso, @Pass, 1, @UsuAlta, 'ACTIVO'
+              FROM VIDA_CUENTA_USUARIOS WITH (UPDLOCK, HOLDLOCK) WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+    const nuevoId = ins.recordset[0].idUsuario;
 
     for (const idPantalla of pantallas) {
       await pool.request()

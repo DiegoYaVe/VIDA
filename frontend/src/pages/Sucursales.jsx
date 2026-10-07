@@ -339,6 +339,8 @@ export default function Sucursales() {
   const { usuario } = useAuthStore();
   const toast = useToast();
   const puedeEscribir = ROLES_ESCRITURA.includes(usuario?.TipoUsuario);
+  // Crear, activar y desactivar tiendas es de la red (cada rol en su región)
+  const esRed = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'].includes(usuario?.TipoUsuario);
 
   const [sucursales, setSucursales] = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -389,7 +391,7 @@ export default function Sucursales() {
           <h1 className="text-2xl font-black text-gray-900">Tiendas</h1>
           <p className="text-gray-500 text-sm mt-1">Gestiona las tiendas y sus datos de contacto</p>
         </div>
-        {puedeEscribir && (
+        {esRed && (
           <button onClick={() => setModal({})}
             className="flex items-center gap-2 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition"
             style={{ background: 'linear-gradient(135deg, #54C4E0, #5BBE6A)' }}>
@@ -404,7 +406,7 @@ export default function Sucursales() {
         <div className="text-center py-16 text-gray-400">
           <Store size={52} className="mx-auto mb-3 opacity-20"/>
           <p className="font-bold text-gray-500">No hay tiendas registradas</p>
-          {puedeEscribir && (
+          {esRed && (
             <button onClick={() => setModal({})} className="mt-4 text-vida-blue text-sm underline">
               Crear la primera tienda
             </button>
@@ -487,7 +489,7 @@ export default function Sucursales() {
                     className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-vida-blue hover:bg-blue-50 rounded-lg py-1.5 transition">
                     <FileText size={13}/> Fiscal
                   </button>
-                  <button onClick={() => toggleStatus(s)}
+                  {esRed && <button onClick={() => toggleStatus(s)}
                     className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold rounded-lg py-1.5 transition ${
                       s.StatusPuntoVenta === 'ACTIVO'
                         ? 'text-gray-400 hover:text-red-500 hover:bg-red-50'
@@ -497,7 +499,7 @@ export default function Sucursales() {
                       ? <><Power size={13}/> Desactivar</>
                       : <><CheckCircle size={13}/> Activar</>
                     }
-                  </button>
+                  </button>}
                 </div>
               )}
             </div>

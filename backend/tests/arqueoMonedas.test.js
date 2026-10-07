@@ -85,3 +85,21 @@ test('desglose corrupto impide generar arqueo silenciosamente incorrecto',()=>{
  assert.throws(()=>efectivoPorMoneda([{MetodoPago:'EFECTIVO',PagoMonedaJSON:'{'}]));
  assert.throws(()=>efectivoPorMoneda([{MetodoPago:'EFECTIVO',PagoMonedaJSON:{Moneda:'EUR',Efectivo:10,Cambio:0}}]));
 });
+
+import { conciliarTardias } from '../src/services/arqueo.service.js';
+test('ventas tardías: explican el sobrante del arqueo por moneda', () => {
+  const arqueo = { USD: { Diferencia: 10 }, VES: { Diferencia: 400 } };
+  const tardias = [
+    { MetodoPago: 'EFECTIVO', TotalUSD: 10, PagoMonedaJSON: { Moneda: 'USD', Efectivo: 20, Cambio: 10 } },
+    { MetodoPago: 'EFECTIVO', TotalUSD: 10, PagoMonedaJSON: { Moneda: 'VES', Efectivo: 400, Cambio: 0 } },
+    { MetodoPago: 'TARJETA', TotalUSD: 5, PagoMonedaJSON: { Moneda: 'USD', Efectivo: 0, Tarjeta: 5, Cambio: 0 } },
+  ];
+  const c = conciliarTardias(arqueo, tardias);
+  assert.equal(c.NumTransacciones, 3);
+  assert.equal(c.TotalUSD, 25);
+  assert.equal(c.EfectivoUSD, 10);
+  assert.equal(c.EfectivoVES, 400);
+  assert.equal(c.DiferenciaConciliadaUSD, 0);
+  assert.equal(c.DiferenciaConciliadaVES, 0);
+  assert.equal(conciliarTardias(null, []).DiferenciaConciliadaUSD, null);
+});

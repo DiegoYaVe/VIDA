@@ -23,13 +23,22 @@ Se eligieron estas funciones porque son **puras y exportadas**: reciben datos y
 devuelven un resultado, sin tocar la BD. Importarlas no abre conexión (`getPool`
 es perezoso), por eso los tests son rápidos y estables.
 
-## Pendiente (siguiente paso)
+## Integración contra la BD (`tests/db/`)
 
-Tests de **integración** contra una BD de prueba (los flujos que hoy se validan
-con scripts E2E manuales: aplicar/redimir cupón, vencimiento de puntos, IDs
-concurrentes). Conviene dejarlos **detrás de una bandera de entorno**
-(p. ej. `RUN_DB_TESTS=1`) para no exigir BD en el `npm test` por defecto, ya que
-mutan datos.
+Pruebas contra SQL Server de los flujos con dinero y documentos fiscales:
+factura (total en Bs, IVA, una por pedido), número de control, notas de
+crédito parciales, inmutabilidad, IGTF, devoluciones (stock, caja y NC) y
+ventas offline tardías. Van **detrás de una bandera** para que `npm test` no
+exija BD (por defecto aparecen como *skipped*):
+
+```bash
+RUN_DB_TESTS=1 npm run test:db      # usa la BD de backend/.env
+```
+
+Cada prueba crea datos ficticios (tienda, venta, turno) **dentro de una
+transacción que siempre se revierte**: no dejan rastro, cosa necesaria porque
+las facturas son inmutables (trigger) y no se podrían borrar. Pendiente:
+cupones y vencimiento de puntos.
 
 ### Monedas y tasa externa
 

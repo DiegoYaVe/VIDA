@@ -8,7 +8,7 @@
 // PENDIENTE_CONTROL y no es válido como factura fiscal.
 import { sql } from '../db/sqlserver.js';
 import {
-  desglosarFactura, normalizarDocumentoReceptor, pagoEnDivisasUSD,
+  desglosarFactura, normalizarDocumentoReceptor, pagoEnDivisasUSD, calcularNotaCredito,
   pedidoFacturable, validarDatosFiscales,
 } from '../domain/fiscal.mjs';
 
@@ -43,7 +43,7 @@ async function siguienteId(tx, ids) {
 
 // Tasa de la operación: la que quedó fija al cobrar; si la venta es anterior a
 // la multimoneda, la tasa BCV vigente el día (Caracas) de la venta.
-async function tasaDeLaVenta(tx, ids, pedido) {
+export async function tasaDeLaVenta(tx, ids, pedido) {
   const pago = JSON.parse(pedido.PagoMonedaJSON || 'null');
   if (Number(pago?.TasaVESporUSD) > 0)
     return { tasa: Number(pago.TasaVESporUSD), fuente: pago.Fuente ?? null, fecha: pago.FechaTasa ?? null };
@@ -89,10 +89,10 @@ async function insertarDocumento(tx, ids, cab, lineas) {
       .input('idProducto', sql.BigInt, l.idProducto).input('Descripcion', sql.VarChar(200), l.Descripcion)
       .input('Cantidad', sql.Decimal(18, 4), l.Cantidad).input('PrecioUnitarioVES', sql.Decimal(18, 2), l.PrecioUnitarioVES)
       .input('Alicuota', sql.VarChar(10), l.Alicuota).input('PorcentajeIVA', sql.Decimal(5, 2), l.PorcentajeIVA)
-      .input('TotalVES', sql.Decimal(18, 2), l.TotalVES)
+      .input('TotalVES', sql.Decimal(18, 2), l.TotalVES).input('LineaAfectada', sql.Int, l.LineaAfectada ?? null)
       .query(`INSERT INTO VIDA_FACTURAS_DETALLE
-                (idBranch, idCuenta, idFactura, Linea, idProducto, Descripcion, Cantidad, PrecioUnitarioVES, Alicuota, PorcentajeIVA, TotalVES)
-              VALUES (@idBranch, @idCuenta, @idFactura, @Linea, @idProducto, @Descripcion, @Cantidad, @PrecioUnitarioVES, @Alicuota, @PorcentajeIVA, @TotalVES)`);
+                (idBranch, idCuenta, idFactura, Linea, idProducto, Descripcion, Cantidad, PrecioUnitarioVES, Alicuota, PorcentajeIVA, TotalVES, LineaAfectada)
+              VALUES (@idBranch, @idCuenta, @idFactura, @Linea, @idProducto, @Descripcion, @Cantidad, @PrecioUnitarioVES, @Alicuota, @PorcentajeIVA, @TotalVES, @LineaAfectada)`);
   }
 }
 
@@ -134,7 +134,8 @@ export async function emitirFactura(tx, actor, { idPedido, receptor }, autorizar
     lineas: dr.recordset.map(d => ({ idProducto: d.idProducto, Descripcion: d.Nombre, Cantidad: Number(d.Cantidad),
       PrecioUnitarioUSD: Number(d.PrecioUnitario), Alicuota: d.AlicuotaIVA })),
     totalUSD: Number(pedido.TotalUSD), tasa, porcentajes: await porcentajesIVA(tx),
-    contribuyenteEspecial: emisor.ContribuyenteEspecial,
+    // El IGTF va en la factura solo si se cobró (el POS lo registra en el pago)
+    contribuyenteEspecial: emisor.ContribuyenteEspecial && JSON.parse(pedido.PagoMonedaJSON || 'null')?.IGTFBaseUSD != null,
     divisasUSD: pagoEnDivisasUSD(pedido.PagoMonedaJSON, Number(pedido.TotalUSD)),
   });
 
@@ -150,8 +151,11 @@ export async function emitirFactura(tx, actor, { idPedido, receptor }, autorizar
   return { idFactura, Numero, idPuntoVenta: pedido.idPuntoVenta, TotalVES: f.TotalVES, Modalidad: emisor.ModalidadFiscal };
 }
 
-// Nota de crédito por el total de una factura ya emitida (con número de control).
-export async function emitirNotaCredito(tx, actor, { idFactura, motivo }, autorizar = async () => true) {
+// Nota de crédito sobre una factura ya emitida (con número de control).
+// `lineas`: [{ Linea, Cantidad }] de la factura; vacío = todo lo que falta por
+// acreditar. Una factura admite varias notas parciales, nunca más de lo
+// facturado. Devuelve también `final` (la factura quedó acreditada completa).
+export async function emitirNotaCredito(tx, actor, { idFactura, motivo, lineas }, autorizar = async () => true) {
   const ids = { idBranch: actor.idBranch, idCuenta: actor.idCuenta };
   const Motivo = String(motivo ?? '').trim().slice(0, 300);
   if (Motivo.length < 5) throw falla(422, 'Indica el motivo de la nota de crédito');
@@ -162,22 +166,33 @@ export async function emitirNotaCredito(tx, actor, { idFactura, motivo }, autori
   if (!o || !(await autorizar(o.idPuntoVenta))) throw falla(404, 'Factura no encontrada');
   if (o.TipoDocumento !== 'FACTURA') throw falla(422, 'Solo se emite nota de crédito sobre una factura');
   if (o.Status !== 'EMITIDA') throw falla(422, 'Registra primero el número de control de la factura');
-  const ya = await req(tx, ids).input('id', sql.BigInt, idFactura)
-    .query(`SELECT idFactura FROM VIDA_FACTURAS WHERE idBranch=@idBranch AND idCuenta=@idCuenta
-            AND idFacturaAfectada=@id AND TipoDocumento='NOTA_CREDITO'`);
-  if (ya.recordset[0]) throw falla(409, 'La factura ya tiene nota de crédito', { idFactura: ya.recordset[0].idFactura });
 
   const lr = await req(tx, ids).input('id', sql.BigInt, idFactura)
     .query(`SELECT * FROM VIDA_FACTURAS_DETALLE WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idFactura=@id ORDER BY Linea`);
+  const pr = await req(tx, ids).input('id', sql.BigInt, idFactura)
+    .query(`SELECT * FROM VIDA_FACTURAS WITH (UPDLOCK, HOLDLOCK)
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idFacturaAfectada=@id AND TipoDocumento='NOTA_CREDITO';
+            SELECT ISNULL(d.LineaAfectada, d.Linea) AS Linea, SUM(d.Cantidad) AS Cantidad, SUM(d.TotalVES) AS TotalVES
+            FROM VIDA_FACTURAS_DETALLE d
+            JOIN VIDA_FACTURAS n ON n.idBranch=d.idBranch AND n.idCuenta=d.idCuenta AND n.idFactura=d.idFactura
+            WHERE n.idBranch=@idBranch AND n.idCuenta=@idCuenta AND n.idFacturaAfectada=@id AND n.TipoDocumento='NOTA_CREDITO'
+            GROUP BY ISNULL(d.LineaAfectada, d.Linea)`);
+  const previoLineas = Object.fromEntries(pr.recordsets[1].map(p => [p.Linea, { Cantidad: Number(p.Cantidad), TotalVES: Number(p.TotalVES) }]));
+  let nc;
+  try {
+    nc = calcularNotaCredito({ orig: o, lineas: lr.recordset, devolver: lineas, previas: pr.recordsets[0], previoLineas });
+  } catch (e) {
+    throw falla(/por completo/.test(e.message) ? 409 : 422, e.message);
+  }
+
   const nuevo = await siguienteId(tx, ids);
   const Numero = await siguienteNumero(tx, ids, o.idPuntoVenta, 'NOTA_CREDITO');
-  // Copia emisor, receptor, tasa y montos de la factura original
+  // Emisor, receptor y tasa de la factura original; montos de lo acreditado
   await insertarDocumento(tx, ids, {
-    ...o, idFactura: nuevo, Numero, TipoDocumento: 'NOTA_CREDITO', idFacturaAfectada: o.idFactura, Motivo,
+    ...o, ...nc, idFactura: nuevo, Numero, TipoDocumento: 'NOTA_CREDITO', idFacturaAfectada: o.idFactura, Motivo,
     UsuAlta: String(actor.idUsuario),
-  }, lr.recordset.map(l => ({ ...l, Cantidad: Number(l.Cantidad), PrecioUnitarioVES: Number(l.PrecioUnitarioVES),
-    PorcentajeIVA: Number(l.PorcentajeIVA), TotalVES: Number(l.TotalVES) })));
-  return { idFactura: nuevo, Numero, idPuntoVenta: o.idPuntoVenta, idFacturaAfectada: o.idFactura };
+  }, nc.lineas);
+  return { idFactura: nuevo, Numero, idPuntoVenta: o.idPuntoVenta, idFacturaAfectada: o.idFactura, TotalVES: nc.TotalVES, final: nc.final };
 }
 
 // Número de control asignado por la máquina fiscal (con su serial) o por la
@@ -212,20 +227,30 @@ export async function registrarControl(tx, actor, { idFactura, NumeroControl, Se
 export async function obtenerFactura(ejecutor, ids, idFactura) {
   const fr = await req(ejecutor, ids).input('id', sql.BigInt, idFactura)
     .query(`SELECT f.*, a.Numero AS NumeroAfectada, a.NumeroControl AS ControlAfectada, a.FechaEmision AS FechaAfectada,
-                   nc.idFactura AS idNotaCredito, nc.Numero AS NumeroNotaCredito,
                    pv.NomComercial AS NombreTienda
             FROM VIDA_FACTURAS f
             LEFT JOIN VIDA_FACTURAS a ON a.idBranch=f.idBranch AND a.idCuenta=f.idCuenta AND a.idFactura=f.idFacturaAfectada
-            LEFT JOIN VIDA_FACTURAS nc ON nc.idBranch=f.idBranch AND nc.idCuenta=f.idCuenta
-                 AND nc.idFacturaAfectada=f.idFactura AND nc.TipoDocumento='NOTA_CREDITO'
             LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA pv ON pv.idBranch=f.idBranch AND pv.idCuenta=f.idCuenta AND pv.idPuntoVenta=f.idPuntoVenta
             WHERE f.idBranch=@idBranch AND f.idCuenta=@idCuenta AND f.idFactura=@id`);
   const f = fr.recordset[0];
   if (!f) return null;
   const lr = await req(ejecutor, ids).input('id', sql.BigInt, idFactura)
-    .query(`SELECT Linea, idProducto, Descripcion, Cantidad, PrecioUnitarioVES, Alicuota, PorcentajeIVA, TotalVES
-            FROM VIDA_FACTURAS_DETALLE WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idFactura=@id ORDER BY Linea`);
-  return { ...f, lineas: lr.recordset };
+    .query(`SELECT Linea, idProducto, Descripcion, Cantidad, PrecioUnitarioVES, Alicuota, PorcentajeIVA, TotalVES, LineaAfectada
+            FROM VIDA_FACTURAS_DETALLE WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idFactura=@id ORDER BY Linea;
+            SELECT n.idFactura, n.Numero, n.Status, n.NumeroControl, n.TotalVES, n.FechaEmision, n.Motivo
+            FROM VIDA_FACTURAS n WHERE n.idBranch=@idBranch AND n.idCuenta=@idCuenta
+              AND n.idFacturaAfectada=@id AND n.TipoDocumento='NOTA_CREDITO' ORDER BY n.Numero;
+            SELECT ISNULL(d.LineaAfectada, d.Linea) AS Linea, SUM(d.Cantidad) AS Cantidad
+            FROM VIDA_FACTURAS_DETALLE d
+            JOIN VIDA_FACTURAS n ON n.idBranch=d.idBranch AND n.idCuenta=d.idCuenta AND n.idFactura=d.idFactura
+            WHERE n.idBranch=@idBranch AND n.idCuenta=@idCuenta AND n.idFacturaAfectada=@id AND n.TipoDocumento='NOTA_CREDITO'
+            GROUP BY ISNULL(d.LineaAfectada, d.Linea)`);
+  const acreditado = Object.fromEntries(lr.recordsets[2].map(a => [a.Linea, Number(a.Cantidad)]));
+  const lineas = lr.recordsets[0].map(l => ({ ...l, CantidadAcreditada: acreditado[l.Linea] || 0 }));
+  const notasCredito = lr.recordsets[1];
+  const acreditadaCompleta = f.TipoDocumento === 'FACTURA' && notasCredito.length > 0
+    && lineas.every(l => Number(l.Cantidad) - l.CantidadAcreditada <= 1e-9);
+  return { ...f, lineas, notasCredito, acreditadaCompleta };
 }
 
 export { validarDatosFiscales };

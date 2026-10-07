@@ -33,7 +33,7 @@ import { academiaRoutes }   from './routes/academia.routes.js';
 import { premiosRoutes }    from './routes/premios.routes.js';
 import { cuponesRoutes }    from './routes/cupones.routes.js';
 import { cuentasRoutes }    from './routes/cuentas.routes.js';
-import { facturasRoutes }   from './routes/facturas.routes.js';
+import { facturasRoutes, devolucionesRoutes } from './routes/facturas.routes.js';
 import { auditRoutes }      from './routes/audit.routes.js';
 import { marcarInactivos }  from './controllers/heartbeat.controller.js';
 import { expirarPedidosVencidos } from './controllers/pedidos.controller.js';
@@ -212,6 +212,7 @@ fastify.register(cuponesRoutes,    { prefix: '/api' });
 fastify.register(monedaRoutes, { prefix: '/api' });
 fastify.register(cuentasRoutes,    { prefix: '/api' });
 fastify.register(facturasRoutes,   { prefix: '/api' });
+fastify.register(devolucionesRoutes, { prefix: '/api' });
 fastify.register(auditRoutes,      { prefix: '/api' });
 fastify.register(wsRoutes,         { prefix: '/api' });
 

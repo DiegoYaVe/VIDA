@@ -3,6 +3,7 @@
 // A diferencia de las promociones (que se aplican solas), el cupón requiere que
 // el cliente ingrese un CÓDIGO y tiene límites de uso (global y por cliente).
 import { getPool, sql } from '../db/sqlserver.js';
+import { conIdUnico } from '../db/idUnico.js';
 import { fechaCaracas, fechaISO } from '../services/fechas.service.js';
 
 const TIPOS    = ['DESCUENTO_PCT', 'DESCUENTO_USD'];
@@ -148,35 +149,39 @@ export async function crearCupon(request, reply) {
     if (await buscarCuponPorCodigo(pool, idBranch, idCuenta, Codigo))
       return reply.code(409).send({ error: 'Ya existe un cupón con ese código' });
 
-    const idCupon = await nextId(pool, 'VIDA_CUPONES', 'idCupon', idBranch, idCuenta);
-    await pool.request()
-      .input('idBranch',      sql.BigInt,       idBranch)
-      .input('idCuenta',      sql.BigInt,       idCuenta)
-      .input('idCupon',       sql.BigInt,       idCupon)
-      .input('Codigo',        sql.VarChar(40),  Codigo)
-      .input('Nombre',        sql.VarChar(150), Nombre)
-      .input('Tipo',          sql.VarChar(20),  Tipo)
-      .input('Valor',         sql.Decimal(18,4),Valor)
-      .input('MinCompra',     sql.Decimal(18,4),b.MinCompra != null ? parseFloat(b.MinCompra) : null)
-      .input('MaxDescuento',  sql.Decimal(18,4),b.MaxDescuento != null ? parseFloat(b.MaxDescuento) : null)
-      .input('Alcance',       sql.VarChar(20),  Alcance)
-      .input('idCategoria',   sql.BigInt,       Alcance === 'CATEGORIA' ? b.idCategoria : null)
-      .input('idProducto',    sql.BigInt,       Alcance === 'PRODUCTO'  ? b.idProducto  : null)
-      .input('Canal',         sql.VarChar(20),  Canal)
-      .input('FechaInicio',   sql.Date,         b.FechaInicio || null)
-      .input('FechaFin',      sql.Date,         b.FechaFin || null)
-      .input('UsosMax',       sql.Int,          b.UsosMax != null && b.UsosMax !== '' ? parseInt(b.UsosMax) : null)
-      .input('UsosPorCliente',sql.Int,          b.UsosPorCliente != null && b.UsosPorCliente !== '' ? parseInt(b.UsosPorCliente) : null)
-      .input('Descripcion',   sql.VarChar(300), b.Descripcion || null)
-      .input('UsuAlta',       sql.VarChar(30),  String(idUsuario))
-      .query(`INSERT INTO VIDA_CUPONES
-                (idBranch,idCuenta,idCupon,Codigo,Nombre,Tipo,Valor,MinCompra,MaxDescuento,
-                 Alcance,idCategoria,idProducto,Canal,FechaInicio,FechaFin,UsosMax,UsosPorCliente,
-                 UsosActuales,Descripcion,Status,UsuAlta)
-              VALUES
-                (@idBranch,@idCuenta,@idCupon,@Codigo,@Nombre,@Tipo,@Valor,@MinCompra,@MaxDescuento,
-                 @Alcance,@idCategoria,@idProducto,@Canal,@FechaInicio,@FechaFin,@UsosMax,@UsosPorCliente,
-                 0,@Descripcion,'ACTIVO',@UsuAlta)`);
+    // id con MAX()+1: si otra alta concurrente toma el mismo, se reintenta
+    const idCupon = await conIdUnico(async () => {
+      const idCupon = await nextId(pool, 'VIDA_CUPONES', 'idCupon', idBranch, idCuenta);
+      await pool.request()
+        .input('idBranch',      sql.BigInt,       idBranch)
+        .input('idCuenta',      sql.BigInt,       idCuenta)
+        .input('idCupon',       sql.BigInt,       idCupon)
+        .input('Codigo',        sql.VarChar(40),  Codigo)
+        .input('Nombre',        sql.VarChar(150), Nombre)
+        .input('Tipo',          sql.VarChar(20),  Tipo)
+        .input('Valor',         sql.Decimal(18,4),Valor)
+        .input('MinCompra',     sql.Decimal(18,4),b.MinCompra != null ? parseFloat(b.MinCompra) : null)
+        .input('MaxDescuento',  sql.Decimal(18,4),b.MaxDescuento != null ? parseFloat(b.MaxDescuento) : null)
+        .input('Alcance',       sql.VarChar(20),  Alcance)
+        .input('idCategoria',   sql.BigInt,       Alcance === 'CATEGORIA' ? b.idCategoria : null)
+        .input('idProducto',    sql.BigInt,       Alcance === 'PRODUCTO'  ? b.idProducto  : null)
+        .input('Canal',         sql.VarChar(20),  Canal)
+        .input('FechaInicio',   sql.Date,         b.FechaInicio || null)
+        .input('FechaFin',      sql.Date,         b.FechaFin || null)
+        .input('UsosMax',       sql.Int,          b.UsosMax != null && b.UsosMax !== '' ? parseInt(b.UsosMax) : null)
+        .input('UsosPorCliente',sql.Int,          b.UsosPorCliente != null && b.UsosPorCliente !== '' ? parseInt(b.UsosPorCliente) : null)
+        .input('Descripcion',   sql.VarChar(300), b.Descripcion || null)
+        .input('UsuAlta',       sql.VarChar(30),  String(idUsuario))
+        .query(`INSERT INTO VIDA_CUPONES
+                  (idBranch,idCuenta,idCupon,Codigo,Nombre,Tipo,Valor,MinCompra,MaxDescuento,
+                   Alcance,idCategoria,idProducto,Canal,FechaInicio,FechaFin,UsosMax,UsosPorCliente,
+                   UsosActuales,Descripcion,Status,UsuAlta)
+                VALUES
+                  (@idBranch,@idCuenta,@idCupon,@Codigo,@Nombre,@Tipo,@Valor,@MinCompra,@MaxDescuento,
+                   @Alcance,@idCategoria,@idProducto,@Canal,@FechaInicio,@FechaFin,@UsosMax,@UsosPorCliente,
+                   0,@Descripcion,'ACTIVO',@UsuAlta)`);
+      return idCupon;
+    });
 
     return reply.code(201).send({ idCupon, Codigo, mensaje: 'Cupón creado' });
   } catch (err) {

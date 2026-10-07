@@ -18,7 +18,7 @@ function puedeEditarFiscal(user, idPuntoVenta) {
 }
 
 // Ejecuta `fn(tx)` en una transacción y traduce los errores de negocio.
-async function enTransaccion(request, reply, fn, codigoOk = 200) {
+export async function enTransaccion(request, reply, fn, codigoOk = 200) {
   const pool = await getPool();
   const tx = new sql.Transaction(pool);
   await tx.begin();
@@ -39,7 +39,7 @@ async function enTransaccion(request, reply, fn, codigoOk = 200) {
   }
 }
 
-const autorizador = (user, pool) => (pv) => tiendaEnAlcance(user, pv, pool);
+export const autorizador = (user, pool) => (pv) => tiendaEnAlcance(user, pv, pool);
 
 // GET /facturas/datos-fiscales/:idPuntoVenta
 export async function obtenerDatosFiscales(request, reply) {
@@ -131,7 +131,7 @@ export async function registrarNumeroControl(request, reply) {
 export async function crearNotaCredito(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   return enTransaccion(request, reply, async (tx, pool) => {
-    const res = await emitirNotaCredito(tx, request.user, { idFactura: request.params.idFactura, motivo: request.body?.Motivo },
+    const res = await emitirNotaCredito(tx, request.user, { idFactura: request.params.idFactura, motivo: request.body?.Motivo, lineas: request.body?.Lineas },
       autorizador(request.user, pool));
     await registrarAuditoria(tx, { idBranch, idCuenta, entityType: 'FACTURA', entityId: res.idFactura,
       accion: 'NOTA_CREDITO_EMITIDA', actor: idUsuario, data: { ...res, Motivo: request.body?.Motivo } }, request.log);

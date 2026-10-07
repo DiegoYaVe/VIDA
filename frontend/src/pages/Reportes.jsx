@@ -232,6 +232,13 @@ function TabVentas({ filtros }) {
             <CardResumen icon={CreditCard}   label="Tarjeta"         valor={USD(datos.totales.TotalTarjeta)}     color="purple" />
             <CardResumen icon={DollarSign}   label="Cambio devuelto" valor={USD(datos.totales.TotalCambio)}      color="red"    />
           </div>
+          {datos.devoluciones?.NumDevoluciones > 0 && (
+            <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+              {datos.devoluciones.NumDevoluciones} devolución(es) en el período por {USD(datos.totales.DevolucionesUSD)}
+              {' '}(efectivo de caja: {Number(datos.devoluciones.EfectivoUSD).toFixed(2)} USD · {Number(datos.devoluciones.EfectivoVES).toFixed(2)} VES).
+              {' '}<b>Venta neta: {USD(datos.totales.NetoUSD)}</b>
+            </p>
+          )}
 
           {datos.monedas&&<div className="bg-white rounded-xl p-4 border space-y-2">
             <h3 className="font-bold">Dinero recibido por moneda</h3>

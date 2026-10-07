@@ -1,5 +1,7 @@
 // src/controllers/sucursales.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
+import { conIdUnico } from '../db/idUnico.js';
+import { tiendaEnAlcance, ubicacionEnAlcance, ROLES_RED } from '../services/alcance.service.js';
 
 // Coordenada válida o null: número dentro de [-max, max]; vacío/fuera de rango = null.
 // (El repartidor y el despacho usan Latitud/Longitud de la sucursal como origen.)
@@ -83,40 +85,46 @@ export async function crearPuntoVenta(request, reply) {
   if (!Nombre) return reply.code(400).send({ error: 'El nombre es requerido' });
   if (!idPais)   return reply.code(400).send({ error: 'El país es requerido' });
   if (!idEstado) return reply.code(400).send({ error: 'El estado es requerido' });
+  // Crear tiendas es de la red, y cada rol solo dentro de su región
+  if (!ubicacionEnAlcance(request.user, { idPais, idEstado }))
+    return reply.code(403).send({ error: 'Solo puedes crear tiendas dentro de tu región' });
 
   try {
     const pool = await getPool();
-    const nuevoId = await nextId(pool, idBranch, idCuenta);
-
-    await pool.request()
-      .input('idBranch',      sql.BigInt,      idBranch)
-      .input('idCuenta',      sql.BigInt,      idCuenta)
-      .input('idPuntoVenta',  sql.BigInt,      nuevoId)
-      .input('Nombre',        sql.VarChar(200), Nombre)
-      .input('NomComercial',  sql.VarChar(200), NomComercial || Nombre)
-      .input('TipoPuntoVenta',sql.VarChar(50),  TipoPuntoVenta || 'TIENDA')
-      .input('Correo',        sql.VarChar(100), Correo || null)
-      .input('Telefono',      sql.VarChar(50),  Telefono || null)
-      .input('Encargado',     sql.VarChar(200), Encargado || null)
-      .input('Calle',         sql.VarChar(200), Calle || null)
-      .input('NumExt',        sql.VarChar(20),  NumExt || null)
-      .input('NumInt',        sql.VarChar(20),  NumInt || null)
-      .input('Colonia',       sql.VarChar(100), Colonia || null)
-      .input('CP',            sql.VarChar(10),  CP || null)
-      .input('Ciudad',        sql.VarChar(100), Ciudad || null)
-      .input('idEstado',      sql.BigInt,       idEstado)
-      .input('idPais',        sql.BigInt,       idPais)
-      .input('Latitud',       sql.Float,        latLng(Latitud, 90))
-      .input('Longitud',      sql.Float,        latLng(Longitud, 180))
-      .input('UsuAlta',       sql.VarChar(20),  String(idUsuario))
-      .query(`INSERT INTO VIDA_CUENTA_PUNTOS_VENTA
-                (idBranch, idCuenta, idPuntoVenta, Nombre, NomComercial, TipoPuntoVenta,
-                 Correo, Telefono, Encargado, Calle, NumExt, NumInt, Colonia, CP,
-                 Ciudad, idEstado, idPais, Latitud, Longitud, UsuAlta)
-              VALUES
-                (@idBranch, @idCuenta, @idPuntoVenta, @Nombre, @NomComercial, @TipoPuntoVenta,
-                 @Correo, @Telefono, @Encargado, @Calle, @NumExt, @NumInt, @Colonia, @CP,
-                 @Ciudad, @idEstado, @idPais, @Latitud, @Longitud, @UsuAlta)`);
+    // id con MAX()+1: si otra alta concurrente toma el mismo, se reintenta
+    const nuevoId = await conIdUnico(async () => {
+      const nuevoId = await nextId(pool, idBranch, idCuenta);
+      await pool.request()
+        .input('idBranch',      sql.BigInt,      idBranch)
+        .input('idCuenta',      sql.BigInt,      idCuenta)
+        .input('idPuntoVenta',  sql.BigInt,      nuevoId)
+        .input('Nombre',        sql.VarChar(200), Nombre)
+        .input('NomComercial',  sql.VarChar(200), NomComercial || Nombre)
+        .input('TipoPuntoVenta',sql.VarChar(50),  TipoPuntoVenta || 'TIENDA')
+        .input('Correo',        sql.VarChar(100), Correo || null)
+        .input('Telefono',      sql.VarChar(50),  Telefono || null)
+        .input('Encargado',     sql.VarChar(200), Encargado || null)
+        .input('Calle',         sql.VarChar(200), Calle || null)
+        .input('NumExt',        sql.VarChar(20),  NumExt || null)
+        .input('NumInt',        sql.VarChar(20),  NumInt || null)
+        .input('Colonia',       sql.VarChar(100), Colonia || null)
+        .input('CP',            sql.VarChar(10),  CP || null)
+        .input('Ciudad',        sql.VarChar(100), Ciudad || null)
+        .input('idEstado',      sql.BigInt,       idEstado)
+        .input('idPais',        sql.BigInt,       idPais)
+        .input('Latitud',       sql.Float,        latLng(Latitud, 90))
+        .input('Longitud',      sql.Float,        latLng(Longitud, 180))
+        .input('UsuAlta',       sql.VarChar(20),  String(idUsuario))
+        .query(`INSERT INTO VIDA_CUENTA_PUNTOS_VENTA
+                  (idBranch, idCuenta, idPuntoVenta, Nombre, NomComercial, TipoPuntoVenta,
+                   Correo, Telefono, Encargado, Calle, NumExt, NumInt, Colonia, CP,
+                   Ciudad, idEstado, idPais, Latitud, Longitud, UsuAlta)
+                VALUES
+                  (@idBranch, @idCuenta, @idPuntoVenta, @Nombre, @NomComercial, @TipoPuntoVenta,
+                   @Correo, @Telefono, @Encargado, @Calle, @NumExt, @NumInt, @Colonia, @CP,
+                   @Ciudad, @idEstado, @idPais, @Latitud, @Longitud, @UsuAlta)`);
+      return nuevoId;
+    });
 
     return reply.code(201).send({ message: 'Punto de venta creado', idPuntoVenta: nuevoId });
   } catch (err) {
@@ -142,6 +150,21 @@ export async function editarPuntoVenta(request, reply) {
 
   try {
     const pool = await getPool();
+    // Solo tiendas del alcance del usuario (el ADMIN, la suya)
+    if (!(await tiendaEnAlcance(request.user, idPuntoVenta, pool)))
+      return reply.code(404).send({ error: 'Punto de venta no encontrado' });
+    if (ROLES_RED.includes(request.user.TipoUsuario)) {
+      if (!ubicacionEnAlcance(request.user, { idPais, idEstado }))
+        return reply.code(403).send({ error: 'No puedes mover la tienda fuera de tu región' });
+    } else {
+      // El ADMIN de la tienda no la cambia de estado ni de país
+      const act = (await pool.request()
+        .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idPuntoVenta', sql.BigInt, idPuntoVenta)
+        .query(`SELECT idPais, idEstado FROM VIDA_CUENTA_PUNTOS_VENTA
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta`)).recordset[0];
+      if (String(act?.idEstado) !== String(idEstado) || String(act?.idPais) !== String(idPais))
+        return reply.code(403).send({ error: 'Solo la red puede cambiar el estado o el país de la tienda' });
+    }
     await pool.request()
       .input('idBranch',      sql.BigInt,      idBranch)
       .input('idCuenta',      sql.BigInt,      idCuenta)
@@ -190,6 +213,11 @@ export async function togglePuntoVenta(request, reply) {
 
   try {
     const pool = await getPool();
+    // Activar / desactivar tiendas es de la red, dentro de su región
+    if (!ROLES_RED.includes(request.user.TipoUsuario))
+      return reply.code(403).send({ error: 'Solo la red puede activar o desactivar tiendas' });
+    if (!(await tiendaEnAlcance(request.user, idPuntoVenta, pool)))
+      return reply.code(404).send({ error: 'Punto de venta no encontrado' });
     await pool.request()
       .input('idBranch',     sql.BigInt,     idBranch)
       .input('idCuenta',     sql.BigInt,     idCuenta)

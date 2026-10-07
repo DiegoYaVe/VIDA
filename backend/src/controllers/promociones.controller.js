@@ -1,6 +1,7 @@
 // src/controllers/promociones.controller.js
 // Promociones: descuentos y combos (T-0049).
 import { getPool, sql } from '../db/sqlserver.js';
+import { conIdUnico } from '../db/idUnico.js';
 
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
   const r = await pool.request()
@@ -146,28 +147,32 @@ export async function crearPromocion(request, reply) {
 
   try {
     const pool = await getPool();
-    const idPromocion = await nextId(pool, 'VIDA_PROMOCIONES', 'idPromocion', idBranch, idCuenta);
-    await pool.request()
-      .input('idBranch',    sql.BigInt,       idBranch)
-      .input('idCuenta',    sql.BigInt,       idCuenta)
-      .input('idPromocion', sql.BigInt,       idPromocion)
-      .input('Nombre',      sql.VarChar(150), Nombre.trim())
-      .input('Tipo',        sql.VarChar(20),  Tipo)
-      .input('Valor',       sql.Decimal(18,4), parseFloat(Valor))
-      .input('Valor2',      sql.Decimal(18,4), Valor2 != null ? parseFloat(Valor2) : null)
-      .input('Alcance',     sql.VarChar(20),  Alcance)
-      .input('idCategoria', sql.BigInt,       Alcance === 'CATEGORIA' ? idCategoria : null)
-      .input('idProducto',  sql.BigInt,       Alcance === 'PRODUCTO'  ? idProducto  : null)
-      .input('FechaInicio', sql.Date,         FechaInicio || null)
-      .input('FechaFin',    sql.Date,         FechaFin || null)
-      .input('Descripcion', sql.VarChar(300), Descripcion?.trim() || null)
-      .input('UsuAlta',     sql.VarChar(30),  `U:${idUsuario}`)
-      .query(`INSERT INTO VIDA_PROMOCIONES
-                (idBranch,idCuenta,idPromocion,Nombre,Tipo,Valor,Valor2,Alcance,
-                 idCategoria,idProducto,FechaInicio,FechaFin,Descripcion,UsuAlta)
-              VALUES
-                (@idBranch,@idCuenta,@idPromocion,@Nombre,@Tipo,@Valor,@Valor2,@Alcance,
-                 @idCategoria,@idProducto,@FechaInicio,@FechaFin,@Descripcion,@UsuAlta)`);
+    // id con MAX()+1: si otra alta concurrente toma el mismo, se reintenta
+    const idPromocion = await conIdUnico(async () => {
+      const idPromocion = await nextId(pool, 'VIDA_PROMOCIONES', 'idPromocion', idBranch, idCuenta);
+      await pool.request()
+        .input('idBranch',    sql.BigInt,       idBranch)
+        .input('idCuenta',    sql.BigInt,       idCuenta)
+        .input('idPromocion', sql.BigInt,       idPromocion)
+        .input('Nombre',      sql.VarChar(150), Nombre.trim())
+        .input('Tipo',        sql.VarChar(20),  Tipo)
+        .input('Valor',       sql.Decimal(18,4), parseFloat(Valor))
+        .input('Valor2',      sql.Decimal(18,4), Valor2 != null ? parseFloat(Valor2) : null)
+        .input('Alcance',     sql.VarChar(20),  Alcance)
+        .input('idCategoria', sql.BigInt,       Alcance === 'CATEGORIA' ? idCategoria : null)
+        .input('idProducto',  sql.BigInt,       Alcance === 'PRODUCTO'  ? idProducto  : null)
+        .input('FechaInicio', sql.Date,         FechaInicio || null)
+        .input('FechaFin',    sql.Date,         FechaFin || null)
+        .input('Descripcion', sql.VarChar(300), Descripcion?.trim() || null)
+        .input('UsuAlta',     sql.VarChar(30),  `U:${idUsuario}`)
+        .query(`INSERT INTO VIDA_PROMOCIONES
+                  (idBranch,idCuenta,idPromocion,Nombre,Tipo,Valor,Valor2,Alcance,
+                   idCategoria,idProducto,FechaInicio,FechaFin,Descripcion,UsuAlta)
+                VALUES
+                  (@idBranch,@idCuenta,@idPromocion,@Nombre,@Tipo,@Valor,@Valor2,@Alcance,
+                   @idCategoria,@idProducto,@FechaInicio,@FechaFin,@Descripcion,@UsuAlta)`);
+      return idPromocion;
+    });
     return reply.code(201).send({ idPromocion });
   } catch (err) {
     request.log.error(err);

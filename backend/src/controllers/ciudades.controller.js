@@ -1,5 +1,6 @@
 // src/controllers/ciudades.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
+import { conIdUnico } from '../db/idUnico.js';
 
 async function nextId(pool, idBranch, idCuenta) {
   const r = await pool.request()
@@ -84,20 +85,23 @@ export async function crearCiudad(request, reply) {
     if (dup.recordset.length)
       return reply.code(409).send({ error: 'Esa ciudad ya existe en el estado', idCiudad: dup.recordset[0].idCiudad });
 
-    const nuevoId = await nextId(pool, idBranch, idCuenta);
-
-    await pool.request()
-      .input('idBranch',     sql.BigInt,      idBranch)
-      .input('idCuenta',     sql.BigInt,      idCuenta)
-      .input('idCiudad',     sql.BigInt,      nuevoId)
-      .input('idEstado',     sql.BigInt,      idEstado)
-      .input('idPais',       sql.BigInt,      idPais)
-      .input('NombreCiudad', sql.VarChar(120), NombreCiudad.trim())
-      .input('UsuAlta',      sql.VarChar(20),  String(idUsuario))
-      .query(`INSERT INTO VIDA_CUENTA_CIUDADES
-                (idBranch, idCuenta, idCiudad, idEstado, idPais, NombreCiudad, UsuAlta)
-              VALUES
-                (@idBranch, @idCuenta, @idCiudad, @idEstado, @idPais, @NombreCiudad, @UsuAlta)`);
+    // id con MAX()+1: si otra alta concurrente toma el mismo, se reintenta
+    const nuevoId = await conIdUnico(async () => {
+      const nuevoId = await nextId(pool, idBranch, idCuenta);
+      await pool.request()
+        .input('idBranch',     sql.BigInt,      idBranch)
+        .input('idCuenta',     sql.BigInt,      idCuenta)
+        .input('idCiudad',     sql.BigInt,      nuevoId)
+        .input('idEstado',     sql.BigInt,      idEstado)
+        .input('idPais',       sql.BigInt,      idPais)
+        .input('NombreCiudad', sql.VarChar(120), NombreCiudad.trim())
+        .input('UsuAlta',      sql.VarChar(20),  String(idUsuario))
+        .query(`INSERT INTO VIDA_CUENTA_CIUDADES
+                  (idBranch, idCuenta, idCiudad, idEstado, idPais, NombreCiudad, UsuAlta)
+                VALUES
+                  (@idBranch, @idCuenta, @idCiudad, @idEstado, @idPais, @NombreCiudad, @UsuAlta)`);
+      return nuevoId;
+    });
 
     return reply.code(201).send({ message: 'Ciudad creada', idCiudad: nuevoId });
   } catch (err) {

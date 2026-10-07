@@ -1,5 +1,6 @@
 // src/controllers/paises.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
+import { conIdUnico } from '../db/idUnico.js';
 
 async function nextId(pool, idBranch, idCuenta) {
   const r = await pool.request()
@@ -48,19 +49,22 @@ export async function crearPais(request, reply) {
 
   try {
     const pool = await getPool();
-    const nuevoId = await nextId(pool, idBranch, idCuenta);
-
-    await pool.request()
-      .input('idBranch',  sql.BigInt,     idBranch)
-      .input('idCuenta',  sql.BigInt,     idCuenta)
-      .input('idPais',    sql.BigInt,     nuevoId)
-      .input('NombrePais', sql.VarChar(100), NombrePais.trim())
-      .input('CodigoISO', sql.VarChar(3),  CodigoISO?.trim() || null)
-      .input('UsuAlta',   sql.VarChar(20), String(idUsuario))
-      .query(`INSERT INTO VIDA_CUENTA_PAISES
-                (idBranch, idCuenta, idPais, NombrePais, CodigoISO, UsuAlta)
-              VALUES
-                (@idBranch, @idCuenta, @idPais, @NombrePais, @CodigoISO, @UsuAlta)`);
+    // id con MAX()+1: si otra alta concurrente toma el mismo, se reintenta
+    const nuevoId = await conIdUnico(async () => {
+      const nuevoId = await nextId(pool, idBranch, idCuenta);
+      await pool.request()
+        .input('idBranch',  sql.BigInt,     idBranch)
+        .input('idCuenta',  sql.BigInt,     idCuenta)
+        .input('idPais',    sql.BigInt,     nuevoId)
+        .input('NombrePais', sql.VarChar(100), NombrePais.trim())
+        .input('CodigoISO', sql.VarChar(3),  CodigoISO?.trim() || null)
+        .input('UsuAlta',   sql.VarChar(20), String(idUsuario))
+        .query(`INSERT INTO VIDA_CUENTA_PAISES
+                  (idBranch, idCuenta, idPais, NombrePais, CodigoISO, UsuAlta)
+                VALUES
+                  (@idBranch, @idCuenta, @idPais, @NombrePais, @CodigoISO, @UsuAlta)`);
+      return nuevoId;
+    });
 
     return reply.code(201).send({ message: 'País creado', idPais: nuevoId });
   } catch (err) {

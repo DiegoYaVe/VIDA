@@ -106,7 +106,28 @@ export async function reporteVentas(request, reply) {
       ORDER BY p.FechaAlta,p.idPedido
     `);
     if(datos.recordset.length>50000) return reply.code(422).send({error:'El reporte supera 50,000 ventas. Reduce el rango o filtra una tienda.'});
-    return reply.send(construirReporteVentas(datos.recordset));
+    // Devoluciones registradas en el período (por su fecha, Caracas), en el
+    // mismo alcance geográfico. Las ventas no se restan solas: se informa el neto.
+    const reqDev = pool.request()
+      .input('idBranch',    sql.BigInt, idBranch)
+      .input('idCuenta',    sql.BigInt, idCuenta)
+      .input('fechaInicio', sql.Date, new Date(fechaInicio))
+      .input('fechaFin',    sql.Date, new Date(fechaFin));
+    const geoDev = buildGeoFilter(request.user, request.query, reqDev);
+    const dev = await reqDev.query(`
+      SELECT COUNT(*) AS NumDevoluciones, ISNULL(SUM(d.MontoUSD), 0) AS TotalUSD,
+             ISNULL(SUM(CASE WHEN d.MetodoReembolso='EFECTIVO' AND d.Moneda='USD' THEN d.MontoReembolso ELSE 0 END), 0) AS EfectivoUSD,
+             ISNULL(SUM(CASE WHEN d.MetodoReembolso='EFECTIVO' AND d.Moneda='VES' THEN d.MontoReembolso ELSE 0 END), 0) AS EfectivoVES
+      FROM VIDA_DEVOLUCIONES d JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+        ON pv.idBranch=d.idBranch AND pv.idCuenta=d.idCuenta AND pv.idPuntoVenta=d.idPuntoVenta
+      WHERE d.idBranch=@idBranch AND d.idCuenta=@idCuenta
+        AND CAST(DATEADD(HOUR,-4,d.FechaAlta) AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        ${geoDev}`);
+    const reporte = construirReporteVentas(datos.recordset);
+    const devoluciones = dev.recordset[0];
+    return reply.send({ ...reporte, devoluciones,
+      totales: { ...reporte.totales, DevolucionesUSD: Number(devoluciones.TotalUSD),
+                 NetoUSD: Math.round((Number(reporte.totales.TotalUSD) - Number(devoluciones.TotalUSD)) * 100) / 100 } });
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error en reporte de ventas: ' + err.message });

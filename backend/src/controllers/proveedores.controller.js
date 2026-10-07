@@ -2,6 +2,7 @@ import { prepararMoneda } from '../services/moneda.service.js';
 import { validarRecepcion } from '../services/recepcionOrden.service.js';
 // src/controllers/proveedores.controller.js
 import { getPool, sql } from '../db/sqlserver.js';
+import { conIdUnico } from '../db/idUnico.js';
 import { emitirCuenta } from '../services/cuentas.service.js';
 
 // ── Helper ─────────────────────────────────────────────────────────────────
@@ -144,27 +145,30 @@ export async function crearProveedor(request, reply) {
 
   try {
     const pool = await getPool();
-    const nuevoId = await nextId(pool, 'VIDA_PROVEEDORES', 'idProveedor', idBranch, idCuenta);
-
-    await pool.request()
-      .input('idBranch',    sql.BigInt,      idBranch)
-      .input('idCuenta',    sql.BigInt,      idCuenta)
-      .input('idProveedor', sql.BigInt,      nuevoId)
-      .input('Nombre',      sql.VarChar(200), Nombre)
-      .input('RIF',         sql.VarChar(50),  RIF || null)
-      .input('Contacto',    sql.VarChar(200), Contacto || null)
-      .input('Email',       sql.VarChar(100), Email || null)
-      .input('Telefono',    sql.VarChar(50),  Telefono || null)
-      .input('Direccion',   sql.VarChar(500), Direccion || null)
-      .input('Ciudad',      sql.VarChar(100), Ciudad || null)
-      .input('Notas',       sql.VarChar(500), Notas || null)
-      .input('UsuAlta',     sql.VarChar(20),  String(idUsuario))
-      .query(`INSERT INTO VIDA_PROVEEDORES
-                (idBranch, idCuenta, idProveedor, Nombre, RIF, Contacto,
-                 Email, Telefono, Direccion, Ciudad, Notas, UsuAlta)
-              VALUES
-                (@idBranch, @idCuenta, @idProveedor, @Nombre, @RIF, @Contacto,
-                 @Email, @Telefono, @Direccion, @Ciudad, @Notas, @UsuAlta)`);
+    // id con MAX()+1: si otra alta concurrente toma el mismo, se reintenta
+    const nuevoId = await conIdUnico(async () => {
+      const nuevoId = await nextId(pool, 'VIDA_PROVEEDORES', 'idProveedor', idBranch, idCuenta);
+      await pool.request()
+        .input('idBranch',    sql.BigInt,      idBranch)
+        .input('idCuenta',    sql.BigInt,      idCuenta)
+        .input('idProveedor', sql.BigInt,      nuevoId)
+        .input('Nombre',      sql.VarChar(200), Nombre)
+        .input('RIF',         sql.VarChar(50),  RIF || null)
+        .input('Contacto',    sql.VarChar(200), Contacto || null)
+        .input('Email',       sql.VarChar(100), Email || null)
+        .input('Telefono',    sql.VarChar(50),  Telefono || null)
+        .input('Direccion',   sql.VarChar(500), Direccion || null)
+        .input('Ciudad',      sql.VarChar(100), Ciudad || null)
+        .input('Notas',       sql.VarChar(500), Notas || null)
+        .input('UsuAlta',     sql.VarChar(20),  String(idUsuario))
+        .query(`INSERT INTO VIDA_PROVEEDORES
+                  (idBranch, idCuenta, idProveedor, Nombre, RIF, Contacto,
+                   Email, Telefono, Direccion, Ciudad, Notas, UsuAlta)
+                VALUES
+                  (@idBranch, @idCuenta, @idProveedor, @Nombre, @RIF, @Contacto,
+                   @Email, @Telefono, @Direccion, @Ciudad, @Notas, @UsuAlta)`);
+      return nuevoId;
+    });
 
     return reply.code(201).send({ message: 'Proveedor creado', idProveedor: nuevoId });
   } catch (err) {

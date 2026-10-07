@@ -96,3 +96,15 @@ test('cuentas: región en solo lectura para ADMIN_PAIS/ADMIN_ESTADO; ADMIN de su
   assert.deepEqual(await alcanceCuentas(u('ADMIN_PAIS', { idPais: '1' }), poolMatriz), { verTodo: false, region: true, soloCxcDe: null });
   assert.deepEqual(await alcanceCuentas(u('ADMIN', { idPuntoVenta: '3' }), poolMatriz), { verTodo: false, region: false, soloCxcDe: '3' });
 });
+
+import { ubicacionEnAlcance } from '../src/services/alcance.service.js';
+test('ubicar tiendas: cada rol solo dentro de su región', () => {
+  assert.equal(ubicacionEnAlcance({ TipoUsuario: 'SUPER_ADMIN' }, { idPais: 9, idEstado: 9 }), true);
+  assert.equal(ubicacionEnAlcance({ TipoUsuario: 'ADMIN_ESTADO', idEstado: 5 }, { idPais: 1, idEstado: 5 }), true);
+  assert.equal(ubicacionEnAlcance({ TipoUsuario: 'ADMIN_ESTADO', idEstado: 5 }, { idPais: 1, idEstado: 6 }), false);
+  assert.equal(ubicacionEnAlcance({ TipoUsuario: 'ADMIN_ESTADO', idEstado: null }, { idEstado: 5 }), false);
+  assert.equal(ubicacionEnAlcance({ TipoUsuario: 'ADMIN_PAIS', idPais: 1 }, { idPais: 1, idEstado: 7 }), true);
+  assert.equal(ubicacionEnAlcance({ TipoUsuario: 'ADMIN_PAIS', idPais: 1 }, { idPais: 2 }), false);
+  assert.equal(ubicacionEnAlcance({ TipoUsuario: 'ADMIN_PAIS', idPais: null }, { idPais: 2 }), true);
+  assert.equal(ubicacionEnAlcance({ TipoUsuario: 'ADMIN', idPuntoVenta: 3 }, { idPais: 1, idEstado: 5 }), false);
+});
