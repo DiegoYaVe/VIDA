@@ -3,6 +3,7 @@ import api from '../services/api.js';
 import {useToast} from './Toast.jsx';
 import {getQueue} from '../services/offlineQueue.js';
 import {useAuthStore} from '../store/authStore.js';
+import {useVentasEnRevision} from './VentasOfflineRevision.jsx';
 
 export default function ArqueoCaja({turno,ventas,esperado:espProp,onClose,onCerrado}) {
  const toast=useToast();
@@ -10,6 +11,7 @@ export default function ArqueoCaja({turno,ventas,esperado:espProp,onClose,onCerr
  const [conteo,setConteo]=useState({USD:'',VES:''});
  const [observaciones,setObservaciones]=useState('');
  const [loading,setLoading]=useState(false),[cerrado,setCerrado]=useState(null);
+ const {pendientes:enRevision}=useVentasEnRevision(turno.idPuntoVenta);
  async function confirmar() {
   if(['USD','VES'].some(m=>conteo[m]===''||!Number.isFinite(Number(conteo[m]))||Number(conteo[m])<0)) return toast.error('Ingresa ambos conteos; usa cero si no hay efectivo');
   setLoading(true);
@@ -26,6 +28,7 @@ export default function ArqueoCaja({turno,ventas,esperado:espProp,onClose,onCerr
   <h2 className="text-xl font-bold">{cerrado?'Turno cerrado':'Arqueo por moneda'}</h2>
   <p className="text-sm text-gray-500">Cuenta dólares y bolívares por separado. Las tarjetas no forman parte del efectivo.</p>
   {!cerrado&&<p className="text-xs text-amber-700">Antes de cerrar, sincroniza las ventas pendientes de todos los equipos de esta tienda.</p>}
+  {!cerrado&&enRevision.length>0&&<p role="alert" className="text-xs text-red-700 bg-red-50 rounded-lg p-2">Esta tienda tiene {enRevision.length} venta{enRevision.length===1?'':'s'} offline rechazada{enRevision.length===1?'':'s'} (${enRevision.reduce((s,v)=>s+Number(v.TotalUSD||0),0).toFixed(2)}) sin resolver: su efectivo está en la caja pero no en el sistema, así que el arqueo puede dar sobrante. Resuélvelas en Pedidos → Ventas offline rechazadas.</p>}
   {['USD','VES'].map(m=>{
    // Esperado autoritativo del servidor (incluye movimientos de caja); si no
    // llega, se recompone con apertura + ventas en efectivo de esa moneda.

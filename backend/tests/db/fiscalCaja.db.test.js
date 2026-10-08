@@ -9,6 +9,7 @@ const F = await import('../../src/services/factura.service.js');
 const D = await import('../../src/services/devolucion.service.js');
 const { turnoDeLaVenta } = await import('../../src/services/turnoVenta.service.js');
 const { calcularTotales } = await import('../../src/controllers/caja.controller.js');
+const R = await import('../../src/services/ventasRevision.service.js');
 
 const opts = { skip: !DB && 'requiere RUN_DB_TESTS=1' };
 const receptor = { Documento: 'V-12345678', Nombre: 'Cliente de prueba' };
@@ -126,4 +127,25 @@ test('ventas offline tardías: van a su turno y no suman al cierre', opts, () =>
   assert.equal(Number(tot.NumTransacciones), 1);
   await q(`UPDATE VIDA_PEDIDOS SET idTurno=${abierto}, VentaTardia=1 WHERE idBranch=1 AND idCuenta=1 AND idPedido=${v.idPedido}`);
   assert.equal(Number((await calcularTotales(tx, 1, 1, v.pv, h(-1), null, abierto)).NumTransacciones), 0);
+}));
+
+test('ventas offline rechazadas: se guardan una vez, cuentan intentos y se resuelven una sola vez', opts, () => enTransaccionRevertida(async (tx) => {
+  const ids = { idBranch: 1, idCuenta: 1, idUsuario: 1 };
+  const venta = { ClienteUUID: 'test-rev-' + Date.now(), idPuntoVenta: 1, FechaVenta: new Date().toISOString(),
+    items: [{ idProducto: 999999, Cantidad: 2, PrecioUnitario: 1.25 }], CuponDescuentoUSD: 0.5 };
+  assert.equal(await R.guardarEnRevision(tx, ids, venta, 'Producto inexistente'), 'PENDIENTE');
+  assert.equal(await R.guardarEnRevision(tx, ids, venta, 'Sigue inexistente'), 'PENDIENTE');
+  let f = await R.obtenerEnRevision(tx, ids, venta.ClienteUUID);
+  assert.equal(f.Intentos, 2); assert.equal(f.Motivo, 'Sigue inexistente'); assert.equal(Number(f.TotalUSD), 2);
+  assert.deepEqual(JSON.parse(f.VentaJSON).items, venta.items);
+  assert.equal(await R.marcarAnulada(tx, ids, venta.ClienteUUID, 'Venta duplicada en otro equipo'), true);
+  // Ya resuelta: ni se reanula, ni se registra, ni un reenvío del POS la reabre
+  assert.equal(await R.marcarAnulada(tx, ids, venta.ClienteUUID, 'otra vez'), false);
+  assert.equal(await R.marcarRegistrada(tx, ids, venta.ClienteUUID, 1), false);
+  assert.equal(await R.guardarEnRevision(tx, ids, venta, 'reenviada'), 'ANULADA');
+  f = await R.obtenerEnRevision(tx, ids, venta.ClienteUUID);
+  assert.equal(f.Intentos, 2); assert.equal(f.Resolucion, 'Venta duplicada en otro equipo');
+  // La BD exige quién y cuándo resolvió
+  await assert.rejects(new sql.Request(tx).query(
+    `UPDATE VIDA_POS_VENTAS_REVISION SET Status='REGISTRADA', idPedido=NULL WHERE idBranch=1 AND idCuenta=1 AND ClienteUUID='${venta.ClienteUUID}'`));
 }));

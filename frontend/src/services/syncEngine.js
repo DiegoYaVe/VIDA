@@ -53,10 +53,13 @@ export async function syncNow() {
     for (const s of res.data.synced || []) {
       await removeFromQueue(s.ClienteUUID);
     }
-    // Rechazos del servidor (motivo permanente, ej. items inválidos):
-    // se reintentan hasta 5 veces y luego se descartan para no bloquear la cola
+    // Rechazos del servidor: si quedó guardada en revisión (el administrador
+    // la resuelve en Pedidos), sale de la cola; un fallo transitorio se
+    // reintenta sin contar. Un servidor anterior no distingue: se cuenta.
     for (const f of res.data.failed || []) {
-      if (f.ClienteUUID) await marcarFallo(f.ClienteUUID, f.motivo);
+      if (!f.ClienteUUID) continue;
+      if (f.enRevision) await removeFromQueue(f.ClienteUUID);
+      else if (!f.transitorio) await marcarFallo(f.ClienteUUID, f.motivo);
     }
 
     lastSyncAt = new Date();

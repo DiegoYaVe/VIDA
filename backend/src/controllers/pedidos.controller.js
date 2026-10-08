@@ -6,8 +6,9 @@ import { broadcast } from '../ws/ws.manager.js';
 import { enviarPush } from '../services/push.service.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 import { fechaCaracas } from '../services/fechas.service.js';
-import { tiendaEnAlcance, filtroTiendasRed } from '../services/alcance.service.js';
+import { tiendaEnAlcance, filtroTiendasRed, esRed } from '../services/alcance.service.js';
 import { turnoDeLaVenta } from '../services/turnoVenta.service.js';
+import { esRechazoPermanente, guardarEnRevision, obtenerEnRevision, marcarRegistrada, marcarAnulada, anotarFallo } from '../services/ventasRevision.service.js';
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
@@ -616,25 +617,28 @@ export async function sincronizarVentasOffline(request, reply) {
   const synced = [];
   const failed = [];
 
+  const rechazo = (mensaje) => Object.assign(new Error(mensaje), { statusCode: 422 });
   for (const venta of ventas) {
     const uuid = typeof venta?.ClienteUUID === 'string' ? venta.ClienteUUID.slice(0, 40) : null;
+    let previa = null;
     try {
       if (!uuid) {
         failed.push({ ClienteUUID: null, motivo: 'ClienteUUID es requerido' });
         continue;
       }
-      if (!venta.idPuntoVenta || !Array.isArray(venta.items) || venta.items.length === 0) {
-        failed.push({ ClienteUUID: uuid, motivo: 'idPuntoVenta e items son requeridos' });
+      // Ya anulada por un administrador: no se registra; el POS la suelta
+      previa = await obtenerEnRevision(pool, { idBranch, idCuenta }, uuid);
+      if (previa?.Status === 'ANULADA') {
+        failed.push({ ClienteUUID: uuid, motivo: `Anulada en revisión: ${previa.Resolucion}`, enRevision: true });
         continue;
       }
+      if (!venta.idPuntoVenta || !Array.isArray(venta.items) || venta.items.length === 0)
+        throw rechazo('idPuntoVenta e items son requeridos');
       const itemInvalido = venta.items.some(it =>
         !it.idProducto || !(parseFloat(it.Cantidad) > 0) || !(parseFloat(it.PrecioUnitario) >= 0));
-      if (itemInvalido) {
-        failed.push({ ClienteUUID: uuid, motivo: 'Items con cantidad o precio inválido' });
-        continue;
-      }
+      if (itemInvalido) throw rechazo('Items con cantidad o precio inválido');
 
-      if (!(await tiendaEnAlcance(request.user, venta.idPuntoVenta, pool))) throw new Error('Tienda no autorizada');
+      if (!(await tiendaEnAlcance(request.user, venta.idPuntoVenta, pool))) throw rechazo('Tienda no autorizada');
 
       // Idempotencia: si el UUID ya está registrado, se responde como synced
       const dupR = await pool.request()
@@ -647,6 +651,8 @@ export async function sincronizarVentasOffline(request, reply) {
       }
 
       const res = await procesarVentaOffline(pool, { venta: { ...venta, ClienteUUID: uuid }, idBranch, idCuenta, idUsuario });
+      // Estaba en revisión y ahora entró (p. ej. reenviada tras corregir el catálogo)
+      if (previa?.Status === 'PENDIENTE') await marcarRegistrada(pool, { idBranch, idCuenta, idUsuario }, uuid, res.idPedido);
       synced.push({ ClienteUUID: uuid, idPedido: res.idPedido, requiereRevision: res.requiereRevision, ventaTardia: res.ventaTardia });
 
       broadcast(idBranch, idCuenta, {
@@ -670,11 +676,137 @@ export async function sincronizarVentasOffline(request, reply) {
         }
       }
       request.log.error(err);
-      failed.push({ ClienteUUID: uuid, motivo: err.message });
+      // Rechazo que no se arregla reintentando: pasa a revisión en el servidor
+      // (el dinero ya se cobró) y el POS la saca de su cola. Si ni eso se pudo
+      // guardar, sigue en la cola y se reintenta.
+      if (uuid && esRechazoPermanente(err)) {
+        try {
+          await guardarEnRevision(pool, { idBranch, idCuenta, idUsuario }, { ...venta, ClienteUUID: uuid }, err.message);
+          failed.push({ ClienteUUID: uuid, motivo: err.message, enRevision: true });
+          continue;
+        } catch (e2) { request.log.error(e2); }
+      }
+      failed.push({ ClienteUUID: uuid, motivo: err.message, transitorio: true });
     }
   }
 
   return reply.send({ synced, failed });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// VENTAS OFFLINE EN REVISIÓN (rechazadas al sincronizar)
+// GET  /pedidos/offline-revision?status=PENDIENTE&idPuntoVenta=
+// POST /pedidos/offline-revision/:uuid/reintentar
+// POST /pedidos/offline-revision/:uuid/anular  { Motivo }
+// ══════════════════════════════════════════════════════════════════════════
+export async function listarVentasRevision(request, reply) {
+  const { idBranch, idCuenta, TipoUsuario, idPuntoVenta: pvUsuario } = request.user;
+  const status = ['PENDIENTE', 'REGISTRADA', 'ANULADA'].includes(request.query?.status) ? request.query.status : 'PENDIENTE';
+  try {
+    const pool = await getPool();
+    const req = pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('status', sql.VarChar(12), status);
+    let filtro = '';
+    if (!esRed({ TipoUsuario })) { req.input('pvU', sql.BigInt, pvUsuario ?? null); filtro += ' AND r.idPuntoVenta=@pvU'; }
+    else filtro += filtroTiendasRed(request.user, 'r.idPuntoVenta', req);
+    const pv = Number(request.query?.idPuntoVenta);
+    if (Number.isSafeInteger(pv) && pv > 0) { req.input('pv', sql.BigInt, pv); filtro += ' AND r.idPuntoVenta=@pv'; }
+    const r = await req.query(`
+      SELECT TOP 200 r.ClienteUUID, r.idPuntoVenta, pv.NomComercial AS NombreSucursal, r.idUsuario,
+             u.Nombre AS NombreCajero, r.TotalUSD, r.FechaVenta, r.Motivo, r.Intentos, r.Status,
+             r.idPedido, r.Resolucion, r.FechaAlta, r.FechaResuelta, r.VentaJSON
+      FROM VIDA_POS_VENTAS_REVISION r
+      LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA pv ON pv.idBranch=r.idBranch AND pv.idCuenta=r.idCuenta AND pv.idPuntoVenta=r.idPuntoVenta
+      LEFT JOIN VIDA_CUENTA_USUARIOS u ON u.idBranch=r.idBranch AND u.idCuenta=r.idCuenta AND u.idUsuario=r.idUsuario
+      WHERE r.idBranch=@idBranch AND r.idCuenta=@idCuenta AND r.Status=@status ${filtro}
+      ORDER BY r.FechaAlta DESC`);
+    const ventas = r.recordset.map(({ VentaJSON, ...f }) => {
+      let v = null; try { v = JSON.parse(VentaJSON); } catch { /* se muestra sin detalle */ }
+      return { f, v };
+    });
+    const ids = [...new Set(ventas.flatMap(({ v }) => (v?.items || []).map(i => Number(i.idProducto)))
+      .filter(n => Number.isSafeInteger(n) && n > 0))].slice(0, 500);
+    const nombres = new Map();
+    if (ids.length) {
+      const pr = await pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+        .query(`SELECT idProducto, Nombre FROM VIDA_INVENTARIO_PRODUCTOS
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProducto IN (${ids.join(',')})`);
+      for (const p of pr.recordset) nombres.set(String(p.idProducto), p.Nombre);
+    }
+    const data = ventas.map(({ f, v }) => {
+      return { ...f,
+        Items: (v?.items || []).map(i => ({ idProducto: i.idProducto, Nombre: nombres.get(String(i.idProducto)) ?? null, Cantidad: i.Cantidad, PrecioUnitario: i.PrecioUnitario })),
+        Moneda: v?.PagoMoneda?.Moneda ?? null, MetodoPago: v?.PagoMoneda?.Metodo ?? v?.MetodoPago ?? null };
+    });
+    return reply.send({ data });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'No se pudieron consultar las ventas en revisión' });
+  }
+}
+
+async function ventaRevisionOperable(request, reply, pool) {
+  const { idBranch, idCuenta } = request.user;
+  const fila = await obtenerEnRevision(pool, { idBranch, idCuenta }, String(request.params.uuid).slice(0, 40));
+  if (!fila || !(await tiendaEnAlcance(request.user, fila.idPuntoVenta, pool))) { reply.code(404).send({ error: 'Venta no encontrada' }); return null; }
+  if (fila.Status !== 'PENDIENTE') { reply.code(409).send({ error: 'La venta ya fue resuelta' }); return null; }
+  return fila;
+}
+
+export async function reintentarVentaRevision(request, reply) {
+  const { idBranch, idCuenta, idUsuario } = request.user;
+  try {
+    const pool = await getPool();
+    const fila = await ventaRevisionOperable(request, reply, pool);
+    if (!fila) return reply;
+    const existente = async () => (await pool.request().input('uuid', sql.VarChar(40), fila.ClienteUUID)
+      .input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta)
+      .query(`SELECT idPedido FROM VIDA_PEDIDOS WHERE ClienteUUID=@uuid AND idBranch=@b AND idCuenta=@c`)).recordset[0];
+    let idPedido = (await existente())?.idPedido, res = null;
+    if (!idPedido) {
+      // Se registra a nombre del cajero que cobró: la cotización es suya
+      try {
+        res = await procesarVentaOffline(pool, { venta: JSON.parse(fila.VentaJSON), idBranch, idCuenta, idUsuario: fila.idUsuario });
+        idPedido = res.idPedido;
+      } catch (err) {
+        if (err.number === 2601 || err.number === 2627) idPedido = (await existente())?.idPedido;
+        if (!idPedido) {
+          if (!esRechazoPermanente(err)) throw err;
+          await anotarFallo(pool, { idBranch, idCuenta }, fila.ClienteUUID, err.message);
+          return reply.code(422).send({ error: `Sigue sin poder registrarse: ${err.message}` });
+        }
+      }
+    }
+    await marcarRegistrada(pool, { idBranch, idCuenta, idUsuario }, fila.ClienteUUID, idPedido);
+    await registrarAuditoria(pool, { idBranch, idCuenta, entityType: 'PEDIDO', entityId: idPedido,
+      accion: 'VENTA_OFFLINE_REVISION_REGISTRADA', actor: idUsuario,
+      data: { ClienteUUID: fila.ClienteUUID, idPuntoVenta: fila.idPuntoVenta, idCajero: fila.idUsuario, MotivoRechazo: fila.Motivo } }, request.log);
+    if (res) broadcast(idBranch, idCuenta, { tipo: 'pedido:nuevo', idPedido, Canal: 'POS', idPuntoVenta: fila.idPuntoVenta, esOffline: true });
+    return reply.send({ ok: true, idPedido, requiereRevision: !!res?.requiereRevision, ventaTardia: !!res?.ventaTardia });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(503).send({ error: 'No se pudo reintentar ahora; prueba de nuevo' });
+  }
+}
+
+export async function anularVentaRevision(request, reply) {
+  const { idBranch, idCuenta, idUsuario } = request.user;
+  const motivo = String(request.body?.Motivo || '').trim();
+  if (motivo.length < 10) return reply.code(400).send({ error: 'Explica en al menos 10 caracteres por qué se anula (p. ej. qué se hizo con el dinero)' });
+  try {
+    const pool = await getPool();
+    const fila = await ventaRevisionOperable(request, reply, pool);
+    if (!fila) return reply;
+    if (!(await marcarAnulada(pool, { idBranch, idCuenta, idUsuario }, fila.ClienteUUID, motivo.slice(0, 500))))
+      return reply.code(409).send({ error: 'La venta ya fue resuelta' });
+    await registrarAuditoria(pool, { idBranch, idCuenta, entityType: 'VENTA_OFFLINE', entityId: fila.ClienteUUID,
+      accion: 'VENTA_OFFLINE_REVISION_ANULADA', actor: idUsuario,
+      data: { idPuntoVenta: fila.idPuntoVenta, idCajero: fila.idUsuario, TotalUSD: fila.TotalUSD, MotivoRechazo: fila.Motivo, Motivo: motivo } }, request.log);
+    return reply.send({ ok: true });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'No se pudo anular la venta' });
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════

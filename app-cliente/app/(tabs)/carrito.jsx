@@ -226,6 +226,24 @@ export default function CarritoScreen() {
 
     setLoading(true);
     try {
+      // Pago Móvil: el comprobante se sube ANTES y viaja con el pedido; si la
+      // subida falla no se crea nada y el cliente puede reintentar.
+      let tokenComprobante = null;
+      if (metodoPago === 'PAGO_MOVIL') {
+        const fd = new FormData();
+        fd.append('file', {
+          uri: comprobante.uri,
+          name: comprobante.fileName || 'comprobante.jpg',
+          type: comprobante.mimeType || 'image/jpeg',
+        });
+        try {
+          const up = await api.post('/delivery/comprobante-previo', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+          tokenComprobante = up.data?.token;
+        } catch (e) {
+          Alert.alert('No se pudo enviar el comprobante', `${e.response?.data?.error || 'Revisa tu conexión'}. Tu pedido todavía no se creó: inténtalo de nuevo.`);
+          return;
+        }
+      }
       const payload = {
         idPuntoVenta,
         items: items.map((i) => ({
@@ -245,30 +263,10 @@ export default function CarritoScreen() {
           Moneda:metodoPago==='PAGO_MOVIL'?'VES':monedaEfectivo,
           MontoOriginal:(metodoPago==='PAGO_MOVIL'||monedaEfectivo==='VES')?totalVES:totalCobroUSD,
         }}:{}),
+        ...(tokenComprobante ? { Comprobante: { token: tokenComprobante, Referencia: referencia.trim() } } : {}),
       };
       const res = await api.post('/delivery/pedido', payload);
       const idPedido = res.data?.idPedido ?? res.data?.pedido?.idPedido;
-
-      // Pago Móvil: subir el comprobante — el admin lo revisa y aprueba
-      if (metodoPago === 'PAGO_MOVIL' && comprobante && idPedido) {
-        try {
-          const fd = new FormData();
-          fd.append('Referencia', referencia.trim());
-          fd.append('file', {
-            uri: comprobante.uri,
-            name: comprobante.fileName || `comprobante_${idPedido}.jpg`,
-            type: comprobante.mimeType || 'image/jpeg',
-          });
-          await api.post(`/delivery/pedido/${idPedido}/comprobante`, fd, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
-        } catch {
-          Alert.alert(
-            'Comprobante no enviado',
-            'Tu pedido se creó pero el comprobante no se pudo subir. Podrás mostrarlo al repartidor.'
-          );
-        }
-      }
 
       limpiarCarrito();
       quitarCupon();

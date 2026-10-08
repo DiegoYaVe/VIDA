@@ -14,6 +14,7 @@ import { plazoPagoMinutos, SQL_SEGUNDOS_SIN_PAGO } from '../../services/pagoMovi
 import path from 'path';
 import fs from 'fs';
 import { getConfigVal, nextIdTx } from './comun.js';
+import { guardarPrevio, rutaPrevio, tokenValido, dirComprobantes } from '../../services/comprobantePrevio.service.js';
 import { reembolsarPuntosPedido } from './puntos.js';
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -165,6 +166,24 @@ export async function subirComprobanteCliente(request, reply) {
     if (transaction) { try { await transaction.rollback(); } catch {} }
     // Sin fila en BD, la imagen queda huérfana: se borra.
     if (rutaArchivo) { try { fs.unlinkSync(rutaArchivo); } catch {} }
+    request.log.error(err);
+    return reply.code(err.statusCode || 500).send({ error: err.statusCode ? err.message : 'Error al subir comprobante' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// CLIENTE — COMPROBANTE ANTES DEL PEDIDO (multipart)
+// POST /delivery/comprobante-previo → { token }; el token va en el pedido
+// (Comprobante: { token, Referencia }) y ambos se registran juntos.
+// ══════════════════════════════════════════════════════════════════════════
+export async function subirComprobantePrevio(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  try {
+    const data = await request.file();
+    if (!data) return reply.code(400).send({ error: 'No se recibió el comprobante' });
+    const token = guardarPrevio({ idBranch, idCuenta, idCliente }, data.mimetype, await data.toBuffer());
+    return reply.code(201).send({ token });
+  } catch (err) {
     request.log.error(err);
     return reply.code(err.statusCode || 500).send({ error: err.statusCode ? err.message : 'Error al subir comprobante' });
   }
@@ -336,7 +355,7 @@ export async function crearPedidoApp(request, reply) {
     idPuntoVenta, items, DireccionEntrega,
     UbicacionEntregaLat, UbicacionEntregaLon,
     NotasCliente, MetodoPago = 'EFECTIVO',
-    PuntosUsar = 0, CuponCodigo = null, PagoMoneda = null,
+    PuntosUsar = 0, CuponCodigo = null, PagoMoneda = null, Comprobante = null,
   } = request.body;
 
   if (!idPuntoVenta || !items?.length) {
@@ -344,6 +363,13 @@ export async function crearPedidoApp(request, reply) {
   }
   const requiereAprobacionPago = MetodoPago === 'PAGO_MOVIL';
   const statusInicial = requiereAprobacionPago ? 'ESPERANDO_PAGO' : 'BUSCANDO_REPARTIDOR';
+  // Comprobante subido antes (app nueva): se registra con el pedido
+  let comprobantePrevio = null;
+  if (requiereAprobacionPago && Comprobante != null) {
+    const ruta = tokenValido(Comprobante.token) && rutaPrevio({ idBranch, idCuenta, idCliente }, Comprobante.token);
+    if (!ruta) return reply.code(422).send({ error: 'El comprobante ya no está disponible. Adjúntalo de nuevo.' });
+    comprobantePrevio = { ruta, ext: Comprobante.token.split('.').pop(), Referencia: String(Comprobante.Referencia || '').trim().slice(0, 100) || null };
+  }
   for (const item of items) {
     const cant = parseFloat(item.Cantidad);
     if (!item.idProducto || !(cant > 0)) {
@@ -568,19 +594,45 @@ export async function crearPedidoApp(request, reply) {
                   VALUES(@b,@c,@id,@cupon,@codigo,@cliente,@pedido,'DELIVERY',@d,@u)`);
       }
 
+      if (comprobantePrevio) {
+        // Copia definitiva con el nombre de siempre; el previo se borra al
+        // confirmar (si algo falla, el cliente puede reintentar con el mismo)
+        const filename = `comp_${idBranch}_${idCuenta}_${idPedido}_${Date.now()}.${comprobantePrevio.ext}`;
+        comprobantePrevio.final = path.join(dirComprobantes(), filename);
+        fs.copyFileSync(comprobantePrevio.ruta, comprobantePrevio.final);
+        await new sql.Request(transaction)
+          .input('idBranch',   sql.BigInt,       idBranch)
+          .input('idCuenta',   sql.BigInt,       idCuenta)
+          .input('idPedido',   sql.BigInt,       idPedido)
+          .input('ImagenURL',  sql.VarChar(500), `/uploads/comprobantes/${filename}`)
+          .input('Referencia', sql.VarChar(100), comprobantePrevio.Referencia)
+          .input('UsuAlta',    sql.VarChar(20),  `CLI:${idCliente}`)
+          .query(`INSERT INTO VIDA_PEDIDOS_COMPROBANTES
+                    (idBranch, idCuenta, idComprobante, idPedido, ImagenURL, Referencia, StatusRevision, UsuAlta)
+                  SELECT @idBranch, @idCuenta, ISNULL(MAX(idComprobante),0)+1, @idPedido, @ImagenURL, @Referencia, 'PENDIENTE', @UsuAlta
+                  FROM VIDA_PEDIDOS_COMPROBANTES WITH (UPDLOCK, HOLDLOCK)
+                  WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
+      }
+
       await transaction.commit();
     } catch (txErr) {
       try { await transaction.rollback(); } catch (rbErr) { request.log.error('Rollback falló: ' + rbErr.message); }
+      if (comprobantePrevio?.final) { try { fs.unlinkSync(comprobantePrevio.final); } catch {} }
       throw txErr;
     }
+    if (comprobantePrevio) { try { fs.unlinkSync(comprobantePrevio.ruta); } catch {} }
 
     // Pago Móvil se queda retenido hasta que un administrador apruebe el
     // comprobante. No inicia reloj, radio ni notificaciones de reparto antes.
     if (requiereAprobacionPago) {
+      // El panel se entera de que hay un comprobante esperando revisión
+      if (comprobantePrevio) broadcast(idBranch, idCuenta, {
+        tipo: 'pedido:actualizado', idPedido: Number(idPedido), StatusNuevo: 'ESPERANDO_PAGO', StatusPago: 'PENDIENTE',
+      });
       return reply.code(201).send({
         idPedido, status: statusInicial, StatusPago: 'PENDIENTE',
         TotalUSD, subtotal, descuentoPuntos, puntosUsados, descuentoCupon,
-        PagoMoneda: pagoSnapshot,
+        PagoMoneda: pagoSnapshot, ComprobanteRegistrado: !!comprobantePrevio,
       });
     }
 

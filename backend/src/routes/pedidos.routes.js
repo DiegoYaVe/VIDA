@@ -6,6 +6,7 @@ import {
   asignarRepartidor, subirComprobante, revisarComprobante,
   listarRepartidores, aprobarRepartidor, listarVentasPOS,
   sincronizarVentasOffline, resolverRevisionStock,
+  listarVentasRevision, reintentarVentaRevision, anularVentaRevision,
 } from '../controllers/pedidos.controller.js';
 
 const ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN'];
@@ -40,6 +41,18 @@ export async function pedidosRoutes(fastify) {
   fastify.patch('/pedidos/:idPedido/repartidor',
     { preHandler: [authenticate, requireRole(...ESCRITURA)] },
     asignarRepartidor);
+
+  // Ventas offline rechazadas al sincronizar: quedan en revisión en el servidor
+  // La caja también las lee (solo su tienda) para avisar al cerrar el turno
+  fastify.get('/pedidos/offline-revision',
+    { preHandler: [authenticate, requireRole(...CAJA)] },
+    listarVentasRevision);
+  fastify.post('/pedidos/offline-revision/:uuid/reintentar',
+    { preHandler: [authenticate, requireRole(...ESCRITURA)] },
+    reintentarVentaRevision);
+  fastify.post('/pedidos/offline-revision/:uuid/anular',
+    { preHandler: [authenticate, requireRole(...ESCRITURA)] },
+    anularVentaRevision);
 
   // Resolver venta offline sincronizada con stock insuficiente
   fastify.patch('/pedidos/:idPedido/revision-stock',

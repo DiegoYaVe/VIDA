@@ -16,7 +16,7 @@ import {
   guardarDireccionCliente,
   eliminarDireccionCliente,
   datosPagoMovil,
-  subirComprobanteCliente,
+  subirComprobanteCliente, subirComprobantePrevio,
   listarSucursales,
   tiendaPublica,
   listarProductosApp,
@@ -136,6 +136,11 @@ export async function deliveryRoutes(fastify) {
   fastify.post('/delivery/pedido/:idPedido/comprobante',
     { preHandler: [authenticateCliente] },
     subirComprobanteCliente);
+
+  // Comprobante de Pago Móvil antes de crear el pedido (se registran juntos)
+  fastify.post('/delivery/comprobante-previo',
+    { preHandler: [authenticateCliente] },
+    subirComprobantePrevio);
 
   fastify.post('/delivery/pedido/:idPedido/calificar',
     { preHandler: [authenticateCliente] },

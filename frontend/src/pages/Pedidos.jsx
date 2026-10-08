@@ -12,6 +12,7 @@ import { hoyCaracas } from '../utils/fechas.js';
 import { ModalFacturar, VistaFactura, puedeFacturar } from '../components/Factura.jsx';
 import { numeroDoc } from '../utils/libroVentas.mjs';
 import { ModalDevolucion, ROLES_DEVUELVEN } from '../components/Devolucion.jsx';
+import { BotonVentasRevision } from '../components/VentasOfflineRevision.jsx';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
@@ -707,6 +708,9 @@ export default function Pedidos() {
             </span>
           </button>
         )}
+
+        {/* Ventas offline que el servidor rechazó al sincronizar */}
+        <BotonVentasRevision usuario={usuario} onCambio={() => { cargar(1); setPage(1); }} />
 
         {/* Ventas offline con stock insuficiente pendientes de revisión */}
         {(revisionCount > 0 || filtRevision) && (
