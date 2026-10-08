@@ -50,10 +50,12 @@ export async function obtenerHidratacion(request, reply) {
       const k = dd.toISOString().slice(0, 10);
       historial.push({ fecha: k, vasos: mapa.get(k) || 0 });
     }
+    // Puntos del bono por cada 7 días de racha (se muestran en la app)
+    const bonoRacha = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'PuntosRachaHidratacion', '50')) || 50;
     return reply.send({
       ...cfg, hoy: hoyStr, vasosHoy, racha,
       mlHoy: vasosHoy * cfg.mlVaso, metaMl: cfg.meta * cfg.mlVaso,
-      historial,
+      historial, bonoRacha,
     });
   } catch (err) {
     request.log.error(err);

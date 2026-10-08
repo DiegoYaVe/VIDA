@@ -1,112 +1,76 @@
 import { useState } from 'react';
-import { View, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Dimensions, Image } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { Text, TextInput } from '../components/Texto';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
 import { ID_BRANCH, ID_CUENTA } from '../constants/config';
-import { colores, logos, radios } from '../constants/tema';
+import { colores, fuentes, logos } from '../constants/tema';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const VEHICULOS = ['Moto', 'Bicicleta', 'Carro'];
 
-const VEHICULOS = [
-  { key: 'Moto',      icon: 'bicycle' },
-  { key: 'Bicicleta', icon: 'bicycle-outline' },
-  { key: 'Carro',     icon: 'car-outline' },
-];
-
-function Campo({ icon, rightIcon, onRightPress, ...props }) {
+function Campo({ etiqueta, ...props }) {
   return (
     <View style={styles.campo}>
-      <Ionicons name={icon} size={19} color="#8C9BB0" style={{ marginRight: 8 }} />
-      <TextInput style={styles.campoInput} placeholderTextColor="#8C9BB0" {...props} />
-      {rightIcon ? (
-        <TouchableOpacity onPress={onRightPress} style={{ padding: 6 }}>
-          <Ionicons name={rightIcon} size={20} color="#8C9BB0" />
-        </TouchableOpacity>
-      ) : null}
+      <Text style={styles.etiqueta}>{etiqueta}</Text>
+      <TextInput style={styles.input} placeholderTextColor="#8C9BB0" {...props} />
     </View>
   );
 }
 
 export default function LoginScreen() {
-  const [tab, setTab] = useState('login');
+  const [modo, setModo] = useState('login'); // login | registro | pendiente
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [pendiente, setPendiente] = useState(false); // solicitud enviada o en revisión
 
-  // Login
   const [telefono, setTelefono] = useState('');
   const [password, setPassword] = useState('');
-  const [showPass, setShowPass] = useState(false);
 
-  // Registro
   const [nombre, setNombre] = useState('');
   const [telefonoReg, setTelefonoReg] = useState('');
   const [vehiculo, setVehiculo] = useState('Moto');
   const [placa, setPlaca] = useState('');
   const [passwordReg, setPasswordReg] = useState('');
-  const [showPassReg, setShowPassReg] = useState(false);
 
   const login = useAuthStore((s) => s.login);
 
+  const cambiar = (m) => { setModo(m); setError(''); };
+
   const handleLogin = async () => {
-    if (!telefono.trim()) {
-      setError('Ingresa tu número de teléfono');
-      return;
-    }
-    if (!password) {
-      setError('Ingresa tu contraseña');
-      return;
-    }
+    if (!telefono.trim()) return setError('Ingresa tu número de teléfono');
+    if (!password) return setError('Ingresa tu contraseña');
     setError('');
     setLoading(true);
     try {
       const res = await api.post('/delivery/repartidor/login', {
-        idBranch: ID_BRANCH,
-        idCuenta: ID_CUENTA,
-        Telefono: telefono.trim(),
-        Contrasena: password,
-        FcmToken: '',
+        idBranch: ID_BRANCH, idCuenta: ID_CUENTA, Telefono: telefono.trim(), Contrasena: password, FcmToken: '',
       });
-      const { token, repartidor } = res.data;
+      // El backend responde { idRepartidor, Nombre, token }
+      const { token } = res.data;
+      const repartidor = res.data.repartidor ?? { idRepartidor: res.data.idRepartidor, Nombre: res.data.Nombre };
       await AsyncStorage.setItem('vida_repartidor_token', token);
       login({ repartidor, token });
     } catch (e) {
-      if (e.response?.data?.codigo === 'PENDIENTE_APROBACION') {
-        setPendiente(true);
-      } else {
-        setError(e.response?.data?.error || e.message);
-      }
+      if (e.response?.data?.codigo === 'PENDIENTE_APROBACION') cambiar('pendiente');
+      else setError(e.response?.data?.error || e.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleRegistro = async () => {
-    if (!nombre.trim() || !telefonoReg.trim()) {
-      setError('Nombre y teléfono son obligatorios');
-      return;
-    }
-    if (!passwordReg || passwordReg.length < 6) {
-      setError('La contraseña es obligatoria (mínimo 6 caracteres)');
-      return;
-    }
+    if (!nombre.trim() || !telefonoReg.trim()) return setError('Nombre y teléfono son obligatorios');
+    if (!passwordReg || passwordReg.length < 6) return setError('La contraseña debe tener al menos 6 caracteres');
     setError('');
     setLoading(true);
     try {
       await api.post('/delivery/repartidor/registro', {
-        idBranch: ID_BRANCH,
-        idCuenta: ID_CUENTA,
-        Nombre: nombre.trim(),
-        Telefono: telefonoReg.trim(),
-        Vehiculo: vehiculo,
-        PlacaVehiculo: placa.trim() || undefined,
-        Contrasena: passwordReg,
+        idBranch: ID_BRANCH, idCuenta: ID_CUENTA, Nombre: nombre.trim(), Telefono: telefonoReg.trim(),
+        Vehiculo: vehiculo, PlacaVehiculo: placa.trim() || undefined, Contrasena: passwordReg,
       });
-      setPendiente(true);
+      cambiar('pendiente');
     } catch (e) {
       setError(e.response?.data?.error || e.message);
     } finally {
@@ -114,246 +78,118 @@ export default function LoginScreen() {
     }
   };
 
+  const boton = (texto, onPress) => (
+    <TouchableOpacity style={[styles.boton, loading && { opacity: 0.7 }]} onPress={onPress} disabled={loading} activeOpacity={0.9}>
+      {loading ? <ActivityIndicator color={colores.marino} /> : <Text style={styles.botonTexto}>{texto}</Text>}
+    </TouchableOpacity>
+  );
+
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['bottom']}>
       <StatusBar style="light" />
-
-
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Hero */}
-          <View style={styles.hero}>
-            <Image source={logos.completoOscuro} style={styles.logoImg} resizeMode="contain" accessibilityLabel="Comercializadora VIDA" />
-            <View style={styles.repartidorChip}>
-              <Text style={styles.repartidorChipText}>APP DE REPARTO</Text>
-            </View>
-            <Text style={styles.tagline}>Entrega en tu zona y cobra tus comisiones cada día.</Text>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={styles.marca}>
+            <Image source={logos.completoOscuro} style={styles.logo} resizeMode="contain" accessibilityLabel="Comercializadora VIDA" />
+            <View style={styles.chip}><Text style={styles.chipTexto}>APP DE REPARTO</Text></View>
+            <Text style={styles.lema}>Entrega en tu zona y cobra{'\n'}tus comisiones cada día.</Text>
           </View>
 
-          {/* Tarjeta */}
-          <View style={styles.card}>
-            {pendiente ? (
-              /* Estado: solicitud en revisión */
-              <View style={styles.pendienteWrap}>
-                <View style={styles.pendienteIcon}>
-                  <Ionicons name="hourglass-outline" size={38} color="#D69E2E" />
-                </View>
-                <Text style={styles.pendienteTitle}>Solicitud en revisión</Text>
-                <Text style={styles.pendienteText}>
-                  El administrador revisará tu solicitud. Te avisaremos cuando tu
-                  cuenta esté aprobada y puedas comenzar a repartir.
-                </Text>
-                <TouchableOpacity
-                  style={styles.pendienteBtn}
-                  onPress={() => { setPendiente(false); setTab('login'); setError(''); }}
-                >
-                  <Text style={styles.pendienteBtnText}>Volver</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                {/* Tabs */}
-                <View style={styles.tabs}>
-                  {['login', 'registro'].map(t => (
-                    <TouchableOpacity
-                      key={t}
-                      style={[styles.tabBtn, tab === t && styles.tabBtnActive]}
-                      onPress={() => { setTab(t); setError(''); }}
-                    >
-                      <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
-                        {t === 'login' ? 'Iniciar sesión' : 'Quiero repartir'}
-                      </Text>
+          {modo === 'login' && (
+            <View style={styles.form}>
+              <Campo etiqueta="Teléfono" placeholder="0414-0000000" keyboardType="phone-pad" value={telefono} onChangeText={setTelefono} />
+              <Campo etiqueta="Contraseña" placeholder="••••••••" secureTextEntry value={password} onChangeText={setPassword}
+                returnKeyType="done" onSubmitEditing={handleLogin} />
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+              {boton('Entrar', handleLogin)}
+            </View>
+          )}
+
+          {modo === 'registro' && (
+            <View style={styles.form}>
+              <Campo etiqueta="Nombre completo" placeholder="Carlos Rodríguez" value={nombre} onChangeText={setNombre} />
+              <Campo etiqueta="Teléfono" placeholder="0414-0000000" keyboardType="phone-pad" value={telefonoReg} onChangeText={setTelefonoReg} />
+              <View style={styles.campo}>
+                <Text style={styles.etiqueta}>Vehículo</Text>
+                <View style={styles.vehiculos}>
+                  {VEHICULOS.map(v => (
+                    <TouchableOpacity key={v} onPress={() => setVehiculo(v)} style={[styles.vehiculo, vehiculo === v && styles.vehiculoOn]}
+                      accessibilityRole="radio" accessibilityState={{ selected: vehiculo === v }}>
+                      <Text style={[styles.vehiculoTexto, vehiculo === v && { color: colores.marino }]}>{v}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
+              </View>
+              {vehiculo !== 'Bicicleta' && (
+                <Campo etiqueta="Placa" placeholder="AB123CD" autoCapitalize="characters" value={placa} onChangeText={setPlaca} />
+              )}
+              <Campo etiqueta="Contraseña" placeholder="Mínimo 6 caracteres" secureTextEntry value={passwordReg} onChangeText={setPasswordReg} />
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+              {boton('Enviar solicitud', handleRegistro)}
+            </View>
+          )}
 
-                {error ? (
-                  <View style={styles.alertError}>
-                    <Ionicons name="alert-circle" size={16} color="#E53E3E" />
-                    <Text style={styles.alertErrorText}>{error}</Text>
-                  </View>
-                ) : null}
+          {modo === 'pendiente' && (
+            <View style={[styles.form, styles.aviso]}>
+              <Text style={styles.avisoTitulo}>Tu solicitud está en revisión</Text>
+              <Text style={styles.avisoTexto}>La tienda revisa tus datos y te aprueba. Cuando esté lista podrás entrar con tu teléfono y contraseña.</Text>
+            </View>
+          )}
 
-                {tab === 'login' ? (
-                  <>
-                    <Text style={styles.cardTitle}>Bienvenido de vuelta</Text>
-                    <Text style={styles.cardSubtitle}>Ingresa con tu teléfono y contraseña</Text>
-                    <View style={{ gap: 10 }}>
-                      <Campo
-                        icon="call-outline"
-                        placeholder="04XX-XXXXXXX"
-                        keyboardType="phone-pad"
-                        value={telefono}
-                        onChangeText={setTelefono}
-                      />
-                      <Campo
-                        icon="lock-closed-outline"
-                        placeholder="Contraseña"
-                        secureTextEntry={!showPass}
-                        value={password}
-                        onChangeText={setPassword}
-                        rightIcon={showPass ? 'eye-off-outline' : 'eye-outline'}
-                        onRightPress={() => setShowPass(v => !v)}
-                        returnKeyType="done"
-                        onSubmitEditing={handleLogin}
-                      />
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.cardTitle}>Únete al equipo VIDA</Text>
-                    <Text style={styles.cardSubtitle}>
-                      Llena tus datos y el administrador aprobará tu cuenta
-                    </Text>
-                    <View style={{ gap: 10 }}>
-                      <Campo icon="person-outline" placeholder="Nombre completo *" value={nombre} onChangeText={setNombre} />
-                      <Campo icon="call-outline" placeholder="Teléfono * (04XX-XXXXXXX)" keyboardType="phone-pad" value={telefonoReg} onChangeText={setTelefonoReg} />
-
-                      {/* Selector de vehículo */}
-                      <View style={styles.vehiculosRow}>
-                        {VEHICULOS.map(v => (
-                          <TouchableOpacity
-                            key={v.key}
-                            style={[styles.vehiculoBtn, vehiculo === v.key && styles.vehiculoBtnActive]}
-                            onPress={() => setVehiculo(v.key)}
-                          >
-                            <Ionicons name={v.icon} size={20} color={vehiculo === v.key ? '#fff' : '#4B5B73'} />
-                            <Text style={[styles.vehiculoText, vehiculo === v.key && styles.vehiculoTextActive]}>
-                              {v.key}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-
-                      {vehiculo !== 'Bicicleta' && (
-                        <Campo icon="pricetag-outline" placeholder="Placa del vehículo" autoCapitalize="characters" value={placa} onChangeText={setPlaca} />
-                      )}
-
-                      <Campo
-                        icon="lock-closed-outline"
-                        placeholder="Contraseña * (mínimo 6 caracteres)"
-                        secureTextEntry={!showPassReg}
-                        value={passwordReg}
-                        onChangeText={setPasswordReg}
-                        rightIcon={showPassReg ? 'eye-off-outline' : 'eye-outline'}
-                        onRightPress={() => setShowPassReg(v => !v)}
-                      />
-                    </View>
-                  </>
-                )}
-
-                <TouchableOpacity
-                  onPress={tab === 'login' ? handleLogin : handleRegistro}
-                  disabled={loading}
-                  activeOpacity={0.9}
-                  style={loading ? { opacity: 0.7 } : null}
-                >
-                  <View style={styles.primaryBtn}>
-                    {loading
-                      ? <ActivityIndicator color={colores.marino} />
-                      : <>
-                          <Text style={styles.primaryBtnText}>
-                            {tab === 'login' ? 'Comenzar a repartir' : 'Enviar solicitud'}
-                          </Text>
-                          <Ionicons name="arrow-forward" size={18} color={colores.marino} />
-                        </>
-                    }
-                  </View>
+          <View style={styles.registro}>
+            {modo === 'login' ? (
+              <>
+                <Text style={styles.registroTitulo}>¿Quieres repartir con VIDA?</Text>
+                <Text style={styles.registroTexto}>Regístrate con tu moto o vehículo. La tienda revisa tus datos y te aprueba.</Text>
+                <TouchableOpacity onPress={() => cambiar('registro')} style={styles.enlace}>
+                  <Text style={styles.enlaceTexto}>Quiero ser repartidor</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.registroTitulo}>¿Ya tienes cuenta?</Text>
+                <TouchableOpacity onPress={() => cambiar('login')} style={styles.enlace}>
+                  <Text style={styles.enlaceTexto}>Entrar con mi teléfono</Text>
                 </TouchableOpacity>
               </>
             )}
           </View>
-
-          {/* Beneficios */}
-          <View style={styles.beneficios}>
-            {[
-              { icon: 'cash-outline', texto: 'Gana comisión por entrega' },
-              { icon: 'notifications-outline', texto: 'Pedidos cercanos al instante' },
-              { icon: 'map-outline', texto: 'Navegación integrada' },
-            ].map((b) => (
-              <View key={b.icon} style={styles.beneficioRow}>
-                <View style={styles.beneficioIcon}>
-                  <Ionicons name={b.icon} size={16} color={colores.verde} />
-                </View>
-                <Text style={styles.beneficioText}>{b.texto}</Text>
-              </View>
-            ))}
-          </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colores.marino },
-  scroll: { flexGrow: 1, paddingBottom: 30 },
+  scroll: { flexGrow: 1, paddingHorizontal: 24 },
 
-  hero: { alignItems: 'center', paddingTop: SCREEN_HEIGHT * 0.06, paddingBottom: 24, paddingHorizontal: 24, gap: 12 },
-  logoImg: { width: 270, height: 130 },
-  repartidorChip: { backgroundColor: colores.verde, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
-  repartidorChipText: { color: colores.marino, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 },
-  tagline: { color: colores.celesteClaro, fontSize: 15, fontWeight: '600', textAlign: 'center' },
+  marca: { marginTop: 90, gap: 10 },
+  logo: { width: 280, height: 135 },
+  chip: { alignSelf: 'flex-start', backgroundColor: colores.verde, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
+  chipTexto: { color: colores.marino, fontWeight: '800', fontSize: 13, letterSpacing: 1 },
+  lema: { marginTop: 10, fontFamily: fuentes.tituloMedio, fontSize: 20, lineHeight: 26, color: colores.celesteClaro },
 
-  card: {
-    marginHorizontal: 18, backgroundColor: colores.blanco, borderRadius: radios.enorme, padding: 22,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.3, shadowRadius: 32, elevation: 14,
-  },
-  tabs: { flexDirection: 'row', backgroundColor: colores.fondo, borderRadius: 14, padding: 4, marginBottom: 16 },
-  tabBtn: { flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: 'center' },
-  tabBtnActive: { backgroundColor: colores.marino },
-  tabText: { color: colores.textoSuave, fontWeight: '700', fontSize: 14 },
-  tabTextActive: { color: colores.blanco, fontWeight: '800' },
+  form: { marginTop: 40, marginBottom: 24, gap: 14 },
+  campo: { gap: 6 },
+  etiqueta: { fontSize: 14, fontWeight: '800', color: colores.blanco },
+  input: { height: 54, borderRadius: 16, backgroundColor: colores.blanco, paddingHorizontal: 16, fontSize: 16, color: colores.marino },
+  error: { backgroundColor: colores.errorClaro, color: colores.error, borderRadius: 12, padding: 10, fontSize: 14, fontWeight: '700' },
+  boton: { marginTop: 6, height: 58, borderRadius: 18, backgroundColor: colores.celeste, alignItems: 'center', justifyContent: 'center' },
+  botonTexto: { color: colores.marino, fontWeight: '800', fontSize: 17 },
 
-  cardTitle: { fontSize: 20, fontWeight: '800', color: colores.marino, marginBottom: 4 },
-  cardSubtitle: { fontSize: 14, color: colores.textoSuave, marginBottom: 16, lineHeight: 20 },
+  vehiculos: { flexDirection: 'row', gap: 8 },
+  vehiculo: { flex: 1, height: 48, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)', alignItems: 'center', justifyContent: 'center' },
+  vehiculoOn: { backgroundColor: colores.celeste, borderColor: colores.celeste },
+  vehiculoTexto: { color: colores.blanco, fontWeight: '800', fontSize: 15 },
 
-  alertError: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colores.errorClaro,
-    borderRadius: 12, padding: 11, borderWidth: 1, borderColor: '#F5C2C2', marginBottom: 12,
-  },
-  alertErrorText: { color: colores.error, fontSize: 13, flex: 1 },
+  aviso: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, padding: 16, gap: 6 },
+  avisoTitulo: { fontWeight: '800', fontSize: 17, color: colores.blanco },
+  avisoTexto: { fontSize: 14, color: colores.celesteClaro, lineHeight: 20 },
 
-  campo: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: colores.blanco,
-    borderWidth: 1.5, borderColor: colores.bordeFuerte, borderRadius: radios.medio, paddingHorizontal: 14, minHeight: 52,
-  },
-  campoInput: { flex: 1, paddingVertical: 13, fontSize: 16, color: colores.marino },
-
-  vehiculosRow: { flexDirection: 'row', gap: 8 },
-  vehiculoBtn: {
-    flex: 1, alignItems: 'center', gap: 4, minHeight: 56, justifyContent: 'center',
-    backgroundColor: colores.fondo, borderRadius: 14, borderWidth: 1.5, borderColor: colores.borde,
-  },
-  vehiculoBtnActive: { backgroundColor: colores.marino, borderColor: colores.marino },
-  vehiculoText: { fontSize: 12, fontWeight: '800', color: colores.textoSuave },
-  vehiculoTextActive: { color: colores.blanco },
-
-  primaryBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderRadius: 18, minHeight: 58, marginTop: 18, backgroundColor: colores.celeste,
-  },
-  primaryBtnText: { color: colores.marino, fontSize: 17, fontWeight: '800' },
-
-  pendienteWrap: { alignItems: 'center', paddingVertical: 10 },
-  pendienteIcon: {
-    width: 76, height: 76, borderRadius: 38, backgroundColor: colores.avisoClaro,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
-  },
-  pendienteTitle: { fontSize: 20, fontWeight: '800', color: colores.marino, marginBottom: 8 },
-  pendienteText: { fontSize: 14, color: colores.textoSuave, textAlign: 'center', lineHeight: 20, marginBottom: 18 },
-  pendienteBtn: { borderWidth: 1.5, borderColor: colores.bordeFuerte, borderRadius: 14, paddingHorizontal: 28, minHeight: 46, justifyContent: 'center' },
-  pendienteBtnText: { color: colores.marino, fontWeight: '800', fontSize: 14 },
-
-  beneficios: { marginTop: 26, paddingHorizontal: 36, gap: 12 },
-  beneficioRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  beneficioIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colores.marinoClaro, alignItems: 'center', justifyContent: 'center' },
-  beneficioText: { color: colores.celesteClaro, fontSize: 14, fontWeight: '600' },
+  registro: { marginTop: 'auto', marginBottom: 30, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20, padding: 16, gap: 6 },
+  registroTitulo: { fontWeight: '800', fontSize: 15, color: colores.blanco },
+  registroTexto: { fontSize: 14, color: colores.celesteClaro, lineHeight: 20 },
+  enlace: { minHeight: 40, justifyContent: 'center', alignSelf: 'flex-start' },
+  enlaceTexto: { fontWeight: '800', fontSize: 15, color: colores.celeste, textDecorationLine: 'underline' },
 });

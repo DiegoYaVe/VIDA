@@ -2,6 +2,9 @@
 //  A) Pago Móvil VES: comprobante previo → pedido → aprobación → repartidor → entrega → factura
 //  B) Efectivo USD con IGTF (tienda contribuyente especial): pedido → entrega → liquidación → factura
 //  C) Venta offline rechazada que al reintentar SÍ se registra
+//  D) Efectivo combinado (parte USD con IGTF + resto en Bs) con cambio: cobro,
+//     saldos del repartidor por moneda, liquidación y factura
+//  E) Tarjeta (punto de venta al entregar): no suma efectivo al repartidor
 // Las facturas se emiten en una transacción REVERTIDA (son inmutables). Los
 // push a Expo se bloquean en este proceso (nada llega a teléfonos). Al final se
 // borran pedidos, comprobantes, movimientos, puntos, liquidación, cotización y
@@ -151,6 +154,63 @@ try {
   const fB = await facturaRevertida(B);
   const baseVES = red2(subtotal * tc);
   ok(Number(fB.IGTFBaseVES) === baseVES && Number(fB.IGTFVES) === red2(baseVES * 0.03), `factura B: IGTF ${fB.IGTFVES} Bs sobre ${fB.IGTFBaseVES} Bs; a pagar ${fB.TotalPagarVES} Bs`);
+
+  // ══ D) Efectivo combinado con IGTF y cambio ═════════════════════════════════
+  console.log('\n== D) Efectivo combinado (USD + Bs) con cambio ==');
+  const modo = (await run(D.cotizacionMonedaCliente, { cliente: CLIENTE, query: { idPuntoVenta: PV } }))._payload?.Modo;
+  if (modo !== 'AMBAS') console.log(`   omitido: la cuenta cobra solo en ${modo}`);
+  else {
+    const usdD = red2(subtotal / 2), vesD = red2((subtotal - usdD) * tc), igtfD = red2(usdD * 0.03);
+    const debeUSD = red2(usdD + igtfD), pagaConUSD = Math.ceil(debeUSD) + 5;
+    const cuerpo = (MontoVES) => ({ idPuntoVenta: PV, items: [{ idProducto: PROD, Cantidad: CANT }], MetodoPago: 'EFECTIVO', DireccionEntrega: 'E2E punta a punta — borrar',
+      PagoMoneda: { idTasa: tasa.idTasa, Moneda: 'MIXTA', MontoUSD: usdD, MontoVES, PagaConUSD: pagaConUSD } });
+    r = await run(D.crearPedidoApp, { cliente: CLIENTE, body: cuerpo(red2(vesD + 1)) });
+    ok(r._code === 409, `bolívares que no cuadran con la tasa → 409 (${r._code})`);
+    r = await run(D.crearPedidoApp, { cliente: CLIENTE, body: cuerpo(vesD) });
+    const DD = r._payload?.idPedido; if (DD) creados.push(DD);
+    const pm = r._payload?.PagoMoneda;
+    ok(r._code === 201 && pm?.Moneda === 'MIXTA' && pm.Desglose.USD.Monto === debeUSD && pm.Desglose.VES.Monto === vesD && pm.IGTFUSD === igtfD,
+      `pedido D #${DD}: $${pm?.Desglose?.USD?.Monto} (IGTF $${pm?.IGTFUSD}) + Bs ${pm?.Desglose?.VES?.Monto}`);
+    ok(pm?.Desglose?.USD?.Cambio === red2(pagaConUSD - debeUSD), `paga con $${pagaConUSD} → cambio $${pm?.Desglose?.USD?.Cambio}`);
+    r = await run(D.aceptarPedido, { repartidor: REP, body: { idPedido: DD } });
+    ok(r._code === 200, `repartidor acepta D (${r._code})`);
+    r = await run(D.pedidosActivos, { repartidor: REP });
+    const cD = (r._payload || []).find(p => Number(p.idPedido) === Number(DD))?.Cobro;
+    ok(cD?.Moneda === 'MIXTA' && cD.MontoUSD === debeUSD && cD.MontoVES === vesD && cD.CambioUSD === red2(pagaConUSD - debeUSD),
+      `la app del repartidor: cobrar $${cD?.MontoUSD} + Bs ${cD?.MontoVES}, llevar $${cD?.CambioUSD} de cambio`);
+    ok((await entregar(DD, REP)) === 'ok', 'D: sucursal → en camino → entregado');
+    const comD = red2(subtotal * 0.1);
+    const rindeUSD = red2(Math.max(0, debeUSD - comD)), rindeVES = red2(vesD - Math.max(0, comD - debeUSD) * tc);
+    rep = (await q(`SELECT SaldoPendiente, SaldoPendienteVES FROM VIDA_REPARTIDORES WHERE idBranch=1 AND idCuenta=1 AND idRepartidor=${idRep}`))[0];
+    ok(red2(rep.SaldoPendiente) === rindeUSD && red2(rep.SaldoPendienteVES) === rindeVES,
+      `saldo del repartidor $${red2(rep.SaldoPendiente)} USD y Bs ${red2(rep.SaldoPendienteVES)} (comisión $${comD} sale de los dólares)`);
+    r = await run(D.liquidarRepartidor, { user: PANEL, params: { idRepartidor: String(idRep) }, body: { Observaciones: 'E2E D' } });
+    ok(r._code === 200 && red2(r._payload.MontoLiquidadoUSD) === rindeUSD && red2(r._payload.MontoLiquidadoVES) === rindeVES,
+      `liquidación $${r._payload?.MontoLiquidadoUSD} + Bs ${r._payload?.MontoLiquidadoVES}`);
+    const fD = await facturaRevertida(DD);
+    ok(Number(fD.IGTFBaseVES) === red2(usdD * tc) && Number(fD.IGTFVES) === red2(red2(usdD * tc) * 0.03),
+      `factura D: IGTF ${fD.IGTFVES} Bs solo sobre la parte en dólares (${fD.IGTFBaseVES} Bs)`);
+  }
+
+  // ══ E) Tarjeta con punto de venta ══════════════════════════════════════════
+  console.log('\n== E) Tarjeta (punto de venta al entregar) ==');
+  r = await run(D.crearPedidoApp, { cliente: CLIENTE, body: { idPuntoVenta: PV, items: [{ idProducto: PROD, Cantidad: CANT }], MetodoPago: 'CRIPTO', DireccionEntrega: 'E2E' } });
+  ok(r._code === 400, `forma de pago desconocida → 400 (${r._code})`);
+  const vesE = red2(subtotal * tc);
+  r = await run(D.crearPedidoApp, { cliente: CLIENTE, body: {
+    idPuntoVenta: PV, items: [{ idProducto: PROD, Cantidad: CANT }], MetodoPago: 'TARJETA', DireccionEntrega: 'E2E punta a punta — borrar',
+    PagoMoneda: { idTasa: tasa.idTasa, Moneda: 'VES', MontoOriginal: vesE } } });
+  const E = r._payload?.idPedido; if (E) creados.push(E);
+  ok(r._code === 201 && (await pedido(E))?.Status === 'BUSCANDO_REPARTIDOR', `pedido E #${E} con tarjeta va directo a buscar repartidor`);
+  r = await run(D.aceptarPedido, { repartidor: REP, body: { idPedido: E } });
+  r = await run(D.pedidosActivos, { repartidor: REP });
+  const cE = (r._payload || []).find(p => Number(p.idPedido) === Number(E))?.Cobro;
+  ok(cE?.CobrarTarjeta === true && cE.CobrarEfectivo === false && cE.Monto === vesE, `la app del repartidor: cobrar Bs ${cE?.Monto} con el punto, sin efectivo`);
+  ok((await entregar(E, REP)) === 'ok', 'E: sucursal → en camino → entregado');
+  const pE = await pedido(E);
+  rep = (await q(`SELECT SaldoPendiente, SaldoPendienteVES FROM VIDA_REPARTIDORES WHERE idBranch=1 AND idCuenta=1 AND idRepartidor=${idRep}`))[0];
+  ok(pE.MontoEfectivoRepartidor == null && Number(rep.SaldoPendiente) === 0 && Number(rep.SaldoPendienteVES) === 0,
+    `nada que rendir: saldo $${Number(rep.SaldoPendiente)} y Bs ${Number(rep.SaldoPendienteVES)}`);
 
   // ══ C) Venta offline rechazada que al reintentar se registra ════════════════
   console.log('\n== C) Venta offline: rechazo → revisión → reintento OK ==');

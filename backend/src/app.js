@@ -85,6 +85,8 @@ const origensPermitidos = [
   'http://localhost:5173',
   'http://localhost:5174',
   process.env.FRONTEND_URL,
+  // Solo en desarrollo: las apps móviles corriendo en modo web (Expo web)
+  ...(ES_PRODUCCION ? [] : ['http://localhost:8081', 'http://localhost:8082', 'http://localhost:8090', 'http://localhost:8091']),
 ].filter(Boolean);
 
 await fastify.register(cors, {

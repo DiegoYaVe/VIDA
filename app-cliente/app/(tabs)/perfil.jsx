@@ -1,367 +1,149 @@
-import { useState, useEffect } from 'react';
-import { View, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, Image, ActivityIndicator, Alert } from 'react-native';
-import { Text } from '../../components/Texto';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+// Perfil (diseño "Agua VIDA"): avatar con iniciales, nombre y correo,
+// resumen (puntos, pedidos, racha de agua) y menú con siglas.
+import { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import * as ImagePicker from 'expo-image-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import Svg, { Path } from 'react-native-svg';
+import { Text } from '../../components/Texto';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
-import { colores, fuentes, radios } from '../../constants/tema';
+import { API_URL } from '../../constants/config';
+import { colores, fuentes } from '../../constants/tema';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') ?? '';
+const API_BASE = API_URL.replace('/api', '');
+const MENU = [
+  { nombre: 'Mis pedidos', sigla: 'Pe', ruta: '/mis-pedidos' },
+  { nombre: 'Mis direcciones', sigla: 'Di', ruta: '/mis-direcciones' },
+  { nombre: 'Mi hidratación', sigla: 'H2O', ruta: '/mi-consumo' },
+  { nombre: 'Puntos y premios', sigla: 'Pt', ruta: '/mis-puntos' },
+  { nombre: 'Recargas y servicios', sigla: 'Re', ruta: '/servicios' },
+  { nombre: 'Academia VIDA', sigla: 'Ac', ruta: '/academia' },
+  { nombre: 'Contraseña y seguridad', sigla: 'Se', ruta: '/perfil-password', gris: true },
+  { nombre: 'Ayuda y privacidad', sigla: '?', ruta: '/info-ayuda', gris: true },
+];
 
-function MenuItem({ icon, label, sublabel, onPress, danger, right, tono }) {
+function Flecha() {
   return (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
-      <View style={[styles.menuIcon, tono && { backgroundColor: tono }, danger && styles.menuIconDanger]}>
-        <Ionicons name={icon} size={20} color={danger ? colores.error : colores.marino} />
-      </View>
-      <View style={styles.menuLabel}>
-        <Text style={[styles.menuText, danger && styles.menuTextDanger]}>{label}</Text>
-        {sublabel ? <Text style={styles.menuSublabel}>{sublabel}</Text> : null}
-      </View>
-      {right ?? <Ionicons name="chevron-forward" size={18} color={colores.textoTenue} />}
-    </TouchableOpacity>
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#8CA5B3" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M9 6l6 6-6 6" />
+    </Svg>
   );
-}
-
-function SectionTitle({ title }) {
-  return <Text style={styles.sectionTitle}>{title}</Text>;
 }
 
 export default function PerfilScreen() {
   const router = useRouter();
-  const { cliente, token, logout, setCliente } = useAuthStore();
-  const [subiendoFoto, setSubiendoFoto] = useState(false);
-  const [pedidosCount, setPedidosCount] = useState(null);
-  const [puntos, setPuntos] = useState(null);
-  const [agua, setAgua] = useState(null);
-  const [club, setClub] = useState(null);
+  const { cliente, token, logout } = useAuthStore();
+  const [resumen, setResumen] = useState({ puntos: null, pedidos: null, racha: null });
+  const [foto, setFoto] = useState(null);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!token) return;
-    api.get('/delivery/cliente/pedidos')
-      .then(r => setPedidosCount((r.data?.pedidos ?? r.data ?? []).length))
-      .catch(() => {});
-    api.get('/delivery/cliente/puntos')
-      .then(r => setPuntos(r.data?.saldo ?? 0))
-      .catch(() => {});
-    api.get('/delivery/cliente/hidratacion')
-      .then(r => setAgua(r.data))
-      .catch(() => {});
-    api.get('/delivery/cliente/membresia')
-      .then(r => setClub(r.data))
-      .catch(() => {});
-  }, [token]);
+    api.get('/delivery/cliente/puntos').then((r) => setResumen((s) => ({ ...s, puntos: r.data?.saldo ?? 0 }))).catch(() => {});
+    api.get('/delivery/cliente/pedidos').then((r) => setResumen((s) => ({ ...s, pedidos: Array.isArray(r.data) ? r.data.length : 0 }))).catch(() => {});
+    api.get('/delivery/cliente/hidratacion').then((r) => setResumen((s) => ({ ...s, racha: r.data?.activa ? Number(r.data.racha) || 0 : null }))).catch(() => {});
+    api.get('/delivery/cliente/perfil').then((r) => setFoto(r.data?.FotoURL || null)).catch(() => {});
+  }, [token]));
 
   if (!token) {
     return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar style="dark" />
-        <View style={styles.guestWrap}>
-          <View style={styles.guestIcon}>
-            <Ionicons name="person-outline" size={44} color="#001034" />
-          </View>
-          <Text style={styles.guestTitle}>Aún no tienes sesión</Text>
-          <Text style={styles.guestSub}>
-            Crea tu cuenta o inicia sesión para hacer pedidos y ver tu historial.
-          </Text>
-          <TouchableOpacity style={styles.guestBtn} onPress={() => router.push('/(auth)/login')}>
-            <Text style={styles.guestBtnText}>Iniciar sesión / Registrarme</Text>
-          </TouchableOpacity>
+      <SafeAreaView edges={['top']} style={styles.root}>
+        <View style={styles.invitado}>
+          <Text style={styles.nombre}>Tu cuenta VIDA</Text>
+          <Text style={styles.correo}>Entra para ver tus pedidos, puntos e hidratación.</Text>
+          <TouchableOpacity style={styles.entrar} onPress={() => router.push('/(auth)/login')}><Text style={styles.entrarTexto}>Entrar o crear cuenta</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
-  const nombre   = cliente?.Nombre    ?? cliente?.nombre    ?? 'Usuario';
-  const apellido = cliente?.Apellidos ?? cliente?.apellidos ?? '';
-  const email    = cliente?.Email     ?? cliente?.email     ?? '';
-  const fotoURL  = cliente?.FotoURL   ?? cliente?.fotoURL;
-  const initials = ([nombre[0], (apellido[0] || '')].join('')).toUpperCase() || '?';
+  const nombre = [cliente?.Nombre, cliente?.Apellidos].filter(Boolean).join(' ') || 'Cliente VIDA';
+  const iniciales = `${String(cliente?.Nombre || '').trim()[0] || ''}${String(cliente?.Apellidos || '').trim()[0] || ''}`.toUpperCase() || 'V';
+  const tarjetas = [
+    { valor: resumen.puntos != null ? Number(resumen.puntos).toLocaleString('es-VE') : '—', etiqueta: 'Puntos', ruta: '/(tabs)/puntos' },
+    { valor: resumen.pedidos != null ? String(resumen.pedidos) : '—', etiqueta: 'Pedidos', ruta: '/(tabs)/pedidos' },
+    { valor: resumen.racha != null ? `${resumen.racha} día${resumen.racha === 1 ? '' : 's'}` : '—', etiqueta: 'Racha de agua', ruta: '/mi-consumo' },
+  ];
 
-  const handleSubirFoto = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Permiso requerido', 'Necesitamos acceso a tu galería para subir una foto.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true, aspect: [1, 1], quality: 0.7,
-    });
-    if (result.canceled) return;
-    const asset = result.assets[0];
-    setSubiendoFoto(true);
-    try {
-      const fd = new FormData();
-      fd.append('foto', { uri: asset.uri, name: 'foto.jpg', type: asset.mimeType ?? 'image/jpeg' });
-      const res = await api.post('/delivery/cliente/foto', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      setCliente({ ...cliente, FotoURL: res.data.fotoURL });
-      Alert.alert('¡Listo!', 'Tu foto fue actualizada.');
-    } catch {
-      Alert.alert('Error', 'No se pudo subir la foto.');
-    } finally {
-      setSubiendoFoto(false);
-    }
-  };
-
-  const handleLogout = () => {
-    Alert.alert('Cerrar sesión', '¿Estás seguro?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Cerrar sesión', style: 'destructive',
-        onPress: async () => {
-          await AsyncStorage.removeItem('vida_cliente_token');
-          logout();
-          router.replace('/(tabs)');
-        },
-      },
-    ]);
-  };
-
-  const handleEliminarCuenta = () => {
-    Alert.alert(
-      'Eliminar cuenta',
-      'Esta acción es irreversible. Se eliminarán todos tus datos.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar', style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.delete('/delivery/cliente');
-              await AsyncStorage.removeItem('vida_cliente_token');
-              logout();
-              router.replace('/(tabs)');
-            } catch {
-              Alert.alert('Error', 'No se pudo eliminar la cuenta. Intenta de nuevo.');
-            }
-          },
-        },
-      ]
-    );
-  };
+  const salir = () => Alert.alert('Cerrar sesión', '¿Seguro que quieres salir?', [
+    { text: 'Cancelar', style: 'cancel' },
+    { text: 'Salir', style: 'destructive', onPress: () => { logout(); router.replace('/(tabs)'); } },
+  ]);
+  const eliminarCuenta = () => Alert.alert('Eliminar mi cuenta', 'Se borran tus datos personales y no se puede deshacer. ¿Continuar?', [
+    { text: 'Cancelar', style: 'cancel' },
+    { text: 'Eliminar', style: 'destructive', onPress: async () => {
+      try { await api.delete('/delivery/cliente'); logout(); router.replace('/(tabs)'); }
+      catch (e) { Alert.alert('No se pudo eliminar', e.response?.data?.error || 'Intenta de nuevo.'); }
+    } },
+  ]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-
-        {/* Header con foto */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleSubirFoto} disabled={subiendoFoto} activeOpacity={0.85} accessibilityLabel="Cambiar foto">
-            {fotoURL ? (
-              <Image source={{ uri: API_BASE + fotoURL }} style={styles.foto} />
-            ) : (
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{initials}</Text>
-              </View>
-            )}
-            <View style={styles.cameraBtn}>
-              {subiendoFoto
-                ? <ActivityIndicator size="small" color={colores.marino} />
-                : <Ionicons name="camera" size={14} color={colores.marino} />}
-            </View>
-          </TouchableOpacity>
-          <View style={styles.headerInfo}>
-            <Text style={styles.headerName}>{nombre} {apellido}</Text>
-            {email ? <Text style={styles.headerEmail}>{email}</Text> : null}
+    <SafeAreaView edges={['top']} style={styles.root}>
+      <StatusBar style="dark" />
+      <ScrollView contentContainerStyle={styles.contenido} showsVerticalScrollIndicator={false}>
+        <View style={styles.cabecera}>
+          {foto ? <Image source={{ uri: API_BASE + foto }} style={styles.avatar} /> : (
+            <View style={styles.avatar}><Text style={styles.avatarTexto}>{iniciales}</Text></View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.nombre} numberOfLines={1}>{nombre}</Text>
+            {cliente?.Email ? <Text style={styles.correo} numberOfLines={1}>{cliente.Email}</Text> : null}
           </View>
+          <TouchableOpacity style={styles.editar} onPress={() => router.push('/perfil-editar')}><Text style={styles.editarTexto}>Editar</Text></TouchableOpacity>
         </View>
 
-        {/* Resumen: puntos, pedidos y racha de agua */}
         <View style={styles.resumen}>
-          <TouchableOpacity style={styles.resumenItem} onPress={() => router.push('/mis-puntos')} activeOpacity={0.85}>
-            <Text style={[styles.resumenValor, { color: colores.verdeTexto }]}>{puntos !== null ? puntos.toLocaleString('es-VE') : '…'}</Text>
-            <Text style={styles.resumenLabel}>Puntos VIDA</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.resumenItem} onPress={() => router.push('/mis-pedidos')} activeOpacity={0.85}>
-            <Text style={styles.resumenValor}>{pedidosCount !== null ? pedidosCount : '…'}</Text>
-            <Text style={styles.resumenLabel}>Pedidos</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.resumenItem} onPress={() => router.push('/mi-consumo')} activeOpacity={0.85}>
-            <Text style={styles.resumenValor}>{agua?.activa ? `${agua.racha ?? 0} d` : '—'}</Text>
-            <Text style={styles.resumenLabel}>Racha de agua</Text>
-          </TouchableOpacity>
+          {tarjetas.map((t) => (
+            <TouchableOpacity key={t.etiqueta} style={styles.dato} onPress={() => router.push(t.ruta)}>
+              <Text style={styles.datoValor} numberOfLines={1} adjustsFontSizeToFit>{t.valor}</Text>
+              <Text style={styles.datoEtiqueta}>{t.etiqueta}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        {/* Programas de VIDA */}
-        <View style={styles.section}>
-          <SectionTitle title="Mis programas" />
-          <View style={styles.card}>
-            <MenuItem
-              icon="receipt-outline"
-              label="Mis pedidos"
-              sublabel={pedidosCount !== null ? `${pedidosCount} pedido${pedidosCount !== 1 ? 's' : ''} realizados` : 'Historial y repetir pedidos'}
-              onPress={() => router.push('/mis-pedidos')}
-            />
-            <View style={styles.divider} />
-            <MenuItem
-              icon="gift-outline"
-              label="Puntos y premios"
-              sublabel={puntos !== null ? `${puntos.toLocaleString('es-VE')} puntos disponibles` : 'Tu billetera de puntos'}
-              tono={colores.verdeClaro}
-              onPress={() => router.push('/mis-puntos')}
-            />
-            <View style={styles.divider} />
-            <MenuItem
-              icon="water-outline"
-              label="Mi hidratación"
-              sublabel={agua?.activa ? `Hoy: ${agua.vasosHoy ?? 0}/${agua.meta ?? 8} vasos` : 'Activa tu programa de hidratación'}
-              onPress={() => router.push('/mi-consumo')}
-            />
-            <View style={styles.divider} />
-            <MenuItem
-              icon="card-outline"
-              label="Club Vida"
-              sublabel={club ? `Nivel ${club.nivel} · ${club.nombreNivel}` : 'Tu membresía digital'}
-              onPress={() => router.push('/mi-club')}
-            />
-            <View style={styles.divider} />
-            <MenuItem
-              icon="phone-portrait-outline"
-              label="Recargas y servicios"
-              sublabel="Movistar, Movilnet, Digitel, CANTV…"
-              onPress={() => router.push('/servicios')}
-            />
-            <View style={styles.divider} />
-            <MenuItem
-              icon="school-outline"
-              label="Academia VIDA"
-              sublabel="Aprende y gana puntos con cada curso"
-              onPress={() => router.push('/academia')}
-            />
-          </View>
+        <View style={styles.menu}>
+          {MENU.map((m, i) => (
+            <TouchableOpacity key={m.nombre} style={[styles.fila, i < MENU.length - 1 && styles.borde]} onPress={() => router.push(m.ruta)}>
+              <View style={[styles.sigla, m.gris && { backgroundColor: '#EEF2F4' }]}><Text style={styles.siglaTexto}>{m.sigla}</Text></View>
+              <Text style={styles.filaTexto}>{m.nombre}</Text>
+              <Flecha />
+            </TouchableOpacity>
+          ))}
         </View>
 
-        {/* Mi cuenta */}
-        <View style={styles.section}>
-          <SectionTitle title="Mi cuenta" />
-          <View style={styles.card}>
-            <MenuItem
-              icon="person-outline"
-              label="Editar perfil"
-              sublabel="Nombre, teléfono, correo"
-              onPress={() => router.push('/perfil-editar')}
-            />
-            <View style={styles.divider} />
-            <MenuItem
-              icon="lock-closed-outline"
-              label="Cambiar contraseña"
-              onPress={() => router.push('/perfil-password')}
-            />
-            <View style={styles.divider} />
-            <MenuItem
-              icon="card-outline"
-              label="Mis tarjetas"
-              sublabel="Métodos de pago guardados"
-              onPress={() => router.push('/perfil-tarjetas')}
-            />
-          </View>
-        </View>
-
-        {/* Información */}
-        <View style={styles.section}>
-          <SectionTitle title="Información" />
-          <View style={styles.card}>
-            <MenuItem
-              icon="help-circle-outline"
-              label="Ayuda"
-              sublabel="Preguntas frecuentes y soporte"
-              onPress={() => router.push('/info-ayuda')}
-            />
-            <View style={styles.divider} />
-            <MenuItem
-              icon="people-outline"
-              label="Quiénes somos"
-              onPress={() => router.push('/info-quienes-somos')}
-            />
-            <View style={styles.divider} />
-            <MenuItem
-              icon="shield-checkmark-outline"
-              label="Aviso de privacidad"
-              onPress={() => router.push('/info-privacidad')}
-            />
-          </View>
-        </View>
-
-        {/* Sesión */}
-        <View style={styles.section}>
-          <View style={styles.card}>
-            <MenuItem
-              icon="log-out-outline"
-              label="Cerrar sesión"
-              onPress={handleLogout}
-              danger
-              right={null}
-            />
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.deleteBtn} onPress={handleEliminarCuenta}>
-          <Text style={styles.deleteBtnText}>Eliminar cuenta</Text>
-        </TouchableOpacity>
-
+        <TouchableOpacity style={styles.salir} onPress={salir}><Text style={styles.salirTexto}>Cerrar sesión</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.eliminar} onPress={eliminarCuenta}><Text style={styles.eliminarTexto}>Eliminar mi cuenta</Text></TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colores.fondo },
-  scroll: { paddingBottom: 40 },
-
-  header: {
-    backgroundColor: colores.marino, flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingTop: 22, paddingBottom: 54, gap: 16,
-  },
-  foto: { width: 74, height: 74, borderRadius: 37, backgroundColor: colores.celesteClaro, borderWidth: 3, borderColor: colores.blanco },
-  avatar: {
-    width: 74, height: 74, borderRadius: 37, backgroundColor: colores.celeste,
-    borderWidth: 3, borderColor: colores.blanco, alignItems: 'center', justifyContent: 'center',
-  },
-  avatarText: { fontSize: 26, fontWeight: '800', color: colores.marino },
-  cameraBtn: {
-    position: 'absolute', bottom: -2, right: -2, width: 28, height: 28, borderRadius: 14,
-    backgroundColor: colores.blanco, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: colores.marino,
-  },
-  headerInfo: { flex: 1 },
-  headerName: { fontSize: 21, fontWeight: '800', color: colores.blanco },
-  headerEmail: { fontSize: 13, color: colores.sobreMarino, marginTop: 3 },
-
-  resumen: { flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: -34 },
-  resumenItem: {
-    flex: 1, backgroundColor: colores.blanco, borderRadius: radios.medio, paddingVertical: 14, paddingHorizontal: 10,
-    alignItems: 'center', borderWidth: 1, borderColor: colores.borde,
-  },
-  resumenValor: { fontSize: 20, fontWeight: '800', color: colores.marino },
-  resumenLabel: { fontSize: 12, fontWeight: '700', color: colores.textoSuave, marginTop: 2, textAlign: 'center' },
-
-  section: { marginHorizontal: 16, marginTop: 18 },
-  sectionTitle: { fontSize: 12, fontWeight: '800', color: colores.textoSuave, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 },
-  card: { backgroundColor: colores.blanco, borderRadius: radios.grande, borderWidth: 1, borderColor: colores.borde, overflow: 'hidden' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, minHeight: 60, gap: 12 },
-  menuIcon: { width: 40, height: 40, borderRadius: 13, backgroundColor: colores.celesteClaro, alignItems: 'center', justifyContent: 'center' },
-  menuIconDanger: { backgroundColor: colores.errorClaro },
-  menuLabel: { flex: 1, paddingVertical: 10 },
-  menuText: { fontSize: 15, fontWeight: '700', color: colores.marino },
-  menuTextDanger: { color: colores.error },
-  menuSublabel: { fontSize: 12, color: colores.textoSuave, marginTop: 1 },
-  divider: { height: 1, backgroundColor: colores.fondo, marginLeft: 66 },
-
-  deleteBtn: { marginHorizontal: 16, marginTop: 24, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
-  deleteBtnText: { fontSize: 13, color: colores.textoSuave, textDecorationLine: 'underline' },
-
-  guestWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  guestIcon: { width: 88, height: 88, borderRadius: 44, backgroundColor: colores.celesteClaro, alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
-  guestTitle: { fontSize: 22, fontWeight: '800', color: colores.marino, marginBottom: 8 },
-  guestSub: { fontSize: 14, color: colores.textoSuave, textAlign: 'center', lineHeight: 21, marginBottom: 24 },
-  guestBtn: { backgroundColor: colores.marino, borderRadius: radios.medio, minHeight: 54, paddingHorizontal: 28, width: '100%', alignItems: 'center', justifyContent: 'center' },
-  guestBtnText: { color: colores.blanco, fontWeight: '800', fontSize: 15 },
+  root: { flex: 1, backgroundColor: colores.fondo },
+  contenido: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28, gap: 14 },
+  cabecera: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: colores.marino, alignItems: 'center', justifyContent: 'center' },
+  avatarTexto: { fontFamily: fuentes.titulo, fontSize: 22, color: colores.blanco },
+  nombre: { fontFamily: fuentes.tituloFuerte, fontSize: 21, color: colores.marino },
+  correo: { fontSize: 14, color: colores.textoSuave },
+  editar: { minHeight: 44, justifyContent: 'center' },
+  editarTexto: { fontWeight: '800', fontSize: 14, color: colores.marino, textDecorationLine: 'underline' },
+  resumen: { flexDirection: 'row', gap: 8 },
+  dato: { flex: 1, backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.borde, borderRadius: 18, padding: 12, gap: 2 },
+  datoValor: { fontFamily: fuentes.tituloFuerte, fontSize: 20, color: colores.marino },
+  datoEtiqueta: { fontSize: 12, color: colores.textoSuave, fontWeight: '700' },
+  menu: { backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.borde, borderRadius: 22, paddingHorizontal: 6, paddingVertical: 4 },
+  fila: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 54, paddingHorizontal: 8 },
+  borde: { borderBottomWidth: 1, borderBottomColor: '#EEF6F8' },
+  sigla: { width: 36, height: 36, borderRadius: 12, backgroundColor: colores.celesteClaro, alignItems: 'center', justifyContent: 'center' },
+  siglaTexto: { fontFamily: fuentes.titulo, fontSize: 12, color: colores.marino },
+  filaTexto: { flex: 1, fontWeight: '700', fontSize: 15, color: colores.marino },
+  salir: { height: 50, alignItems: 'center', justifyContent: 'center' },
+  salirTexto: { fontWeight: '800', fontSize: 15, color: '#8A2B2B' },
+  eliminar: { minHeight: 36, alignItems: 'center', justifyContent: 'center' },
+  eliminarTexto: { fontSize: 13, color: colores.textoSuave },
+  invitado: { padding: 24, gap: 10 },
+  entrar: { marginTop: 8, height: 54, borderRadius: 18, backgroundColor: colores.marino, alignItems: 'center', justifyContent: 'center' },
+  entrarTexto: { color: colores.blanco, fontWeight: '800', fontSize: 16 },
 });

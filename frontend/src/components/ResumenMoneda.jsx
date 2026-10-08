@@ -8,6 +8,7 @@ export default function ResumenMoneda({datos}) {
  {!!p.AjusteRedondeoUSD&&<p>Ajuste de redondeo: {Number(p.AjusteRedondeoUSD).toFixed(4)} USD</p>}
  <p>USD {Number(p.TotalUSD).toFixed(2)} · VES {Number(p.TotalVES).toFixed(2)}</p>
  {p.Efectivo!=null && <p>Recibido: {Number(p.Efectivo).toFixed(2)} efectivo + {Number(p.Tarjeta).toFixed(2)} tarjeta ({p.Moneda})</p>}
+ {p.PagaCon!=null && <p>Paga con: {Number(p.PagaCon).toFixed(2)} {p.Moneda}</p>}
  {p.Cambio>0 && <p>Cambio: {Number(p.Cambio).toFixed(2)} {p.Moneda}</p>}
  <p>1 USD = {p.TasaVESporUSD} VES · {String(p.FechaTasa).slice(0,10)}</p><p className="break-all">Fuente: {p.Fuente}</p>
  </div>;

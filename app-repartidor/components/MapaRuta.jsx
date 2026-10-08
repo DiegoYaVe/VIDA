@@ -1,223 +1,97 @@
-// Mapa de ruta multi-pedido: dibuja al repartidor, las paradas ordenadas
-// (sucursales 🏪 y entregas numeradas) y la polilínea de la ruta completa.
-// Usa Leaflet + OpenStreetMap en un WebView (sin API key, igual que MapaPedido).
+// Mapa de ruta con el estilo del diseño "Agua VIDA": terreno celeste, calles
+// claras, ruta marina, repartidor = punto marino, tienda = cuadro celeste y
+// entrega = cuadro marino numerado. Google Maps con el estilo VIDA en la APK
+// (producción); Leaflet en Expo Go. La ruta por calles la traza el backend.
 import { useRef, useEffect, useMemo } from 'react';
-import { View, StyleSheet, TouchableOpacity, Linking } from 'react-native';
-import { Text } from './Texto';
+import { View, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import { htmlLeaflet, ESTILO_GOOGLE, buildPuntos, SCRIPT_RUTA as SCRIPT, CENTRO_DEFECTO, depurarParadas } from './estiloMapa';
+import { useTrazado } from '../services/trazado';
 
-// Google Maps nativo en la APK; Leaflet en Expo Go
 const ES_EXPO_GO = Constants.executionEnvironment === 'storeClient';
 let Maps = null;
 if (!ES_EXPO_GO) {
   try { Maps = require('react-native-maps'); } catch (_) { Maps = null; }
 }
 
-const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
-
-// Normaliza paradas del backend → [{lat, lon, tipo, num, label}]
-function buildPuntos(ubicacion, paradas) {
-  const yoLat = num(ubicacion?.Latitud);
-  const yoLon = num(ubicacion?.Longitud);
-  const yo = yoLat != null ? { lat: yoLat, lon: yoLon } : null;
-
-  let numEntrega = 0;
-  const stops = (paradas || [])
-    .filter((p) => num(p.lat) != null && num(p.lon) != null)
-    .map((p) => {
-      if (p.tipo === 'ENTREGA') numEntrega += 1;
-      return {
-        lat: num(p.lat), lon: num(p.lon), tipo: p.tipo,
-        num: p.tipo === 'ENTREGA' ? numEntrega : null,
-        label: p.tipo === 'PICKUP'
-          ? `Recoger: ${p.NombreSucursal || 'sucursal'}`
-          : `Entrega #${numEntrega} · Pedido ${p.idPedido}`,
-      };
-    });
-  return { yo, stops };
-}
-
-function buildHTML(yo, stops) {
-  const center = yo ?? stops[0] ?? { lat: 10.4806, lon: -66.9036 };
-  return `<!DOCTYPE html><html><head>
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<style>html,body,#map{margin:0;padding:0;width:100%;height:100%;}</style>
-</head><body><div id="map"></div>
-<script>
-var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([${center.lat},${center.lon}],14);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-var capas=[];
-
-function mkIcon(html){
-  return L.divIcon({html:html,className:'',iconAnchor:[16,16]});
-}
-function iconYo(){
-  return mkIcon('<div style="background:#2C3D58;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🛵</div>');
-}
-function iconStop(s){
-  if(s.tipo==='PICKUP')
-    return mkIcon('<div style="background:#001034;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🏪</div>');
-  return mkIcon('<div style="background:#4DAD66;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">'+s.num+'</div>');
-}
-
-window.update=function(data){
-  capas.forEach(function(c){map.removeLayer(c);}); capas=[];
-  var seq=[];
-  if(data.yo){ capas.push(L.marker([data.yo.lat,data.yo.lon],{icon:iconYo()}).addTo(map)); seq.push([data.yo.lat,data.yo.lon]); }
-  data.stops.forEach(function(s){
-    capas.push(L.marker([s.lat,s.lon],{icon:iconStop(s)}).bindPopup(s.label).addTo(map));
-    seq.push([s.lat,s.lon]);
-  });
-  if(seq.length>=2) capas.push(L.polyline(seq,{color:'#001034',weight:3,dashArray:'8,6'}).addTo(map));
-  if(seq.length>=2){ map.fitBounds(L.latLngBounds(seq).pad(0.25)); }
-  else if(seq.length===1){ map.setView(seq[0],15); }
-};
-window.update(${JSON.stringify({ yo, stops: [] })});
-</script></body></html>`;
-}
-
-// Versión nativa con Google Maps
-function MapaRutaGoogle({ yo, stops }) {
+function MapaGoogle({ yo, stops, margenAbajo, interactivo, trazo }) {
   const mapRef = useRef(null);
   const MapView = Maps.default;
-
   const seq = [
     ...(yo ? [{ latitude: yo.lat, longitude: yo.lon }] : []),
-    ...stops.map(s => ({ latitude: s.lat, longitude: s.lon })),
+    ...stops.map((s) => ({ latitude: s.lat, longitude: s.lon })),
   ];
-
   useEffect(() => {
     if (!mapRef.current || !seq.length) return;
-    if (seq.length >= 2) {
-      mapRef.current.fitToCoordinates(seq, {
-        edgePadding: { top: 60, right: 60, bottom: 60, left: 60 },
-        animated: true,
-      });
-    } else {
-      mapRef.current.animateToRegion({ ...seq[0], latitudeDelta: 0.01, longitudeDelta: 0.01 }, 500);
-    }
-  }, [JSON.stringify(seq)]);
-
-  const centro = seq[0] ?? { latitude: 10.4806, longitude: -66.9036 };
-
+    if (seq.length >= 2) mapRef.current.fitToCoordinates(seq, { edgePadding: { top: 40, right: 40, bottom: margenAbajo || 40, left: 40 }, animated: true });
+    else mapRef.current.animateToRegion({ ...seq[0], latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
+  }, [JSON.stringify(seq), margenAbajo]);
+  // Ruta por las calles; mientras llega, o si no hay, línea recta
+  const linea = useMemo(() => (trazo ? trazo.map(([latitude, longitude]) => ({ latitude, longitude })) : null), [trazo]);
+  const centro = seq[0] ?? { latitude: CENTRO_DEFECTO.lat, longitude: CENTRO_DEFECTO.lon };
   return (
-    <MapView
-      ref={mapRef}
-      provider={Maps.PROVIDER_GOOGLE}
-      style={{ flex: 1 }}
+    <MapView ref={mapRef} provider={Maps.PROVIDER_GOOGLE} style={{ flex: 1 }} customMapStyle={ESTILO_GOOGLE}
       initialRegion={{ ...centro, latitudeDelta: 0.03, longitudeDelta: 0.03 }}
-      showsCompass={false}
-      toolbarEnabled={false}
-    >
-      {yo && (
-        <Maps.Marker coordinate={{ latitude: yo.lat, longitude: yo.lon }} title="Tú" anchor={{ x: 0.5, y: 0.5 }}>
-          <View style={[styles.pinNativo, { backgroundColor: '#2C3D58' }]}>
-            <Text style={styles.pinNativoEmoji}>🛵</Text>
-          </View>
-        </Maps.Marker>
-      )}
+      showsCompass={false} toolbarEnabled={false} showsPointsOfInterest={false} showsBuildings={false}
+      scrollEnabled={interactivo} zoomEnabled={interactivo} rotateEnabled={false} pitchEnabled={false}>
+      {seq.length >= 2 && <Maps.Polyline coordinates={linea || seq} strokeColor="#001034" strokeWidth={5} lineCap="round" lineJoin="round" />}
       {stops.map((s, i) => (
-        <Maps.Marker
-          key={`${s.tipo}-${s.idPedido ?? s.lat}-${i}`}
-          coordinate={{ latitude: s.lat, longitude: s.lon }}
-          title={s.label}
-          anchor={{ x: 0.5, y: 0.5 }}
-        >
-          {s.tipo === 'PICKUP' ? (
-            <View style={[styles.pinNativo, { backgroundColor: '#001034' }]}>
-              <Text style={styles.pinNativoEmoji}>🏪</Text>
-            </View>
-          ) : (
-            <View style={[styles.pinNativo, { backgroundColor: '#4DAD66' }]}>
-              <Text style={styles.pinNativoNum}>{s.num}</Text>
-            </View>
-          )}
+        <Maps.Marker key={`${s.tipo}-${i}`} coordinate={{ latitude: s.lat, longitude: s.lon }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+          <View style={s.tipo === 'ENTREGA' ? styles.entrega : styles.tienda} />
         </Maps.Marker>
       ))}
-      {seq.length >= 2 && (
-        <Maps.Polyline coordinates={seq} strokeColor="#001034" strokeWidth={3} lineDashPattern={[8, 6]} />
+      {yo && (
+        <Maps.Marker coordinate={{ latitude: yo.lat, longitude: yo.lon }} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+          <View style={styles.halo}><View style={styles.yo} /></View>
+        </Maps.Marker>
       )}
     </MapView>
   );
 }
 
-export default function MapaRuta({ ubicacion, paradas }) {
+// paradas: [{ tipo: 'PICKUP'|'ENTREGA', lat, lon }]; margenAbajo deja libre
+// la parte tapada por una hoja (p. ej. la oferta de pedido nuevo).
+export default function MapaRuta({ ubicacion, paradas, numerar = true, margenAbajo = 40, interactivo = true }) {
   const webRef = useRef(null);
   const { yo, stops } = useMemo(() => buildPuntos(ubicacion, paradas), [ubicacion, paradas]);
+  // Lo que se dibuja (sin paradas encimadas) es lo que se manda a trazar
+  const visibles = useMemo(() => depurarParadas(yo, stops), [yo, stops]);
+  const ruta = useTrazado([yo, ...visibles], yo ? 0 : -1);
+  const trazo = ruta?.coords || null;
+  const datos = JSON.stringify({ yo, stops, numerar: numerar && stops.filter((s) => s.tipo === 'ENTREGA').length > 1, margenAbajo, trazo });
 
   useEffect(() => {
     if (Maps || !webRef.current) return;
-    webRef.current.injectJavaScript(`window.update(${JSON.stringify({ yo, stops })}); true;`);
-  }, [yo?.lat, yo?.lon, JSON.stringify(stops)]);
+    webRef.current.injectJavaScript(`window.update(${datos}); true;`);
+  }, [datos]);
 
-  // Navegar en Google Maps hacia la siguiente parada
-  const siguiente = stops[0];
-
-  if (!yo && !stops.length) {
-    return (
-      <View style={styles.placeholder}>
-        <Ionicons name="map-outline" size={48} color="#CFE4EB" />
-        <Text style={styles.placeholderText}>Esperando ubicación GPS...</Text>
-      </View>
-    );
-  }
-
+  const centro = yo ?? stops[0] ?? CENTRO_DEFECTO;
   return (
-    <View style={styles.container}>
+    <View style={styles.contenedor} pointerEvents={interactivo ? 'auto' : 'none'}>
       {Maps ? (
-        <MapaRutaGoogle yo={yo} stops={stops} />
+        <MapaGoogle yo={yo} stops={visibles} margenAbajo={margenAbajo} interactivo={interactivo} trazo={trazo} />
       ) : (
-      <WebView
-        ref={webRef}
-        style={{ flex: 1 }}
-        source={{ html: buildHTML(yo, stops) }}
-        javaScriptEnabled
-        domStorageEnabled
-        originWhitelist={['*']}
-        scrollEnabled={false}
-        onLoadEnd={() => {
-          webRef.current?.injectJavaScript(`window.update(${JSON.stringify({ yo, stops })}); true;`);
-        }}
-      />
-      )}
-      {siguiente && (
-        <TouchableOpacity style={styles.navBtn} onPress={() => {
-          const url = `https://www.google.com/maps/dir/?api=1&destination=${siguiente.lat},${siguiente.lon}&travelmode=driving`;
-          Linking.openURL(url).catch(() => {});
-        }}>
-          <Ionicons name="navigate" size={18} color="#fff" />
-          <Text style={styles.navBtnText}>
-            {siguiente.tipo === 'PICKUP' ? 'Ir a la sucursal' : `Ir a entrega #${siguiente.num}`}
-          </Text>
-        </TouchableOpacity>
+        <WebView
+          ref={webRef}
+          style={{ flex: 1, backgroundColor: '#DDEFF5' }}
+          source={{ html: htmlLeaflet(centro, SCRIPT) }}
+          javaScriptEnabled
+          domStorageEnabled
+          originWhitelist={['*']}
+          scrollEnabled={false}
+          nestedScrollEnabled
+          onLoadEnd={() => webRef.current?.injectJavaScript(`window.update(${datos}); true;`)}
+        />
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E6F1F5' },
-  placeholderText: { color: '#8C9BB0', marginTop: 8, fontSize: 13 },
-  pinNativo: {
-    width: 34, height: 34, borderRadius: 17,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: '#fff',
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  pinNativoEmoji: { fontSize: 15 },
-  pinNativoNum: { color: '#fff', fontSize: 14, fontWeight: '800' },
-  navBtn: {
-    position: 'absolute', top: 12, right: 12,
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#001034', paddingHorizontal: 14, paddingVertical: 9,
-    borderRadius: 22, elevation: 5,
-    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
-  },
-  navBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  contenedor: { flex: 1, backgroundColor: '#DDEFF5' },
+  halo: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,16,52,0.12)', alignItems: 'center', justifyContent: 'center' },
+  yo: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#001034', borderWidth: 4, borderColor: '#FFFFFF' },
+  tienda: { width: 30, height: 30, borderRadius: 10, backgroundColor: '#62C6DE', borderWidth: 4, borderColor: '#001034' },
+  entrega: { width: 30, height: 30, borderRadius: 10, backgroundColor: '#001034', borderWidth: 3, borderColor: '#FFFFFF' },
 });

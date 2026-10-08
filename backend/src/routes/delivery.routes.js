@@ -1,6 +1,7 @@
 // src/routes/delivery.routes.js
 import { authenticate, requireRole } from '../middlewares/auth.js';
 import { authenticateCliente, authenticateRepartidor } from '../middlewares/authDelivery.js';
+import { trazadoHandler } from '../services/trazadoRuta.service.js';
 import {
   // Cliente
   registrarCliente,
@@ -44,7 +45,7 @@ import {
   liberarPedido,
   pedidosActivos,
   pedidosDisponibles,
-  historialRepartidor,
+  historialRepartidor, gananciasRepartidor, cambiarPasswordRepartidor,
   rutaRepartidor,
   resumenRepartidores,
   mapaVivoDelivery,
@@ -103,6 +104,13 @@ export async function deliveryRoutes(fastify) {
 
   fastify.get('/delivery/cliente/cotizacion-moneda',
     { preHandler: [authenticateCliente] }, cotizacionMonedaCliente);
+
+  // Trazado por calles para los mapas (Google Routes en producción)
+  const limiteTrazado = { rateLimit: { max: 60, timeWindow: '1 minute' } };
+  fastify.post('/delivery/cliente/trazado',
+    { preHandler: [authenticateCliente], config: limiteTrazado }, trazadoHandler);
+  fastify.post('/delivery/repartidor/trazado',
+    { preHandler: [authenticateRepartidor], config: limiteTrazado }, trazadoHandler);
 
   fastify.get('/delivery/cliente/pedidos',
     { preHandler: [authenticateCliente] },
@@ -202,6 +210,14 @@ export async function deliveryRoutes(fastify) {
   fastify.get('/delivery/repartidor/pedidos-disponibles',
     { preHandler: [authenticateRepartidor] },
     pedidosDisponibles);
+
+  fastify.put('/delivery/repartidor/password',
+    { preHandler: [authenticateRepartidor] },
+    cambiarPasswordRepartidor);
+
+  fastify.get('/delivery/repartidor/ganancias',
+    { preHandler: [authenticateRepartidor] },
+    gananciasRepartidor);
 
   fastify.get('/delivery/repartidor/historial',
     { preHandler: [authenticateRepartidor] },

@@ -71,6 +71,11 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
 - [ ] Factura fiscal (migración 50): ninguna tienda factura hasta configurarle en Sucursales → **Fiscal** su modalidad, RIF, razón social y domicilio fiscal. Revisar con el contador la alícuota de IVA de cada producto (todos arrancan en `GENERAL` 16%). Marcar a una tienda como contribuyente especial activa el IGTF (3%) en el POS y en delivery para los pagos en dólares: publicar antes la versión de la app cliente que lo muestra (las anteriores no pueden pagar en efectivo en esa tienda).
 - [ ] Pago Móvil: el plazo para enviar el comprobante se configura en BD con la clave `PlazoPagoMovilMin` de `VIDA_CONFIG_DELIVERY` (por defecto 60 min; `0` lo desactiva). Verifica también `PagoMovilBanco`/`PagoMovilTelefono`/`PagoMovilCedula`/`PagoMovilTitular` de producción.
 - [ ] **Salida a internet (egress) permitida hacia `https://bcv.today`** — el servicio de tasa automática (BCV) la consulta bajo demanda al cotizar. Sin salida, el backend no fabrica una tasa (por diseño) y las ventas en VES fallarán al no tener cotización vigente.
+- [ ] **Rutas de los mapas de las apps (Google Routes API).** El backend traza la ruta por calles, la distancia y el tiempo que ven el repartidor (oferta, inicio) y el cliente (seguimiento) en `POST /delivery/{cliente|repartidor}/trazado`. En producción:
+  - Crear en Google Cloud una llave **de servidor** con **solo "Routes API"** habilitada y restringida por **IP del servidor** (no por referente ni por app). Ponerla en `GOOGLE_ROUTES_API_KEY` del `.env`. Las apps nunca la ven.
+  - Permitir salida a internet hacia `https://routes.googleapis.com`.
+  - Opcional: `GOOGLE_ROUTES_TRAFICO=1` para tiempos con tráfico (tarifa más alta).
+  - Sin llave, en producción las apps dibujan línea recta y estiman el tiempo (el OSRM público de demostración solo se usa fuera de producción). Las respuestas se guardan 10 min en memoria y las apps reutilizan el trazado mientras el repartidor se mueve menos de 100 m, para contener el costo.
 - [ ] Confirmar que `web.config` (IIS + iisnode) está presente en `backend/`.
 - [ ] Subir el backend por FTP/panel de SmarterASP (incluye `node_modules` si el hosting no corre `npm install`, o instálalos allá).
 - [ ] **Preservar `backend/uploads/`** — las imágenes subidas viven ahí y NO están en git; no borrarlas en el deploy.
@@ -102,7 +107,9 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
 - [ ] `eas.json` lleva la URL de **producción** del API (revisar que no apunte a una IP LAN).
 - [ ] Build de cliente: `cd app-cliente && eas build --platform android` (y/o iOS).
 - [ ] Build de repartidor: `cd app-repartidor && eas build --platform android`.
-- [ ] Probar el APK/dev build real (no Expo Go) para validar **Google Sign-In** y push notifications (no funcionan en Expo Go).
+- [ ] **Google Maps en las apps.** En el APK los mapas son Google Maps con el estilo VIDA (`ESTILO_GOOGLE` en `components/estiloMapa.js`: terreno celeste, calles claras, nombres de calles, sin íconos de comercios). En Expo Go se ve el mismo diseño sobre OpenStreetMap, solo para desarrollo.
+  - La llave de **Maps SDK for Android** va en `app.json` → `android.config.googleMaps.apiKey` de cada app. Restringirla en Google Cloud a "Maps SDK for Android" y a las apps `com.vida.cliente` y `com.vida.repartidor` con la huella SHA-1 del keystore de EAS (`eas credentials`) y la de Google Play si se publica ahí. Esa llave viaja dentro del APK: la restricción es lo que la protege.
+- [ ] Probar el APK/dev build real (no Expo Go) para validar **Google Sign-In**, push notifications y **el mapa de Google con el estilo VIDA** (no funcionan en Expo Go).
 - [ ] Distribuir (tiendas o APK directo) según el canal acordado.
 
 ---

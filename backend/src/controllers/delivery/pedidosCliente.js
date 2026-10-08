@@ -361,6 +361,10 @@ export async function crearPedidoApp(request, reply) {
   if (!idPuntoVenta || !items?.length) {
     return reply.code(400).send({ error: 'idPuntoVenta e items son requeridos' });
   }
+  // Efectivo y tarjeta (punto de venta) se cobran al entregar; Pago Móvil antes
+  if (!['EFECTIVO', 'TARJETA', 'PAGO_MOVIL'].includes(MetodoPago)) {
+    return reply.code(400).send({ error: 'Forma de pago no válida' });
+  }
   const requiereAprobacionPago = MetodoPago === 'PAGO_MOVIL';
   const statusInicial = requiereAprobacionPago ? 'ESPERANDO_PAGO' : 'BUSCANDO_REPARTIDOR';
   // Comprobante subido antes (app nueva): se registra con el pedido
@@ -785,10 +789,13 @@ export async function estadoPedidoCliente(request, reply) {
                CASE WHEN EXISTS (
                  SELECT 1 FROM VIDA_REPARTIDORES_CALIFICACIONES c
                  WHERE c.idBranch=p.idBranch AND c.idCuenta=p.idCuenta AND c.idPedido=p.idPedido
-               ) THEN 1 ELSE 0 END AS YaCalificado
+               ) THEN 1 ELSE 0 END AS YaCalificado,
+               pv.NomComercial AS NombreSucursal, pv.Latitud AS LatSucursal, pv.Longitud AS LonSucursal
         FROM VIDA_PEDIDOS p
         LEFT JOIN VIDA_REPARTIDORES rep
           ON rep.idBranch=p.idBranch AND rep.idCuenta=p.idCuenta AND rep.idRepartidor=p.idRepartidor
+        LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+          ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
         WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
           AND p.idPedido=@idPedido AND p.idCliente=@idCliente
       `);
@@ -805,7 +812,15 @@ export async function estadoPedidoCliente(request, reply) {
       const plazo = plazoPagoMinutos(await getConfigVal(pool, idBranch, idCuenta, 'PlazoPagoMovilMin', ''));
       if (plazo) SegundosPagoRestantes = Math.max(0, plazo * 60 - Number(SegundosSinPago));
     }
-    return reply.send({ ...estado, SegundosPagoRestantes });
+    // Productos del pedido (resumen en el seguimiento)
+    const det = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idPedido', sql.BigInt, idPedido)
+      .query(`SELECT d.idProducto, ISNULL(pr.Nombre, CONCAT('Producto ', d.idProducto)) AS Nombre, d.Cantidad, d.PrecioUnitario AS PrecioUSD
+              FROM VIDA_PEDIDOS_DETALLE d
+              LEFT JOIN VIDA_INVENTARIO_PRODUCTOS pr ON pr.idBranch=d.idBranch AND pr.idCuenta=d.idCuenta AND pr.idProducto=d.idProducto
+              WHERE d.idBranch=@idBranch AND d.idCuenta=@idCuenta AND d.idPedido=@idPedido ORDER BY d.idDetalle`);
+    const items = det.recordset.map((i) => ({ ...i, Cantidad: Number(i.Cantidad), PrecioUSD: Number(i.PrecioUSD) }));
+    return reply.send({ ...estado, SegundosPagoRestantes, items });
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener estado del pedido' });
@@ -828,14 +843,34 @@ export async function historialPedidosCliente(request, reply) {
         SELECT TOP 50
           p.idPedido, p.Status, p.StatusPago, p.MetodoPago, p.TotalUSD,
           p.PagoMonedaJSON, p.CuponCodigo, p.CuponDescuentoUSD,
-          p.FechaAlta AS FechaCreacion, p.DireccionEntrega,
+          p.FechaAlta AS FechaCreacion, p.DireccionEntrega, p.idPuntoVenta,
+          pv.NomComercial AS NombreSucursal,
+          CASE WHEN p.ETAEntrega IS NULL THEN NULL ELSE DATEDIFF(MINUTE, GETUTCDATE(), p.ETAEntrega) END AS MinutosRestantes,
           (SELECT COUNT(*) FROM VIDA_PEDIDOS_DETALLE d
            WHERE d.idBranch=p.idBranch AND d.idCuenta=p.idCuenta AND d.idPedido=p.idPedido) AS TotalItems
         FROM VIDA_PEDIDOS p
+        LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA pv ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
         WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.idCliente=@idCliente
         ORDER BY p.FechaAlta DESC
       `);
-    return reply.send(r.recordset);
+    // Productos de cada pedido (para mostrarlos y para "Repetir este pedido")
+    const ids = r.recordset.map(x => Number(x.idPedido)).filter(Number.isSafeInteger);
+    const porPedido = new Map();
+    if (ids.length) {
+      const d = await pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+        .query(`SELECT d.idPedido, d.idProducto, d.Cantidad, d.PrecioUnitario, pr.Nombre, pr.ImagenProducto
+                FROM VIDA_PEDIDOS_DETALLE d
+                LEFT JOIN VIDA_INVENTARIO_PRODUCTOS pr ON pr.idBranch=d.idBranch AND pr.idCuenta=d.idCuenta AND pr.idProducto=d.idProducto
+                WHERE d.idBranch=@idBranch AND d.idCuenta=@idCuenta AND d.idPedido IN (${ids.join(',')})
+                ORDER BY d.idPedido, d.idDetalle`);
+      for (const it of d.recordset) {
+        const k = String(it.idPedido);
+        if (!porPedido.has(k)) porPedido.set(k, []);
+        porPedido.get(k).push({ idProducto: it.idProducto, Nombre: it.Nombre, Cantidad: Number(it.Cantidad),
+          PrecioUSD: Number(it.PrecioUnitario), ImagenProducto: it.ImagenProducto || '' });
+      }
+    }
+    return reply.send(r.recordset.map(x => ({ ...x, items: porPedido.get(String(x.idPedido)) || [] })));
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener historial' });

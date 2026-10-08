@@ -5,6 +5,7 @@ import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import { ESTILO_GOOGLE } from './estiloMapa';
 
 // Google Maps nativo en la APK; Leaflet en Expo Go
 const ES_EXPO_GO = Constants.executionEnvironment === 'storeClient';
@@ -113,6 +114,7 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
             <Maps.default
               ref={mapRef}
               provider={Maps.PROVIDER_GOOGLE}
+              customMapStyle={ESTILO_GOOGLE}
               style={StyleSheet.absoluteFill}
               initialRegion={{ latitude: lat, longitude: lon, latitudeDelta: 0.008, longitudeDelta: 0.008 }}
               onRegionChangeComplete={(r) => { setLat(r.latitude); setLon(r.longitude); }}

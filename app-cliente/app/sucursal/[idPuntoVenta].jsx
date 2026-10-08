@@ -1,318 +1,251 @@
+// Tienda (diseño "Agua VIDA"): cabecera marina con búsqueda, categorías,
+// promoción vigente, productos en cuadrícula por categoría y "Ver carrito".
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, FlatList, TouchableOpacity, StyleSheet, Image, Alert, ActivityIndicator, SafeAreaView, ScrollView } from 'react-native';
-import { Text, TextInput } from '../../components/Texto';
+import { View, TouchableOpacity, StyleSheet, Image, ActivityIndicator, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
+import Svg, { Circle, Path } from 'react-native-svg';
+import { Text, TextInput } from '../../components/Texto';
+import { BotonAtras } from '../../components/Cabecera';
+import DetalleProducto from '../../components/DetalleProducto';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import useCarritoStore from '../../store/carritoStore';
+import { agregarConTienda } from '../../services/carrito';
 import { absImg } from '../../constants/config';
-import Precio from '../../components/Precio';
-import { colores, fuentes, radios } from '../../constants/tema';
+import { colores, fuentes } from '../../constants/tema';
 import { useTasaReferencial, precioMonedas } from '../../services/moneda';
 
-const PLACEHOLDER = 'https://via.placeholder.com/150/DDF2F8/001034?text=VIDA';
+const FONDOS = ['#DDF2F8', '#EADCCB', '#F8D9D9', '#FBE3B8', '#E3F3E7', '#F5E7B8'];
+const marcaVida = (p) => /\bvida\b/i.test(p.Nombre || '');
 
-export default function CatalogoScreen() {
+function Lupa() {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colores.textoSuave} strokeWidth={2.2} strokeLinecap="round">
+      <Circle cx={11} cy={11} r={7} /><Path d="M20 20l-3.5-3.5" />
+    </Svg>
+  );
+}
+
+export default function TiendaScreen() {
   const tasa = useTasaReferencial();
   const { idPuntoVenta } = useLocalSearchParams();
   const router = useRouter();
   const { idBranch, idCuenta } = useAuthStore();
 
   const [productos, setProductos] = useState([]);
-  const [categorias, setCategorias] = useState([]);
-  const [categoriaActiva, setCategoriaActiva] = useState(null);
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [tienda, setTienda] = useState(null);
+  const [categoria, setCategoria] = useState(null);
+  const [soloPromo, setSoloPromo] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+  const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const [abierto, setAbierto] = useState(null);
 
   const items = useCarritoStore((s) => s.items);
   const idPVCarrito = useCarritoStore((s) => s.idPuntoVenta);
-  const nombreSucursal = useCarritoStore((s) => s.nombreSucursal);
-  const agregarItem = useCarritoStore((s) => s.agregarItem);
-  const quitarItem = useCarritoStore((s) => s.quitarItem);
-  const limpiarCarrito = useCarritoStore((s) => s.limpiarCarrito);
-  const setSucursal = useCarritoStore((s) => s.setSucursal);
-  const totalCarrito = useCarritoStore((s) =>
-    s.items.reduce((acc, item) => acc + item.PrecioUSD * item.Cantidad, 0)
-  );
-  const totalItems = items.reduce((acc, i) => acc + i.Cantidad, 0);
+  const totalItems = items.reduce((a, i) => a + i.Cantidad, 0);
+  const totalUSD = items.reduce((a, i) => a + i.PrecioUSD * i.Cantidad, 0);
 
-  const fetchProductos = useCallback(async () => {
+  const cargar = useCallback(async () => {
     try {
       setError('');
-      const res = await api.get('/delivery/productos', {
-        params: {
-          idBranch,
-          idCuenta,
-          idPuntoVenta,
-          search: '',
-          idCategoria: '',
-        },
-      });
-      const data = res.data?.productos ?? res.data ?? [];
-      setProductos(data);
-
-      // Build category list
-      const cats = [];
-      const seen = new Set();
-      data.forEach((p) => {
-        const id = p.idCategoria ?? p.categoria?.id;
-        const name = p.NombreCategoria ?? p.categoria?.Nombre ?? p.categoria?.nombre;
-        if (id && !seen.has(id)) {
-          seen.add(id);
-          cats.push({ id, nombre: name ?? 'General' });
-        }
-      });
-      setCategorias(cats);
+      const [pr, su] = await Promise.all([
+        api.get('/delivery/productos', { params: { idBranch, idCuenta, idPuntoVenta } }),
+        api.get('/delivery/sucursales', { params: { idBranch, idCuenta } }),
+      ]);
+      const lista = pr.data?.productos ?? pr.data ?? [];
+      setProductos(lista.filter((p) => String(p.idPuntoVenta) === String(idPuntoVenta)));
+      const sucs = su.data?.sucursales ?? su.data ?? [];
+      setTienda(sucs.find((s) => String(s.idPuntoVenta) === String(idPuntoVenta)) || null);
     } catch (e) {
       setError(e.message);
     } finally {
-      setLoading(false);
+      setCargando(false);
     }
   }, [idBranch, idCuenta, idPuntoVenta]);
+  useEffect(() => { cargar(); }, [cargar]);
 
-  useEffect(() => {
-    fetchProductos();
-  }, [fetchProductos]);
+  const nombre = tienda?.NomComercial || productos[0]?.NombreSucursal || 'Tienda';
+  const categorias = useMemo(() => {
+    const vistas = new Map();
+    productos.forEach((p) => { if (p.idCategoria && !vistas.has(p.idCategoria)) vistas.set(p.idCategoria, p.NombreCategoria || 'General'); });
+    return [...vistas.entries()].map(([id, n]) => ({ id, nombre: n }));
+  }, [productos]);
+  const promo = productos.find((p) => p.PromoNombre);
 
   const filtrados = useMemo(() => {
-    let list = productos;
-    if (categoriaActiva) list = list.filter((p) => (p.idCategoria ?? p.categoria?.id) === categoriaActiva);
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter((p) => (p.Nombre ?? p.nombre ?? '').toLowerCase().includes(q));
-    }
-    return list;
-  }, [productos, categoriaActiva, search]);
-
-  const getCantidad = (idProducto) => {
-    const found = items.find((i) => i.idProducto === idProducto);
-    return found?.Cantidad ?? 0;
-  };
-
-  const handleAgregar = (producto) => {
-    const idProd = producto.idProducto ?? producto.id;
-
-    if (idPVCarrito && String(idPVCarrito) !== String(idPuntoVenta) && items.length > 0) {
-      Alert.alert(
-        'Carrito de otra tienda',
-        `Tienes productos de "${nombreSucursal}" en tu carrito. ¿Deseas vaciarlo y empezar uno nuevo?`,
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          {
-            text: 'Vaciar y agregar',
-            style: 'destructive',
-            onPress: () => {
-              limpiarCarrito();
-              setSucursal(idPuntoVenta, nombreSucursal);
-              agregarItem({
-                idProducto: idProd,
-                Nombre: producto.Nombre ?? producto.nombre,
-                PrecioUSD: parseFloat(producto.PrecioUSD ?? producto.precio ?? 0),
-                Cantidad: 1,
-                ImagenProducto: producto.ImagenProducto ?? producto.imagen ?? '',
-              });
-            },
-          },
-        ]
-      );
-      return;
-    }
-
-    if (!idPVCarrito) setSucursal(idPuntoVenta, nombreSucursal);
-    agregarItem({
-      idProducto: idProd,
-      Nombre: producto.Nombre ?? producto.nombre,
-      PrecioUSD: parseFloat(producto.PrecioUSD ?? producto.precio ?? 0),
-      Cantidad: 1,
-      ImagenProducto: producto.ImagenProducto ?? producto.imagen ?? '',
+    let l = productos;
+    if (soloPromo) l = l.filter((p) => p.PromoNombre);
+    if (categoria) l = l.filter((p) => p.idCategoria === categoria);
+    const q = busqueda.trim().toLowerCase();
+    if (q) l = l.filter((p) => (p.Nombre || '').toLowerCase().includes(q));
+    return l;
+  }, [productos, categoria, soloPromo, busqueda]);
+  // Productos agrupados por categoría, en el orden de las píldoras
+  const secciones = useMemo(() => {
+    const m = new Map();
+    filtrados.forEach((p) => {
+      const k = p.NombreCategoria || 'Productos';
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(p);
     });
-  };
+    return [...m.entries()];
+  }, [filtrados]);
 
-  const renderProducto = ({ item }) => {
-    const idProd = item.idProducto ?? item.id;
-    const cant = getCantidad(idProd);
-    const precio = parseFloat(item.PrecioUSD ?? item.precio ?? 0);
-    const nombre = item.Nombre ?? item.nombre ?? '';
-    const imagen = item.ImagenProducto ?? item.imagen ?? '';
-    const esPlus = !!(item.EsProductoPlus ?? item.esProductoPlus);
-
-    return (
-      <View style={styles.prodCard}>
-        <Image
-          source={{ uri: absImg(imagen) || PLACEHOLDER }}
-          style={styles.prodImg}
-          defaultSource={{ uri: PLACEHOLDER }}
-        />
-        {esPlus && (
-          <View style={styles.plusBadge}>
-            <Text style={styles.plusBadgeText}>PLUS</Text>
-          </View>
-        )}
-        <Text style={styles.prodNombre} numberOfLines={2}>{nombre}</Text>
-        <Precio usd={precio} tasa={tasa} style={styles.prodPrecio} />
-
-        {cant === 0 ? (
-          <TouchableOpacity style={styles.addBtn} onPress={() => handleAgregar(item)}>
-            <Ionicons name="add" size={22} color="#fff" />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.qtyRow}>
-            <TouchableOpacity style={styles.qtyBtn} onPress={() => quitarItem(idProd)}>
-              <Ionicons name="remove" size={16} color="#001034" />
-            </TouchableOpacity>
-            <Text style={styles.qtyText}>{cant}</Text>
-            <TouchableOpacity style={styles.qtyBtn} onPress={() => handleAgregar(item)}>
-              <Ionicons name="add" size={16} color="#001034" />
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-    );
-  };
+  const cantidadDe = (p) => (String(idPVCarrito) === String(p.idPuntoVenta) ? items.find((i) => i.idProducto === p.idProducto)?.Cantidad ?? 0 : 0);
+  const agregar = (p, c = 1) => agregarConTienda({ ...p, NombreSucursal: p.NombreSucursal || nombre }, c);
+  const total = precioMonedas(totalUSD, tasa);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          headerTitle: nombreSucursal || 'Productos',
-          headerStyle: { backgroundColor: '#001034' },
-          headerTintColor: '#fff',
-          headerTitleStyle: { fontFamily: fuentes.titulo },
-        }}
-      />
-
-      {/* Search */}
-      <View style={styles.searchWrap}>
-        <Ionicons name="search" size={18} color="#8C9BB0" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar productos..."
-          placeholderTextColor="#8C9BB0"
-          value={search}
-          onChangeText={setSearch}
-        />
-        {search ? (
-          <TouchableOpacity onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={18} color="#8C9BB0" />
-          </TouchableOpacity>
-        ) : null}
+    <SafeAreaView edges={['top']} style={styles.root}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <StatusBar style="light" />
+      <View style={styles.cabecera}>
+        <View style={styles.cabeceraFila}>
+          <BotonAtras oscuro />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.tiendaNombre} numberOfLines={1}>{nombre}</Text>
+            <Text style={styles.tiendaSub} numberOfLines={1}>Abierta · {tienda?.Direccion?.trim() || 'pide a domicilio'}</Text>
+          </View>
+          <View style={styles.abierta}><Text style={styles.abiertaTexto}>Abierta</Text></View>
+        </View>
+        <View style={styles.buscar}>
+          <Lupa />
+          <TextInput style={styles.buscarInput} placeholder={`Buscar en ${nombre}`} placeholderTextColor={colores.textoSuave}
+            value={busqueda} onChangeText={setBusqueda} accessibilityLabel="Buscar en la tienda" />
+        </View>
       </View>
 
-      {/* Categories */}
-      {categorias.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.catList}
-        >
-          <TouchableOpacity
-            style={[styles.catChip, !categoriaActiva && styles.catChipActive]}
-            onPress={() => setCategoriaActiva(null)}
-          >
-            <Text style={[styles.catChipText, !categoriaActiva && styles.catChipTextActive]}>
-              Todos
-            </Text>
-          </TouchableOpacity>
-          {categorias.map((c) => (
-            <TouchableOpacity
-              key={c.id}
-              style={[styles.catChip, categoriaActiva === c.id && styles.catChipActive]}
-              onPress={() => setCategoriaActiva(categoriaActiva === c.id ? null : c.id)}
-            >
-              <Text style={[styles.catChipText, categoriaActiva === c.id && styles.catChipTextActive]}>
-                {c.nombre}
-              </Text>
-            </TouchableOpacity>
+      {cargando ? <ActivityIndicator size="large" color={colores.celeste} style={{ marginTop: 40 }} /> : error ? (
+        <Text style={styles.error}>{error}</Text>
+      ) : (
+        <ScrollView style={{ backgroundColor: colores.fondo }} contentContainerStyle={{ paddingBottom: totalItems > 0 ? 100 : 24 }} showsVerticalScrollIndicator={false}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+            {[{ id: null, nombre: 'Todo' }, ...categorias].map((c) => {
+              const activa = categoria === c.id;
+              return (
+                <TouchableOpacity key={String(c.id)} style={[styles.chip, activa && styles.chipActivo]} onPress={() => setCategoria(c.id)}>
+                  <Text style={[styles.chipTexto, activa && { color: colores.blanco }]}>{c.nombre}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {promo ? (
+            <View style={styles.promo}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={styles.promoEtiqueta}>PROMOCIÓN</Text>
+                <Text style={styles.promoNombre}>{promo.PromoNombre}</Text>
+              </View>
+              <TouchableOpacity style={styles.promoVer} onPress={() => setSoloPromo((v) => !v)}>
+                <Text style={styles.promoVerTexto}>{soloPromo ? 'Todo' : 'Ver'}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {secciones.length === 0 && <Text style={styles.vacio}>No encontramos productos.</Text>}
+          {secciones.map(([titulo, lista]) => (
+            <View key={titulo} style={styles.seccion}>
+              <Text style={styles.h2}>{titulo}</Text>
+              <View style={styles.grid}>
+                {lista.map((p, i) => {
+                  const cant = cantidadDe(p);
+                  const { principal, secundario } = precioMonedas(parseFloat(p.PrecioPromo ?? p.PrecioUSD ?? 0), tasa);
+                  const img = absImg(p.ImagenProducto);
+                  return (
+                    <TouchableOpacity key={p.idProducto} style={styles.tarjeta} activeOpacity={0.9} onPress={() => setAbierto(p)}>
+                      <View style={[styles.foto, { backgroundColor: FONDOS[i % FONDOS.length] }]}>
+                        {img ? <Image source={{ uri: img }} style={styles.fotoImg} /> : null}
+                        {marcaVida(p) ? <View style={styles.vida}><Text style={styles.vidaTexto}>VIDA</Text></View> : null}
+                        {p.PromoBadge ? <View style={styles.badge}><Text style={styles.badgeTexto}>{p.PromoBadge}</Text></View> : null}
+                      </View>
+                      <Text style={styles.prodNombre} numberOfLines={2}>{p.Nombre}</Text>
+                      <View style={styles.prodPie}>
+                        <View style={{ flexShrink: 1 }}>
+                          <Text style={styles.prodPrecio}>{principal}</Text>
+                          {secundario ? <Text style={styles.prodSec} numberOfLines={1}>{secundario}</Text> : null}
+                        </View>
+                        <TouchableOpacity style={[styles.mas, cant > 0 && styles.masLleno]} onPress={() => agregar(p)} accessibilityLabel={`Agregar ${p.Nombre}`}>
+                          <Text style={[styles.masTexto, cant > 0 && { color: colores.marino }]}>{cant > 0 ? cant : '+'}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
           ))}
         </ScrollView>
       )}
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#001034" />
-        </View>
-      ) : error ? (
-        <View style={styles.center}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={fetchProductos}>
-            <Text style={styles.retryBtnText}>Reintentar</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={filtrados}
-          keyExtractor={(item) => String(item.idProducto ?? item.id)}
-          renderItem={renderProducto}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
-          contentContainerStyle={styles.grid}
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Text style={styles.emptyText}>No se encontraron productos</Text>
-            </View>
-          }
-        />
-      )}
-
-      {/* Floating cart button */}
       {totalItems > 0 && (
-        <TouchableOpacity
-          style={styles.floatingCart}
-          onPress={() => router.push('/(tabs)/carrito')}
-          activeOpacity={0.9}
-        >
-          <View style={styles.floatingCartBadge}>
-            <Text style={styles.floatingCartBadgeText}>{totalItems}</Text>
+        <TouchableOpacity style={styles.verCarrito} activeOpacity={0.9} onPress={() => router.push('/(tabs)/carrito')}>
+          <View style={styles.verCarritoNum}><Text style={styles.verCarritoNumTexto}>{totalItems}</Text></View>
+          <Text style={styles.verCarritoTexto}>Ver carrito</Text>
+          <View style={{ alignItems: 'flex-end', paddingRight: 10 }}>
+            <Text style={styles.verCarritoTotal}>{total.principal}</Text>
+            {total.secundario ? <Text style={styles.verCarritoSec}>{total.secundario}</Text> : null}
           </View>
-          <Ionicons name="cart-outline" size={20} color="#fff" />
-          <Text style={styles.floatingCartText}>Ver carrito</Text>
-          <Text style={styles.floatingCartPrice}>{precioMonedas(totalCarrito, tasa).principal}</Text>
         </TouchableOpacity>
       )}
+
+      {abierto && <DetalleProducto producto={abierto} onClose={() => setAbierto(null)} onAgregar={agregar} />}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colores.fondo },
-  searchWrap: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: colores.blanco, margin: 16, marginBottom: 10,
-    borderRadius: radios.medio, borderWidth: 1, borderColor: colores.borde, paddingHorizontal: 14, minHeight: 50,
+  root: { flex: 1, backgroundColor: colores.marino },
+  cabecera: { backgroundColor: colores.marino, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 20, gap: 14 },
+  cabeceraFila: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  tiendaNombre: { fontFamily: fuentes.titulo, fontSize: 19, color: colores.blanco },
+  tiendaSub: { fontSize: 13, color: colores.sobreMarino },
+  abierta: { backgroundColor: colores.verde, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  abiertaTexto: { color: colores.marino, fontWeight: '800', fontSize: 12 },
+  buscar: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colores.blanco, borderRadius: 16, paddingHorizontal: 14, height: 48 },
+  buscarInput: { flex: 1, fontSize: 15, color: colores.marino },
+
+  chips: { gap: 8, paddingHorizontal: 20, paddingTop: 14, backgroundColor: colores.fondo },
+  chip: { height: 40, paddingHorizontal: 16, borderRadius: 99, backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.borde, justifyContent: 'center' },
+  chipActivo: { backgroundColor: colores.marino, borderColor: colores.marino },
+  chipTexto: { fontWeight: '700', fontSize: 14, color: colores.marino },
+
+  promo: { marginTop: 14, marginHorizontal: 20, backgroundColor: colores.celesteClaro, borderRadius: 20, paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  promoEtiqueta: { fontSize: 12, fontWeight: '800', color: colores.marinoClaro, letterSpacing: 0.7 },
+  promoNombre: { fontFamily: fuentes.titulo, fontSize: 16, color: colores.marino },
+  promoVer: { minHeight: 44, justifyContent: 'center' },
+  promoVerTexto: { fontWeight: '800', fontSize: 14, color: colores.marino, textDecorationLine: 'underline' },
+
+  seccion: { paddingTop: 16, paddingHorizontal: 20, gap: 10 },
+  h2: { fontFamily: fuentes.titulo, fontSize: 18, color: colores.marino },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  tarjeta: { width: '47.8%', backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.borde, borderRadius: 20, padding: 10, gap: 8 },
+  foto: { height: 96, borderRadius: 14, overflow: 'hidden' },
+  fotoImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  vida: { position: 'absolute', top: 8, right: 8, backgroundColor: colores.marino, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
+  vidaTexto: { color: colores.blanco, fontSize: 10, fontWeight: '800' },
+  badge: { position: 'absolute', top: 8, left: 8, backgroundColor: colores.verde, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
+  badgeTexto: { color: colores.marino, fontSize: 10, fontWeight: '800' },
+  prodNombre: { fontWeight: '800', fontSize: 14, lineHeight: 17, color: colores.marino },
+  prodPie: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 6 },
+  prodPrecio: { fontFamily: fuentes.titulo, fontSize: 16, color: colores.marino },
+  prodSec: { fontSize: 11, color: colores.textoSuave },
+  mas: { width: 44, height: 44, borderRadius: 22, backgroundColor: colores.marino, alignItems: 'center', justifyContent: 'center' },
+  masLleno: { backgroundColor: colores.celeste },
+  masTexto: { color: colores.blanco, fontWeight: '800', fontSize: 15 },
+
+  verCarrito: {
+    position: 'absolute', left: 16, right: 16, bottom: 16, height: 62, borderRadius: 20, backgroundColor: colores.marino,
+    flexDirection: 'row', alignItems: 'center', paddingLeft: 18, paddingRight: 8, gap: 12,
   },
-  searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 15, color: colores.marino, paddingVertical: 10 },
-  catList: { paddingHorizontal: 16, paddingBottom: 10, gap: 8, flexDirection: 'row' },
-  catChip: { minHeight: 40, paddingHorizontal: 16, borderRadius: 999, justifyContent: 'center', backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.borde },
-  catChipActive: { backgroundColor: colores.marino, borderColor: colores.marino },
-  catChipText: { color: colores.marino, fontSize: 14, fontWeight: '700' },
-  catChipTextActive: { color: colores.blanco },
-  grid: { paddingHorizontal: 10, paddingBottom: 110 },
-  row: { justifyContent: 'space-between', paddingHorizontal: 0 },
-  prodCard: { backgroundColor: colores.blanco, borderRadius: radios.grande, margin: 6, flex: 1, padding: 10, borderWidth: 1, borderColor: colores.borde },
-  prodImg: { width: '100%', height: 110, borderRadius: 14, resizeMode: 'cover', marginBottom: 8, backgroundColor: colores.celesteClaro },
-  plusBadge: { position: 'absolute', top: 14, right: 14, backgroundColor: colores.marino, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
-  plusBadgeText: { color: colores.blanco, fontSize: 10, fontWeight: '800' },
-  prodNombre: { fontSize: 14, fontWeight: '800', color: colores.marino, marginBottom: 4, minHeight: 36 },
-  prodPrecio: { fontSize: 16, fontWeight: '700', color: colores.marino, fontFamily: fuentes.titulo },
-  addBtn: { backgroundColor: colores.marino, borderRadius: 22, width: 44, height: 44, justifyContent: 'center', alignItems: 'center', alignSelf: 'flex-end', marginTop: 6 },
-  qtyRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 6, backgroundColor: colores.celesteClaro, borderRadius: 22, height: 44 },
-  qtyBtn: { width: 34, height: 44, alignItems: 'center', justifyContent: 'center' },
-  qtyText: { paddingHorizontal: 6, fontSize: 14, fontWeight: '800', color: colores.marino },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
-  errorText: { color: colores.error, textAlign: 'center', fontSize: 14 },
-  emptyText: { color: colores.textoSuave, fontSize: 15 },
-  retryBtn: { marginTop: 12, backgroundColor: colores.marino, borderRadius: 14, paddingHorizontal: 22, minHeight: 44, justifyContent: 'center' },
-  retryBtnText: { color: colores.blanco, fontWeight: '800' },
-  floatingCart: {
-    position: 'absolute', bottom: 16, left: 16, right: 16, minHeight: 62, backgroundColor: colores.marino, borderRadius: 20,
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10,
-    shadowColor: colores.marino, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
-  },
-  floatingCartBadge: { backgroundColor: colores.celeste, borderRadius: 12, minWidth: 30, height: 30, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 },
-  floatingCartBadgeText: { color: colores.marino, fontSize: 13, fontWeight: '800' },
-  floatingCartText: { flex: 1, color: colores.blanco, fontWeight: '800', fontSize: 16 },
-  floatingCartPrice: { color: colores.blanco, fontSize: 17, fontFamily: fuentes.titulo },
+  verCarritoNum: { width: 34, height: 34, borderRadius: 12, backgroundColor: colores.celeste, alignItems: 'center', justifyContent: 'center' },
+  verCarritoNumTexto: { color: colores.marino, fontWeight: '800' },
+  verCarritoTexto: { flex: 1, color: colores.blanco, fontWeight: '800', fontSize: 16 },
+  verCarritoTotal: { fontFamily: fuentes.titulo, fontSize: 17, color: colores.blanco },
+  verCarritoSec: { fontSize: 11, color: colores.sobreMarino },
+
+  error: { color: colores.error, textAlign: 'center', padding: 24, backgroundColor: colores.fondo },
+  vacio: { textAlign: 'center', color: colores.textoSuave, padding: 24 },
 });

@@ -39,3 +39,30 @@ test('IGTF redondea a centavos',()=>{
  const p=calcularPagoDelivery(7.35,{Moneda:'USD',MontoOriginal:7.57,Metodo:'EFECTIVO'},tasa,'USD',true);
  assert.equal(p.IGTFUSD,0.22);assert.equal(p.TotalCobradoUSD,7.57);
 });
+const t40={idTasa:9,VESporUSD:40,FechaValor:'2026-10-08',Fuente:'prueba'};
+test('combinado: parte en dólares y el resto en bolívares a la tasa del pedido',()=>{
+ const p=calcularPagoDelivery(10,{Moneda:'MIXTA',Metodo:'EFECTIVO',MontoUSD:6,MontoVES:160},t40,'AMBAS');
+ assert.equal(p.Moneda,'MIXTA');assert.equal(p.TotalUSD,10);
+ assert.deepEqual([p.Desglose.USD.Monto,p.Desglose.VES.Monto],[6,160]);
+ assert.equal(p.IGTFUSD,undefined);
+ // Bolívares que no cuadran con la tasa → 409
+ assert.throws(()=>calcularPagoDelivery(10,{Moneda:'MIXTA',Metodo:'EFECTIVO',MontoUSD:6,MontoVES:150},t40,'AMBAS'),e=>e.statusCode===409);
+ // Requiere ambas monedas, efectivo y una parte en dólares entre 0 y el total
+ assert.throws(()=>calcularPagoDelivery(10,{Moneda:'MIXTA',Metodo:'EFECTIVO',MontoUSD:6,MontoVES:160},t40,'USD'));
+ assert.throws(()=>calcularPagoDelivery(10,{Moneda:'MIXTA',Metodo:'TARJETA',MontoUSD:6,MontoVES:160},t40,'AMBAS'));
+ assert.throws(()=>calcularPagoDelivery(10,{Moneda:'MIXTA',Metodo:'EFECTIVO',MontoUSD:10,MontoVES:0},t40,'AMBAS'));
+});
+test('combinado con IGTF: solo sobre la parte en dólares',()=>{
+ const p=calcularPagoDelivery(10,{Moneda:'MIXTA',Metodo:'EFECTIVO',MontoUSD:6,MontoVES:160},t40,'AMBAS',true);
+ assert.equal(p.IGTFUSD,0.18);assert.equal(p.IGTFBaseUSD,6);assert.equal(p.Desglose.USD.Monto,6.18);assert.equal(p.TotalCobradoUSD,10.18);
+});
+test('cambio: el billete con que paga el cliente',()=>{
+ const p=calcularPagoDelivery(7.5,{Moneda:'USD',Metodo:'EFECTIVO',MontoOriginal:7.5,PagaConUSD:20},t40,'AMBAS');
+ assert.equal(p.PagaCon,20);assert.equal(p.Cambio,12.5);
+ assert.throws(()=>calcularPagoDelivery(7.5,{Moneda:'USD',Metodo:'EFECTIVO',MontoOriginal:7.5,PagaConUSD:5},t40,'AMBAS'));
+ const m=calcularPagoDelivery(10,{Moneda:'MIXTA',Metodo:'EFECTIVO',MontoUSD:6,MontoVES:160,PagaConUSD:10,PagaConVES:200},t40,'AMBAS');
+ assert.equal(m.Desglose.USD.Cambio,4);assert.equal(m.Desglose.VES.Cambio,40);assert.equal(m.Desglose.USD.Efectivo,10);
+ // Pago Móvil no lleva cambio
+ const pm=calcularPagoDelivery(10,{Moneda:'VES',Metodo:'PAGO_MOVIL',MontoOriginal:400,PagaConVES:500},t40,'AMBAS');
+ assert.equal(pm.Cambio,undefined);
+});

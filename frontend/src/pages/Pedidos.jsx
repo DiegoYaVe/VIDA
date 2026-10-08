@@ -13,6 +13,7 @@ import { ModalFacturar, VistaFactura, puedeFacturar } from '../components/Factur
 import { numeroDoc } from '../utils/libroVentas.mjs';
 import { ModalDevolucion, ROLES_DEVUELVEN } from '../components/Devolucion.jsx';
 import { BotonVentasRevision } from '../components/VentasOfflineRevision.jsx';
+import ResumenMoneda from '../components/ResumenMoneda.jsx';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
@@ -41,6 +42,7 @@ const STATUS_PAGO_CFG = {
   PAGADO:    { label: 'Pagado',    color: 'text-green-600' },
   RECHAZADO: { label: 'Rechazado', color: 'text-red-600' },
 };
+const METODO_PAGO_LABEL = { EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta (punto de venta)', PAGO_MOVIL: 'Pago Móvil' };
 
 function StatusBadge({ status }) {
   const cfg = STATUS_CFG[status] || { label: status, color: 'bg-gray-100 text-gray-600' };
@@ -247,6 +249,16 @@ function ModalPedido({ idPedido, idBranch, idCuenta, puedeEscribir, repartidores
                 ) : <p className="text-xs text-gray-400">Sin asignar</p>
               )}
             </div>
+          </div>
+
+          {/* Pago: método, moneda (USD, bolívares o combinado), IGTF y cambio */}
+          <div className="bg-gray-50 rounded-xl p-3">
+            <p className="text-xs text-gray-400 mb-1">Pago</p>
+            <p className="text-sm font-semibold text-gray-800">
+              {METODO_PAGO_LABEL[pedido.MetodoPago] || pedido.MetodoPago || '—'}
+              {pedido.Canal === 'APP' && pedido.MetodoPago !== 'PAGO_MOVIL' ? ' · al entregar' : ''}
+            </p>
+            {pedido.PagoMonedaJSON && <ResumenMoneda datos={pedido.PagoMonedaJSON}/>}
           </div>
 
           {/* Evidencia de entrega (foto del repartidor) */}

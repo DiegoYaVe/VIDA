@@ -16,6 +16,23 @@ export function calcularCobroEfectivoRepartidor({ totalUSD, comisionUSD, pagoMon
 
   const pago = leerSnapshot(pagoMonedaJSON);
   const moneda = String(pago?.Moneda || 'USD').toUpperCase();
+  // Combinado: rinde cada moneda aparte; la comisión sale primero de los
+  // dólares y lo que falte, de los bolívares a la tasa del pedido
+  if (moneda === 'MIXTA') {
+    const tasa = Number(pago?.TasaVESporUSD);
+    const usd = r2(pago?.Desglose?.USD?.Monto ?? 0), ves = r2(pago?.Desglose?.VES?.Monto ?? 0);
+    if (!Number.isFinite(tasa) || tasa <= 0) throw Object.assign(new Error('El pedido combinado no tiene una tasa válida'), { statusCode: 422 });
+    const rendirUSD = r2(Math.max(0, usd - comision));
+    const restoUSD = Math.max(0, comision - usd);
+    const rendirVES = r2(Math.max(0, ves - restoUSD * tasa));
+    return {
+      Version: 1, Moneda: 'MIXTA', EfectivoCobradoUSD: usd, EfectivoCobradoVES: ves,
+      ...(pago?.IGTFUSD ? { IGTFUSD: r2(pago.IGTFUSD) } : {}),
+      ComisionUSD: comision, MontoARendirUSDOriginal: rendirUSD, MontoARendirVESOriginal: rendirVES,
+      MontoARendirUSD: r4(rendirUSD + rendirVES / tasa),
+      TasaVESporUSD: tasa, idTasa: pago.idTasa ?? null, FechaTasa: pago.FechaTasa ?? null, Fuente: pago.Fuente ?? null,
+    };
+  }
   if (moneda === 'VES') {
     const tasa = Number(pago?.TasaVESporUSD);
     const cobrado = Number(pago?.TotalOriginal ?? pago?.TotalVES);
@@ -54,19 +71,36 @@ export function calcularCobroEfectivoRepartidor({ totalUSD, comisionUSD, pagoMon
 export function cobroAlCliente({ metodoPago, totalUSD, pagoMonedaJSON }) {
   const metodo = String(metodoPago || '').toUpperCase();
   const total = r2(totalUSD);
+  // Tarjeta: se cobra con el punto de venta al entregar (en bolívares)
+  if (metodo === 'TARJETA') {
+    let pago = null; try { pago = leerSnapshot(pagoMonedaJSON); } catch { pago = null; }
+    const monto = Number(pago?.TotalOriginal ?? pago?.TotalVES);
+    return { CobrarEfectivo: false, CobrarTarjeta: true, Metodo: metodo, Moneda: pago?.Moneda || null,
+      Monto: Number.isFinite(monto) ? r2(monto) : null, TotalUSD: total, TasaVESporUSD: Number(pago?.TasaVESporUSD) || null };
+  }
   if (metodo !== 'EFECTIVO') return { CobrarEfectivo: false, Metodo: metodo, Moneda: null, Monto: null, TotalUSD: total, TasaVESporUSD: null };
   const pago = leerSnapshot(pagoMonedaJSON);
+  if (String(pago?.Moneda || '').toUpperCase() === 'MIXTA') {
+    const d = pago.Desglose || {};
+    const igtf = r2(pago?.IGTFUSD || 0);
+    return { CobrarEfectivo: true, Metodo: metodo, Moneda: 'MIXTA', Monto: null, TotalUSD: total, TasaVESporUSD: Number(pago.TasaVESporUSD) || null,
+      MontoUSD: r2(d.USD?.Monto ?? 0), MontoVES: r2(d.VES?.Monto ?? 0),
+      CambioUSD: r2(d.USD?.Cambio ?? 0), CambioVES: r2(d.VES?.Cambio ?? 0),
+      ...(igtf ? { IGTFUSD: igtf } : {}) };
+  }
+  // Cambio que debe llevar el repartidor (si el cliente avisó con qué paga)
+  const cambio = Number(pago?.Cambio) > 0 ? { Cambio: r2(pago.Cambio), PagaCon: r2(pago.PagaCon) } : {};
   if (String(pago?.Moneda || 'USD').toUpperCase() === 'VES') {
     const monto = Number(pago?.TotalOriginal ?? pago?.TotalVES);
     const tasa = Number(pago?.TasaVESporUSD);
     if (!Number.isFinite(monto) || monto < 0) {
       throw Object.assign(new Error('El pedido VES no tiene un monto de cobro válido'), { statusCode: 422 });
     }
-    return { CobrarEfectivo: true, Metodo: metodo, Moneda: 'VES', Monto: r2(monto), TotalUSD: total, TasaVESporUSD: Number.isFinite(tasa) && tasa > 0 ? tasa : null };
+    return { CobrarEfectivo: true, Metodo: metodo, Moneda: 'VES', Monto: r2(monto), TotalUSD: total, TasaVESporUSD: Number.isFinite(tasa) && tasa > 0 ? tasa : null, ...cambio };
   }
   const igtf = r2(pago?.IGTFUSD || 0);
   return { CobrarEfectivo: true, Metodo: metodo, Moneda: 'USD', Monto: r2(total + igtf), TotalUSD: total, TasaVESporUSD: null,
-    ...(igtf ? { IGTFUSD: igtf } : {}) };
+    ...(igtf ? { IGTFUSD: igtf } : {}), ...cambio };
 }
 
 // Versión para listas y avisos: un snapshot dañado no debe tumbar la lista

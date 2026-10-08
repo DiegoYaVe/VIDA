@@ -29,7 +29,9 @@ export function useTasaReferencial() {
   return valor;
 }
 
-export const fmtUSD = (n) => `$${Number(n || 0).toFixed(2)}`;
+// Coma decimal, como se escribe en Venezuela: $2,50 · Bs 2.144,72
+export const fmtUSD = (n) =>
+  `$${Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const fmtVES = (n) =>
   `Bs ${Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const red2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;

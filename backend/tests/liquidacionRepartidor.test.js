@@ -39,7 +39,9 @@ test('cobro al cliente: efectivo USD o legado sin snapshot se cobra en dólares'
 test('cobro al cliente: Pago Móvil y tarjeta no piden efectivo',()=>{
  for(const m of ['PAGO_MOVIL','TARJETA']) {
   const c=cobroAlCliente({metodoPago:m,totalUSD:3.4,pagoMonedaJSON:snapVES});
-  assert.equal(c.CobrarEfectivo,false);assert.equal(c.Monto,null);assert.equal(c.Metodo,m);
+  assert.equal(c.CobrarEfectivo,false);assert.equal(c.Metodo,m);
+  // Tarjeta: el repartidor cobra con el punto el monto del snapshot
+  assert.equal(c.Monto,m==='TARJETA'?2962.65:null);
  }
 });
 test('cobro al cliente: coincide con lo que la liquidación cuenta como efectivo cobrado',()=>{
@@ -64,4 +66,22 @@ test('IGTF: el repartidor cobra venta + IGTF y rinde ambos; la comisión es sobr
 test('sin IGTF el cobro en dólares sigue siendo el total', () => {
   const cobro = cobroAlCliente({ metodoPago: 'EFECTIVO', totalUSD: 10, pagoMonedaJSON: { Moneda: 'USD', TotalOriginal: 10 } });
   assert.equal(cobro.Monto, 10); assert.equal(cobro.IGTFUSD, undefined);
+});
+
+test('combinado: cobra y rinde cada moneda; la comisión sale primero de los dólares', () => {
+  const pago = { Moneda: 'MIXTA', TasaVESporUSD: 40, TotalUSD: 10, Desglose: { USD: { Monto: 6, Cambio: 4 }, VES: { Monto: 160, Cambio: 0 } } };
+  const cobro = cobroAlCliente({ metodoPago: 'EFECTIVO', totalUSD: 10, pagoMonedaJSON: pago });
+  assert.equal(cobro.Moneda, 'MIXTA'); assert.equal(cobro.MontoUSD, 6); assert.equal(cobro.MontoVES, 160); assert.equal(cobro.CambioUSD, 4);
+  const liq = calcularCobroEfectivoRepartidor({ totalUSD: 10, comisionUSD: 1, pagoMonedaJSON: pago });
+  assert.equal(liq.MontoARendirUSDOriginal, 5); assert.equal(liq.MontoARendirVESOriginal, 160); assert.equal(liq.MontoARendirUSD, 9);
+  // Comisión mayor que la parte en dólares: el resto sale de los bolívares
+  const liq2 = calcularCobroEfectivoRepartidor({ totalUSD: 10, comisionUSD: 7, pagoMonedaJSON: pago });
+  assert.equal(liq2.MontoARendirUSDOriginal, 0); assert.equal(liq2.MontoARendirVESOriginal, 120);
+});
+
+test('tarjeta: se cobra con el punto, sin efectivo; cambio en efectivo simple', () => {
+  const t = cobroAlCliente({ metodoPago: 'TARJETA', totalUSD: 10, pagoMonedaJSON: { Moneda: 'VES', TotalOriginal: 400, TasaVESporUSD: 40 } });
+  assert.equal(t.CobrarEfectivo, false); assert.equal(t.CobrarTarjeta, true); assert.equal(t.Monto, 400);
+  const c = cobroAlCliente({ metodoPago: 'EFECTIVO', totalUSD: 7.5, pagoMonedaJSON: { Moneda: 'USD', TotalOriginal: 7.5, PagaCon: 20, Cambio: 12.5 } });
+  assert.equal(c.Cambio, 12.5); assert.equal(c.PagaCon, 20);
 });

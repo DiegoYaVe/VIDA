@@ -588,10 +588,13 @@ export async function actualizarStatusPedido(request, reply) {
           .input('idBranch',     sql.BigInt,       idBranch)
           .input('idCuenta',     sql.BigInt,       idCuenta)
           .input('idRepartidor', sql.BigInt,       idRepartidor)
-          .input('efectivo',     sql.Decimal(18,4), efectivoARendir)
-          .input('efectivoVES',  sql.Decimal(18,4), liquidacionMoneda?.Moneda === 'VES' ? liquidacionMoneda.MontoARendirOriginal : 0)
+          // Saldo físico por moneda (el combinado suma a las dos)
+          .input('efectivoUSD',  sql.Decimal(18,4), liquidacionMoneda?.Moneda === 'MIXTA' ? liquidacionMoneda.MontoARendirUSDOriginal
+                                                     : liquidacionMoneda?.Moneda === 'VES' ? 0 : efectivoARendir)
+          .input('efectivoVES',  sql.Decimal(18,4), liquidacionMoneda?.Moneda === 'MIXTA' ? liquidacionMoneda.MontoARendirVESOriginal
+                                                     : liquidacionMoneda?.Moneda === 'VES' ? liquidacionMoneda.MontoARendirOriginal : 0)
           .query(`UPDATE VIDA_REPARTIDORES
-                  SET SaldoPendiente = ISNULL(SaldoPendiente,0) + CASE WHEN @efectivoVES=0 THEN @efectivo ELSE 0 END,
+                  SET SaldoPendiente = ISNULL(SaldoPendiente,0) + @efectivoUSD,
                       SaldoPendienteVES = ISNULL(SaldoPendienteVES,0) + @efectivoVES
                   WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
       }
@@ -993,7 +996,24 @@ export async function pedidosActivos(request, reply) {
           AND p.Status NOT IN ('ENTREGADO','CANCELADO')
         ORDER BY ISNULL(p.OrdenRuta, 999), p.FechaAlta ASC
       `);
-    return reply.send(r.recordset.map(conCobro));
+    // Productos de cada pedido, para revisar al recoger y al entregar
+    const ids = r.recordset.map(p => Number(p.idPedido)).filter(Number.isSafeInteger);
+    const items = new Map();
+    if (ids.length) {
+      const d = await pool.request()
+        .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+        .query(`SELECT d.idPedido, ISNULL(pr.Nombre, CONCAT('Producto ', d.idProducto)) AS Nombre, d.Cantidad
+                FROM VIDA_PEDIDOS_DETALLE d
+                LEFT JOIN VIDA_INVENTARIO_PRODUCTOS pr ON pr.idBranch=d.idBranch AND pr.idCuenta=d.idCuenta AND pr.idProducto=d.idProducto
+                WHERE d.idBranch=@idBranch AND d.idCuenta=@idCuenta AND d.idPedido IN (${ids.join(',')})
+                ORDER BY d.idPedido, d.idDetalle`);
+      for (const it of d.recordset) {
+        const k = String(it.idPedido);
+        if (!items.has(k)) items.set(k, []);
+        items.get(k).push({ Nombre: it.Nombre, Cantidad: Number(it.Cantidad) });
+      }
+    }
+    return reply.send(r.recordset.map(p => ({ ...conCobro(p), items: items.get(String(p.idPedido)) || [] })));
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener pedidos activos' });
@@ -1044,47 +1064,150 @@ export async function pedidosDisponibles(request, reply) {
 // REPARTIDOR — HISTORIAL PAGINADO
 // GET /delivery/repartidor/historial?page=1&limit=20
 // ══════════════════════════════════════════════════════════════════════════
+// Entregas del repartidor con la hora real de entrega (historial del pedido),
+// el cliente abreviado ("María G.") y la calificación que dejó.
+const SQL_ENTREGAS = (joins = '') => `
+  FROM VIDA_PEDIDOS p
+  OUTER APPLY (SELECT TOP 1 h.FechaAlta FROM VIDA_PEDIDOS_HISTORIAL h
+               WHERE h.idBranch=p.idBranch AND h.idCuenta=p.idCuenta AND h.idPedido=p.idPedido
+                 AND h.StatusNuevo='ENTREGADO' ORDER BY h.FechaAlta DESC) he
+  CROSS APPLY (SELECT ISNULL(he.FechaAlta, ISNULL(p.FechaMod, p.FechaAlta)) AS FechaEntrega) fe
+  ${joins}
+  WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta
+    AND p.idRepartidor=@idRepartidor AND p.Status='ENTREGADO'`;
+// Día de negocio (Caracas, UTC−4) de la entrega
+const DIA_ENTREGA = 'CAST(DATEADD(HOUR,-4,fe.FechaEntrega) AS DATE)';
+
 export async function historialRepartidor(request, reply) {
   const { idBranch, idCuenta, idRepartidor } = request.repartidor;
-  const { page = 1, limit = 20 } = request.query;
-  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const { page = 1, limit = 20, mes } = request.query;
+  const lim = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+  const offset = (Math.max(parseInt(page) || 1, 1) - 1) * lim;
+  // Filtro opcional por mes de entrega (YYYY-MM, hora de Caracas)
+  const filtroMes = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(mes || '')) ? String(mes) : null;
+  const condMes = filtroMes ? ` AND ${DIA_ENTREGA} >= @desde AND ${DIA_ENTREGA} < DATEADD(MONTH,1,@desde)` : '';
+  const req = (pool) => {
+    const r = pool.request()
+      .input('idBranch',     sql.BigInt, idBranch)
+      .input('idCuenta',     sql.BigInt, idCuenta)
+      .input('idRepartidor', sql.BigInt, idRepartidor);
+    if (filtroMes) r.input('desde', sql.Date, filtroMes + '-01');
+    return r;
+  };
 
   try {
     const pool = await getPool();
-    const r = await pool.request()
-      .input('idBranch',     sql.BigInt, idBranch)
-      .input('idCuenta',     sql.BigInt, idCuenta)
-      .input('idRepartidor', sql.BigInt, idRepartidor)
+    const r = await req(pool)
       .input('offset',       sql.Int,    offset)
-      .input('limit',        sql.Int,    parseInt(limit))
+      .input('limit',        sql.Int,    lim)
       .query(`
-        SELECT idPedido, Status, MetodoPago, TotalUSD, PagoMonedaJSON,
-               ComisionRepartidor, MontoEfectivoRepartidor, LiquidacionRepartidorJSON,
-               DireccionEntrega, FechaAlta
-        FROM VIDA_PEDIDOS
-        WHERE idBranch=@idBranch AND idCuenta=@idCuenta
-          AND idRepartidor=@idRepartidor AND Status='ENTREGADO'
-        ORDER BY FechaAlta DESC
+        SELECT p.idPedido, p.Status, p.MetodoPago, p.TotalUSD, p.PagoMonedaJSON,
+               p.ComisionRepartidor, p.MontoEfectivoRepartidor, p.LiquidacionRepartidorJSON,
+               p.DireccionEntrega, p.DistanciaKm, p.FechaAlta, fe.FechaEntrega,
+               LTRIM(RTRIM(c.Nombre + ISNULL(' ' + LEFT(NULLIF(LTRIM(c.Apellidos),''),1) + '.', ''))) AS Cliente,
+               cal.Estrellas
+        ${SQL_ENTREGAS(`
+        LEFT JOIN VIDA_APP_CLIENTES c ON c.idBranch=p.idBranch AND c.idCuenta=p.idCuenta AND c.idCliente=p.idCliente
+        LEFT JOIN VIDA_REPARTIDORES_CALIFICACIONES cal
+          ON cal.idBranch=p.idBranch AND cal.idCuenta=p.idCuenta AND cal.idPedido=p.idPedido AND cal.idRepartidor=p.idRepartidor`)}
+        ${condMes}
+        ORDER BY fe.FechaEntrega DESC
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
       `);
 
-    const totalR = await pool.request()
-      .input('idBranch',     sql.BigInt, idBranch)
-      .input('idCuenta',     sql.BigInt, idCuenta)
-      .input('idRepartidor', sql.BigInt, idRepartidor)
-      .query(`SELECT COUNT(*) AS total FROM VIDA_PEDIDOS
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta
-                AND idRepartidor=@idRepartidor AND Status='ENTREGADO'`);
+    const totalR = await req(pool).query(`
+      SELECT COUNT(*) AS total, ISNULL(SUM(p.ComisionRepartidor),0) AS Comisiones
+      ${SQL_ENTREGAS()} ${condMes}`);
+    const { total, Comisiones } = totalR.recordset[0];
 
     return reply.send({
       data:  r.recordset,
-      total: totalR.recordset[0].total,
-      page:  parseInt(page),
-      pages: Math.ceil(totalR.recordset[0].total / parseInt(limit)),
+      total,
+      Comisiones: Number(Comisiones),
+      page:  parseInt(page) || 1,
+      pages: Math.ceil(total / lim),
     });
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener historial' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// REPARTIDOR — GANANCIAS
+// GET /delivery/repartidor/ganancias?periodo=hoy|semana|mes
+// Comisiones y entregas por día (Caracas), efectivo por rendir por moneda y
+// las últimas liquidaciones.
+// ══════════════════════════════════════════════════════════════════════════
+const DIAS_PERIODO = { hoy: 1, semana: 7, mes: 30 };
+
+// % de comisión que de verdad se le aplica: el suyo o el global de la cuenta
+// (misma regla que al entregar, en actualizarStatusPedido)
+async function comisionPctEfectiva(pool, idBranch, idCuenta, propio) {
+  if (propio != null) return Number(propio);
+  const g = parseFloat(await getConfigVal(pool, idBranch, idCuenta, 'ComisionRepartidorPct', '0'));
+  return Number.isFinite(g) ? g : 0;
+}
+
+export async function gananciasRepartidor(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  const periodo = DIAS_PERIODO[request.query?.periodo] ? request.query.periodo : 'semana';
+  // Semana = lunes a domingo de esta semana (Caracas); hoy y mes = días corridos
+  const hoy = new Date(Date.now() - 4 * 3600 * 1000);
+  const desdeLunes = (hoy.getUTCDay() + 6) % 7; // 0 = lunes
+  const dias = periodo === 'semana' ? desdeLunes + 1 : DIAS_PERIODO[periodo];
+  const largo = periodo === 'semana' ? 7 : dias;
+  try {
+    const pool = await getPool();
+    const base = () => pool.request()
+      .input('idBranch',     sql.BigInt, idBranch)
+      .input('idCuenta',     sql.BigInt, idCuenta)
+      .input('idRepartidor', sql.BigInt, idRepartidor);
+    const [serieR, repR, liqR] = await Promise.all([
+      base().input('dias', sql.Int, dias).query(`
+        SELECT ${DIA_ENTREGA} AS Dia, COUNT(*) AS Entregas, ISNULL(SUM(p.ComisionRepartidor),0) AS Comision
+        ${SQL_ENTREGAS()}
+          AND ${DIA_ENTREGA} > DATEADD(DAY, -@dias, CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE))
+        GROUP BY ${DIA_ENTREGA}`),
+      base().query(`SELECT SaldoPendiente, SaldoPendienteVES, Calificacion, ComisionPct FROM VIDA_REPARTIDORES
+                    WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`),
+      base().query(`SELECT TOP 5 idLiquidacion, FechaAlta, MontoALiquidar, NumPedidos, DesgloseMonedasJSON
+                    FROM VIDA_REPARTIDOR_LIQUIDACIONES
+                    WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor
+                    ORDER BY FechaAlta DESC`),
+    ]);
+    // Serie completa (días sin entregas en cero), del más viejo a hoy
+    const porDia = new Map(serieR.recordset.map(d => [new Date(d.Dia).toISOString().slice(0, 10), d]));
+    const serie = [];
+    for (let i = 0; i < largo; i++) {
+      const fecha = new Date(hoy.getTime() - (dias - 1 - i) * 86400000);
+      const f = fecha.toISOString().slice(0, 10);
+      const d = porDia.get(f);
+      serie.push({ Fecha: f, Hoy: i === dias - 1, Futuro: i > dias - 1,
+        Entregas: d ? d.Entregas : 0, Comision: d ? Math.round(Number(d.Comision) * 100) / 100 : 0 });
+    }
+    const rep = repR.recordset[0] || {};
+    return reply.send({
+      periodo,
+      Comision: Math.round(serie.reduce((s, d) => s + d.Comision, 0) * 100) / 100,
+      Entregas: serie.reduce((s, d) => s + d.Entregas, 0),
+      serie,
+      SaldoPendienteUSD: Number(rep.SaldoPendiente || 0),
+      SaldoPendienteVES: Number(rep.SaldoPendienteVES || 0),
+      Calificacion: rep.Calificacion ?? null,
+      ComisionPctEfectiva: await comisionPctEfectiva(pool, idBranch, idCuenta, rep.ComisionPct),
+      liquidaciones: liqR.recordset.map(l => {
+        let d = null; try { d = JSON.parse(l.DesgloseMonedasJSON || 'null'); } catch { /* legado */ }
+        return {
+          idLiquidacion: l.idLiquidacion, Fecha: l.FechaAlta, NumPedidos: l.NumPedidos,
+          USD: d ? Number(d.USD?.MontoALiquidar || 0) : Number(l.MontoALiquidar || 0),
+          VES: d ? Number(d.VES?.MontoALiquidar || 0) : 0,
+        };
+      }),
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener ganancias' });
   }
 }
 
@@ -1167,6 +1290,36 @@ export async function actualizarPerfilRepartidor(request, reply) {
 // REPARTIDOR — PERFIL COMPLETO CON ESTADÍSTICAS
 // GET /delivery/repartidor/perfil
 // ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════
+// REPARTIDOR — CAMBIAR CONTRASEÑA
+// PUT /delivery/repartidor/password  { actual, nueva }
+// ══════════════════════════════════════════════════════════════════════════
+export async function cambiarPasswordRepartidor(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  const { actual, nueva } = request.body || {};
+  if (typeof nueva !== 'string' || nueva.length < 6 || nueva.length > 100)
+    return reply.code(400).send({ error: 'La nueva contraseña debe tener al menos 6 caracteres' });
+  try {
+    const pool = await getPool();
+    const ids = () => pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idRepartidor', sql.BigInt, idRepartidor);
+    const rep = (await ids().query(`SELECT Contrasena FROM VIDA_REPARTIDORES
+      WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`)).recordset[0];
+    if (!rep) return reply.code(404).send({ error: 'Repartidor no encontrado' });
+    if (rep.Contrasena) {
+      if (!actual) return reply.code(400).send({ error: 'Escribe tu contraseña actual' });
+      if (!(await bcrypt.compare(String(actual), rep.Contrasena))) return reply.code(401).send({ error: 'La contraseña actual no es correcta' });
+    }
+    await ids().input('Contrasena', sql.NVarChar(200), await bcrypt.hash(nueva, 10))
+      .query(`UPDATE VIDA_REPARTIDORES SET Contrasena=@Contrasena
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+    return reply.send({ ok: true });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'No se pudo cambiar la contraseña' });
+  }
+}
+
 export async function perfilRepartidorApp(request, reply) {
   const { idBranch, idCuenta, idRepartidor } = request.repartidor;
   try {
@@ -1186,7 +1339,8 @@ export async function perfilRepartidorApp(request, reply) {
         WHERE r.idBranch=@idBranch AND r.idCuenta=@idCuenta AND r.idRepartidor=@idRepartidor
       `);
     if (!r.recordset.length) return reply.code(404).send({ error: 'Repartidor no encontrado' });
-    return reply.send(r.recordset[0]);
+    const perfil = r.recordset[0];
+    return reply.send({ ...perfil, idRepartidor: Number(idRepartidor), ComisionPctEfectiva: await comisionPctEfectiva(pool, idBranch, idCuenta, perfil.ComisionPct) });
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener perfil' });
