@@ -1,19 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Animated,
-  Easing,
-  Vibration,
-  Alert,
-  ActivityIndicator,
-  ScrollView,
-  Switch,
-  Dimensions,
-  Platform,
-} from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Animated, Easing, Vibration, Alert, ActivityIndicator, ScrollView, Switch, Dimensions, Platform, Image } from 'react-native';
+import { Text } from '../../components/Texto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -26,6 +13,7 @@ import MapaRuta from '../../components/MapaRuta';
 import { iniciarUbicacionBackground, detenerUbicacionBackground } from '../../services/backgroundLocation';
 import useAuthStore from '../../store/authStore';
 import usePedidoStore from '../../store/pedidoStore';
+import { colores, fuentes, logos, radios } from '../../constants/tema';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -63,11 +51,11 @@ const MOTIVOS_CANCELACION = [
 ];
 
 const ACTION_BUTTONS = [
-  { fromStatus: 'REPARTIDOR_ASIGNADO', label: 'Voy a la sucursal',                nextStatus: 'IR_A_SUCURSAL', color: '#1A6A9A' },
-  { fromStatus: null,                  label: 'Voy a la sucursal',                nextStatus: 'IR_A_SUCURSAL', color: '#1A6A9A' },
-  { fromStatus: 'IR_A_SUCURSAL',       label: 'Llegué a la sucursal',             nextStatus: 'EN_SUCURSAL',   color: '#7B3FBE' },
-  { fromStatus: 'EN_SUCURSAL',         label: 'Tomé el pedido, voy al cliente',   nextStatus: 'EN_CAMINO',     color: '#E67E22' },
-  { fromStatus: 'EN_CAMINO',           label: 'Marcar como entregado',            nextStatus: 'ENTREGADO',     color: '#27AE60' },
+  { fromStatus: 'REPARTIDOR_ASIGNADO', label: 'Voy a la sucursal',                nextStatus: 'IR_A_SUCURSAL', color: '#001034' },
+  { fromStatus: null,                  label: 'Voy a la sucursal',                nextStatus: 'IR_A_SUCURSAL', color: '#001034' },
+  { fromStatus: 'IR_A_SUCURSAL',       label: 'Llegué a la sucursal',             nextStatus: 'EN_SUCURSAL',   color: '#001034' },
+  { fromStatus: 'EN_SUCURSAL',         label: 'Tomé el pedido, voy al cliente',   nextStatus: 'EN_CAMINO',     color: '#001034' },
+  { fromStatus: 'EN_CAMINO',           label: 'Marcar como entregado',            nextStatus: 'ENTREGADO',     color: '#001034' },
 ];
 
 // Formatea el ETA como "~25 min · 3:40 PM"
@@ -118,13 +106,13 @@ function NuevoPedidoModal({ pedido, pedidosActivos, onAceptar, onRechazar }) {
   }, []);
 
   const progressWidth = progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
-  const colorProgress = progressAnim.interpolate({ inputRange: [0, 0.3, 1], outputRange: ['#E53E3E', '#E67E22', '#27AE60'] });
+  const colorProgress = progressAnim.interpolate({ inputRange: [0, 0.3, 1], outputRange: ['#E53E3E', '#E67E22', '#4DAD66'] });
 
   return (
     <View style={modalStyles.overlay}>
       <Animated.View style={[modalStyles.sheet, { transform: [{ translateY: slideAnim }] }]}>
         <View style={modalStyles.urgentHeader}>
-          <Ionicons name="flash" size={28} color="#fff" />
+          <Ionicons name="flash" size={26} color={colores.celeste} />
           <Text style={modalStyles.urgentTitle}>
             {pedidosActivos > 0 ? '¡Pedido extra en tu ruta!' : '¡Nuevo pedido!'}
           </Text>
@@ -136,7 +124,7 @@ function NuevoPedidoModal({ pedido, pedidosActivos, onAceptar, onRechazar }) {
         <View style={modalStyles.body}>
           {pedidosActivos > 0 && (
             <View style={modalStyles.multiChip}>
-              <Ionicons name="layers-outline" size={16} color="#1A6A9A" />
+              <Ionicons name="layers-outline" size={16} color="#001034" />
               <Text style={modalStyles.multiChipText}>
                 Ya llevas {pedidosActivos} pedido{pedidosActivos !== 1 ? 's' : ''} — este se suma a tu ruta
               </Text>
@@ -144,13 +132,13 @@ function NuevoPedidoModal({ pedido, pedidosActivos, onAceptar, onRechazar }) {
           )}
           {(pedido.sucursal || pedido.NombreSucursal) && (
             <View style={modalStyles.infoRow}>
-              <Ionicons name="storefront-outline" size={20} color="#718096" />
+              <Ionicons name="storefront-outline" size={20} color="#4B5B73" />
               <Text style={modalStyles.infoLabel}>Recoger en:</Text>
               <Text style={modalStyles.infoValue}>{pedido.sucursal || pedido.NombreSucursal}</Text>
             </View>
           )}
           <View style={modalStyles.infoRow}>
-            <Ionicons name="location-outline" size={20} color="#718096" />
+            <Ionicons name="location-outline" size={20} color="#4B5B73" />
             <Text style={modalStyles.infoLabel}>Entregar en:</Text>
             <Text style={modalStyles.infoValue} numberOfLines={2}>{pedido.direccion || pedido.DireccionEntrega || 'Sin dirección'}</Text>
           </View>
@@ -159,21 +147,21 @@ function NuevoPedidoModal({ pedido, pedidosActivos, onAceptar, onRechazar }) {
             <Text style={modalStyles.totalValue}>{cobro.cobrar ? (cobro.monto || 'Confirmar') : fmtUSD(pedido.total || pedido.Total || pedido.TotalUSD)}</Text>
           </View>
           <View style={modalStyles.pagoRow}>
-            <Ionicons name={cobro.cobrar ? 'cash-outline' : 'checkmark-circle-outline'} size={22} color={cobro.cobrar ? '#27AE60' : '#1A6A9A'} />
+            <Ionicons name={cobro.cobrar ? 'cash-outline' : 'checkmark-circle-outline'} size={22} color={cobro.cobrar ? colores.verdeTexto : colores.marino} />
             <View style={{ flexShrink: 1 }}>
-              <Text style={[modalStyles.pagoText, { color: cobro.cobrar ? '#27AE60' : '#1A6A9A' }]}>{cobro.titulo}</Text>
-              {cobro.detalle ? <Text style={{ fontSize: 12, color: '#718096', marginTop: 2 }}>{cobro.detalle}</Text> : null}
+              <Text style={[modalStyles.pagoText, { color: cobro.cobrar ? colores.verdeTexto : colores.marino }]}>{cobro.titulo}</Text>
+              {cobro.detalle ? <Text style={{ fontSize: 12, color: '#4B5B73', marginTop: 2 }}>{cobro.detalle}</Text> : null}
             </View>
           </View>
         </View>
         <View style={modalStyles.actions}>
           <TouchableOpacity style={modalStyles.btnRechazar} onPress={onRechazar}>
-            <Ionicons name="close" size={22} color="#718096" />
+            <Ionicons name="close" size={22} color="#4B5B73" />
             <Text style={modalStyles.btnRechazarText}>Rechazar</Text>
           </TouchableOpacity>
           <TouchableOpacity style={modalStyles.btnAceptar} onPress={onAceptar}>
-            <Ionicons name="checkmark" size={24} color="#fff" />
-            <Text style={modalStyles.btnAceptarText}>Aceptar</Text>
+            <Ionicons name="checkmark" size={24} color={colores.marino} />
+            <Text style={modalStyles.btnAceptarText}>Aceptar pedido</Text>
           </TouchableOpacity>
         </View>
       </Animated.View>
@@ -206,7 +194,7 @@ function MotivoCancelacionModal({ pedido, loading, onConfirmar, onCerrar }) {
             <Ionicons
               name={sel === m ? 'radio-button-on' : 'radio-button-off'}
               size={20}
-              color={sel === m ? '#E53E3E' : '#A0AEC0'}
+              color={sel === m ? '#E53E3E' : '#8C9BB0'}
             />
             <Text style={[motivoStyles.opcionText, sel === m && motivoStyles.opcionTextSel]}>{m}</Text>
           </TouchableOpacity>
@@ -244,7 +232,7 @@ function PedidoStatusBar({ currentStatus }) {
             <View style={[pedidoStyles.stepDot, done && pedidoStyles.stepDone, active && pedidoStyles.stepActive]}>
               {done
                 ? <Ionicons name="checkmark" size={12} color="#fff" />
-                : <Ionicons name={STATUS_ICONS[s]} size={active ? 14 : 12} color={active ? '#fff' : '#A0AEC0'} />
+                : <Ionicons name={STATUS_ICONS[s]} size={active ? 14 : 12} color={active ? colores.marino : colores.textoTenue} />
               }
             </View>
             <Text style={[pedidoStyles.stepLabel, active && pedidoStyles.stepLabelActive, done && pedidoStyles.stepLabelDone]}>
@@ -543,7 +531,11 @@ export default function IndexScreen() {
       style={[styles.header, disponible ? styles.headerOnline : styles.headerOffline]}
     >
       <View style={styles.headerContent}>
-        <View>
+        <View style={styles.headerIzq}>
+          <View style={styles.headerSimbolo}>
+            <Image source={logos.simboloOscuro} style={styles.headerSimboloImg} resizeMode="contain" accessibilityLabel="VIDA" />
+          </View>
+          <View>
           <Text style={styles.headerGreeting}>Hola, {repartidor?.Nombre || 'Repartidor'}</Text>
           <Text style={styles.headerStatus}>
             {disponible
@@ -552,6 +544,7 @@ export default function IndexScreen() {
                 : '● En línea'
               : '● Desconectado'}
           </Text>
+          </View>
         </View>
         <View style={styles.headerRight}>
           {toggling ? (
@@ -560,7 +553,7 @@ export default function IndexScreen() {
             <Switch
               value={disponible}
               onValueChange={handleToggle}
-              trackColor={{ false: 'rgba(255,255,255,0.3)', true: '#27AE60' }}
+              trackColor={{ false: 'rgba(255,255,255,0.3)', true: colores.celeste }}
               thumbColor="#fff"
               ios_backgroundColor="rgba(255,255,255,0.3)"
             />
@@ -573,13 +566,13 @@ export default function IndexScreen() {
   // -------- RENDER INACTIVO --------
   if (!disponible && pedidosActivos.length === 0) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#1A202C' }}>
+      <View style={{ flex: 1, backgroundColor: '#001034' }}>
         {Header}
         <View style={styles.inactivoContainer}>
           <View style={styles.inactivoContent}>
             <PulseView style={styles.pulseBg} />
             <View style={styles.pulseCenter}>
-              <Ionicons name="bicycle" size={52} color="#fff" />
+              <Image source={logos.simboloOscuro} style={styles.pulseSimbolo} resizeMode="contain" accessibilityLabel="VIDA" />
             </View>
             <Text style={styles.inactivoTitle}>Estás desconectado</Text>
             <Text style={styles.inactivoSub}>Actívate para recibir pedidos cercanos</Text>
@@ -589,11 +582,11 @@ export default function IndexScreen() {
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colores.marino} />
               ) : (
                 <>
-                  <Ionicons name="power" size={22} color="#fff" />
-                  <Text style={styles.conectarBtnText}>CONECTARME</Text>
+                  <Ionicons name="power" size={22} color={colores.marino} />
+                  <Text style={styles.conectarBtnText}>Conectarme</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -605,7 +598,7 @@ export default function IndexScreen() {
 
   // -------- RENDER DISPONIBLE / CON PEDIDOS --------
   return (
-    <View style={{ flex: 1, backgroundColor: '#F5F7FA' }}>
+    <View style={{ flex: 1, backgroundColor: '#F2F9FB' }}>
       {Header}
       <View style={styles.onlineContainer}>
         <View style={styles.mapPlaceholder}>
@@ -665,7 +658,7 @@ export default function IndexScreen() {
                 {/* ETA estimado */}
                 {fmtETA(pedidoSel) && (
                   <View style={styles.etaBox}>
-                    <Ionicons name="time-outline" size={18} color="#1A6A9A" />
+                    <Ionicons name="time-outline" size={18} color="#001034" />
                     <Text style={styles.etaText}>Entrega estimada: {fmtETA(pedidoSel)}</Text>
                     {pedidoSel?.DistanciaKm != null && (
                       <Text style={styles.etaKm}>{parseFloat(pedidoSel.DistanciaKm).toFixed(1)} km</Text>
@@ -675,19 +668,19 @@ export default function IndexScreen() {
 
                 {(pedidoSel?.NombreCliente || pedidoSel?.cliente) && (
                   <View style={styles.infoRow}>
-                    <Ionicons name="person-outline" size={18} color="#718096" />
+                    <Ionicons name="person-outline" size={18} color="#4B5B73" />
                     <Text style={styles.infoText}>{pedidoSel.NombreCliente || pedidoSel.cliente}</Text>
                   </View>
                 )}
                 <View style={styles.infoRow}>
-                  <Ionicons name="location-outline" size={18} color="#718096" />
+                  <Ionicons name="location-outline" size={18} color="#4B5B73" />
                   <Text style={styles.infoText} numberOfLines={2}>
                     {pedidoSel?.direccion || pedidoSel?.DireccionEntrega || 'Sin dirección'}
                   </Text>
                 </View>
                 {(pedidoSel?.sucursal || pedidoSel?.NombreSucursal) && (
                   <View style={styles.infoRow}>
-                    <Ionicons name="storefront-outline" size={18} color="#718096" />
+                    <Ionicons name="storefront-outline" size={18} color="#4B5B73" />
                     <Text style={styles.infoText}>{pedidoSel.sucursal || pedidoSel.NombreSucursal}</Text>
                   </View>
                 )}
@@ -697,19 +690,19 @@ export default function IndexScreen() {
                   const cobro = infoCobro(pedidoSel);
                   return cobro.cobrar ? (
                     <View style={styles.efectivoBox}>
-                      <Ionicons name="cash-outline" size={20} color="#27AE60" />
+                      <Ionicons name="cash-outline" size={22} color={colores.celeste} />
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.efectivoLabel}>Cobrar al cliente · {cobro.titulo}</Text>
+                        <Text style={styles.efectivoLabel}>Cobra al cliente · {cobro.titulo}</Text>
                         {cobro.monto ? <Text style={styles.efectivoMonto}>{cobro.monto}</Text> : null}
                         {cobro.detalle ? <Text style={styles.efectivoLabel}>{cobro.detalle}</Text> : null}
                       </View>
                     </View>
                   ) : (
-                    <View style={[styles.efectivoBox, { backgroundColor: '#EBF8FF', borderColor: '#BEE3F8' }]}>
-                      <Ionicons name="checkmark-circle-outline" size={20} color="#1A6A9A" />
+                    <View style={[styles.efectivoBox, { backgroundColor: '#DDF2F8', borderColor: '#C3E8F2' }]}>
+                      <Ionicons name="checkmark-circle-outline" size={20} color="#001034" />
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.efectivoLabel, { color: '#1A6A9A' }]}>{cobro.titulo}</Text>
-                        <Text style={[styles.efectivoLabel, { color: '#1A6A9A' }]}>{cobro.detalle}</Text>
+                        <Text style={[styles.efectivoLabel, { color: '#001034' }]}>{cobro.titulo}</Text>
+                        <Text style={[styles.efectivoLabel, { color: '#001034' }]}>{cobro.detalle}</Text>
                       </View>
                     </View>
                   );
@@ -768,7 +761,7 @@ export default function IndexScreen() {
             </>
           ) : (
             <View style={styles.esperandoContainer}>
-              <Ionicons name="radio-outline" size={40} color="#27AE60" />
+              <Ionicons name="radio-outline" size={40} color={colores.celeste} />
               <Text style={styles.esperandoTitle}>Esperando pedidos...</Text>
               <Text style={styles.esperandoSub}>Estás en línea y visible para clientes cercanos</Text>
             </View>
@@ -799,13 +792,13 @@ export default function IndexScreen() {
 
 function getStatusColor(status) {
   return {
-    REPARTIDOR_ASIGNADO: '#718096',
-    IR_A_SUCURSAL: '#1A6A9A',
-    EN_SUCURSAL: '#7B3FBE',
+    REPARTIDOR_ASIGNADO: '#4B5B73',
+    IR_A_SUCURSAL: '#001034',
+    EN_SUCURSAL: '#0C2A5E',
     EN_CAMINO: '#E67E22',
-    ENTREGADO: '#27AE60',
+    ENTREGADO: '#4DAD66',
     CANCELADO: '#E53E3E',
-  }[status] || '#718096';
+  }[status] || '#4B5B73';
 }
 
 // ---- Styles ----
@@ -814,36 +807,28 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15, shadowRadius: 8, elevation: 6,
   },
-  headerOffline: { backgroundColor: '#2D3748' },
-  headerOnline:  { backgroundColor: '#1A6A9A' },
+  headerOffline: { backgroundColor: colores.marinoSuave },
+  headerOnline: { backgroundColor: colores.marino },
   headerContent: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 10,
-    paddingBottom: Platform.OS === 'android' ? 14 : 10,
+    paddingHorizontal: 16, paddingVertical: 10, paddingBottom: Platform.OS === 'android' ? 14 : 10,
   },
-  headerGreeting: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  headerStatus:   { color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 1 },
+  headerIzq: { flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 1 },
+  headerSimbolo: { width: 44, height: 44, borderRadius: 14, backgroundColor: colores.marino, alignItems: 'center', justifyContent: 'center' },
+  headerSimboloImg: { width: 26, height: 40 },
+  headerGreeting: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  headerStatus: { color: colores.sobreMarino, fontSize: 12, marginTop: 1 },
   headerRight:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
 
   inactivoContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   inactivoContent:   { alignItems: 'center', paddingHorizontal: 32 },
-  pulseBg: {
-    width: 160, height: 160, borderRadius: 80,
-    backgroundColor: 'rgba(39,174,96,0.2)', position: 'absolute',
-  },
-  pulseCenter: {
-    width: 110, height: 110, borderRadius: 55,
-    backgroundColor: '#27AE60', justifyContent: 'center', alignItems: 'center', marginBottom: 32,
-  },
+  pulseBg: { width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(98,198,222,0.18)', position: 'absolute' },
+  pulseCenter: { width: 124, height: 124, borderRadius: 62, backgroundColor: colores.marino, borderWidth: 3, borderColor: colores.celeste, justifyContent: 'center', alignItems: 'center', marginBottom: 32 },
+  pulseSimbolo: { width: 54, height: 84 },
   inactivoTitle: { color: '#fff', fontSize: 24, fontWeight: '800', marginBottom: 8 },
-  inactivoSub:   { color: '#A0AEC0', fontSize: 15, textAlign: 'center', marginBottom: 40 },
-  conectarBtn: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#27AE60',
-    paddingHorizontal: 40, paddingVertical: 18, borderRadius: 50,
-    shadowColor: '#27AE60', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4, shadowRadius: 14, elevation: 8, gap: 10,
-  },
-  conectarBtnText: { color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 1.5 },
+  inactivoSub: { color: colores.sobreMarino, fontSize: 15, textAlign: 'center', marginBottom: 40 },
+  conectarBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: colores.celeste, paddingHorizontal: 40, minHeight: 60, borderRadius: 30, gap: 10 },
+  conectarBtnText: { color: colores.marino, fontSize: 18, fontWeight: '800' },
   btnDisabled: { opacity: 0.6 },
 
   onlineContainer: { flex: 1 },
@@ -851,95 +836,63 @@ const styles = StyleSheet.create({
   // pantalla COMPLETA, cuando el espacio real es la pantalla menos el header
   // y la tab bar. El panel no podía encogerse y su parte de abajo (los
   // botones) terminaba detrás de la tab bar, inalcanzable.
-  mapPlaceholder: { flex: 1, backgroundColor: '#E8EDF2', minHeight: 140, overflow: 'hidden' },
+  mapPlaceholder: { flex: 1, backgroundColor: '#DDEFF5', minHeight: 140, overflow: 'hidden' },
 
   bottomPanel: {
-    backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12,
-    // El % se resuelve contra el alto disponible del contenedor, no contra la
-    // pantalla, y flexShrink deja que ceda si el contenido no cabe
-    maxHeight: '68%', flexShrink: 1,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1, shadowRadius: 12, elevation: 8,
+    backgroundColor: colores.blanco, borderTopLeftRadius: radios.enorme, borderTopRightRadius: radios.enorme,
+    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12, maxHeight: '68%', flexShrink: 1,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 8,
   },
   // flexShrink sin flexGrow: el scroll cede espacio al footer, nunca lo tapa
   panelScroll:        { flexShrink: 1 },
   panelScrollContent: { paddingBottom: 4 },
   panelFooter: {
     paddingTop: 12, gap: 4,
-    borderTopWidth: 1, borderTopColor: '#EDF2F7',
+    borderTopWidth: 1, borderTopColor: '#E6F1F5',
   },
   esperandoContainer: { alignItems: 'center', paddingVertical: 32 },
-  esperandoTitle: { fontSize: 20, fontWeight: '700', color: '#1A202C', marginTop: 12 },
-  esperandoSub:   { color: '#718096', fontSize: 14, textAlign: 'center', marginTop: 6 },
+  esperandoTitle: { fontSize: 20, fontWeight: '700', color: '#001034', marginTop: 12 },
+  esperandoSub:   { color: '#4B5B73', fontSize: 14, textAlign: 'center', marginTop: 6 },
 
   chipsScroll: { marginBottom: 14, marginHorizontal: -4 },
   chipsRow:    { gap: 8, paddingHorizontal: 4 },
-  chip: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#F7FAFC', borderRadius: 14,
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderWidth: 1.5, borderColor: '#E2E8F0',
-  },
-  chipSel: { borderColor: '#1A6A9A', backgroundColor: '#EBF8FF' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colores.blanco, borderRadius: radios.medio, paddingHorizontal: 12, minHeight: 48, borderWidth: 1.5, borderColor: colores.borde },
+  chipSel: { borderColor: colores.marino, backgroundColor: colores.celesteClaro },
   chipNum: {
     width: 24, height: 24, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
   },
   chipNumText: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  chipTitle:    { fontSize: 13, fontWeight: '700', color: '#4A5568' },
-  chipTitleSel: { color: '#1A6A9A' },
-  chipEta:      { fontSize: 10, color: '#718096' },
+  chipTitle:    { fontSize: 13, fontWeight: '700', color: '#2C3D58' },
+  chipTitleSel: { color: '#001034' },
+  chipEta:      { fontSize: 10, color: '#4B5B73' },
 
-  etaBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#EBF8FF', borderRadius: 12, padding: 10, marginBottom: 10,
-    borderWidth: 1, borderColor: '#BEE3F8',
-  },
-  etaText: { color: '#1A6A9A', fontSize: 13, fontWeight: '700', flex: 1 },
-  etaKm:   { color: '#4299E1', fontSize: 12, fontWeight: '600' },
+  etaBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colores.celesteClaro, borderRadius: 14, padding: 12, marginBottom: 10 },
+  etaText: { color: '#001034', fontSize: 13, fontWeight: '700', flex: 1 },
+  etaKm: { color: colores.marino, fontSize: 12, fontWeight: '800' },
 
-  pedidoCard: {
-    backgroundColor: '#F7FAFC', borderRadius: 16, padding: 16, marginBottom: 16,
-    borderWidth: 1, borderColor: '#E2E8F0',
-  },
+  pedidoCard: { backgroundColor: colores.blanco, borderRadius: radios.grande, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colores.borde },
   pedidoHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  pedidoTitle:  { fontSize: 15, fontWeight: '700', color: '#1A202C', flex: 1, marginRight: 8 },
-  statusBadge:  { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  statusBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  pedidoTitle: { fontSize: 18, fontWeight: '700', color: colores.marino, flex: 1, marginRight: 8 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  statusBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   infoRow:  { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8, gap: 8 },
-  infoText: { color: '#4A5568', fontSize: 14, flex: 1 },
+  infoText: { color: '#2C3D58', fontSize: 14, flex: 1 },
 
-  efectivoBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: '#F0FFF4', borderRadius: 12, padding: 12, marginBottom: 10,
-    borderWidth: 1, borderColor: '#C6F6D5',
-  },
-  efectivoLabel: { fontSize: 12, color: '#276749', fontWeight: '600' },
-  efectivoMonto: { fontSize: 18, fontWeight: '800', color: '#27AE60' },
+  efectivoBox: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colores.marino, borderRadius: radios.grande, padding: 16, marginBottom: 10 },
+  efectivoLabel: { fontSize: 12, color: colores.sobreMarino, fontWeight: '700' },
+  efectivoMonto: { fontSize: 30, color: colores.blanco, fontFamily: fuentes.tituloFuerte },
 
-  totalRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    borderTopWidth: 1, borderTopColor: '#E2E8F0', paddingTop: 10, marginTop: 4,
-  },
-  totalLabel: { color: '#718096', fontSize: 14 },
-  totalValue: { color: '#1A202C', fontSize: 20, fontWeight: '800' },
+  totalRow: { backgroundColor: colores.fondo, borderRadius: radios.medio, padding: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 8 },
+  totalLabel: { color: '#4B5B73', fontSize: 14 },
+  totalValue: { color: colores.marino, fontSize: 20, fontFamily: fuentes.titulo },
 
-  actionBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 16, borderRadius: 16, marginBottom: 12, gap: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
-  },
-  actionBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  liberarBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    paddingVertical: 13, borderRadius: 14,
-    borderWidth: 1.5, borderColor: '#F0C29A', backgroundColor: '#FFF7ED',
-  },
+  actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: 60, borderRadius: 18, marginBottom: 12, gap: 10 },
+  actionBtnText: { color: '#fff', fontSize: 17, fontWeight: '800' },
+  liberarBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48, borderRadius: radios.medio, borderWidth: 1.5, borderColor: '#F0C29A', backgroundColor: '#FFF7ED' },
   liberarBtnText: { color: '#C05621', fontSize: 14, fontWeight: '700' },
-  cancelBtn: { alignItems: 'center', paddingVertical: 12 },
-  cancelBtnText: { color: '#E53E3E', fontSize: 14, fontWeight: '600' },
+  cancelBtn: { alignItems: 'center', justifyContent: 'center', minHeight: 44 },
+  cancelBtnText: { color: colores.error, fontSize: 14, fontWeight: '800' },
 });
 
 const motivoStyles = StyleSheet.create({
@@ -948,22 +901,22 @@ const motivoStyles = StyleSheet.create({
     paddingHorizontal: 20, paddingTop: 24,
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
   },
-  title: { fontSize: 20, fontWeight: '800', color: '#1A202C' },
-  sub:   { fontSize: 14, color: '#718096', marginTop: 6, marginBottom: 18, lineHeight: 20 },
+  title: { fontSize: 20, fontWeight: '800', color: '#001034' },
+  sub:   { fontSize: 14, color: '#4B5B73', marginTop: 6, marginBottom: 18, lineHeight: 20 },
   opcion: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingVertical: 14, paddingHorizontal: 14, marginBottom: 8,
-    borderRadius: 14, borderWidth: 1.5, borderColor: '#E2E8F0', backgroundColor: '#F7FAFC',
+    borderRadius: 14, borderWidth: 1.5, borderColor: '#DCEEF3', backgroundColor: '#F7FBFC',
   },
   opcionSel:      { borderColor: '#E53E3E', backgroundColor: '#FFF5F5' },
-  opcionText:     { flex: 1, fontSize: 15, color: '#2D3748', fontWeight: '600' },
+  opcionText:     { flex: 1, fontSize: 15, color: '#1B2A45', fontWeight: '600' },
   opcionTextSel:  { color: '#C53030' },
   actions:        { flexDirection: 'row', gap: 12, marginTop: 12 },
   btnVolver: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 16, borderRadius: 16, backgroundColor: '#EDF2F7',
+    paddingVertical: 16, borderRadius: 16, backgroundColor: '#E6F1F5',
   },
-  btnVolverText: { color: '#4A5568', fontSize: 16, fontWeight: '700' },
+  btnVolverText: { color: '#2C3D58', fontSize: 16, fontWeight: '700' },
   btnConfirmar: {
     flex: 1.4, alignItems: 'center', justifyContent: 'center',
     paddingVertical: 16, borderRadius: 16, backgroundColor: '#E53E3E',
@@ -978,19 +931,19 @@ const pedidoStyles = StyleSheet.create({
   },
   stepContainer: { alignItems: 'center', flex: 1, position: 'relative' },
   stepDot: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: '#E2E8F0',
+    width: 32, height: 32, borderRadius: 16, backgroundColor: '#DCEEF3',
     justifyContent: 'center', alignItems: 'center', zIndex: 1,
   },
-  stepDone:   { backgroundColor: '#27AE60' },
-  stepActive: { backgroundColor: '#1A6A9A', width: 36, height: 36, borderRadius: 18 },
-  stepLabel:       { fontSize: 9, color: '#A0AEC0', textAlign: 'center', marginTop: 4, fontWeight: '500' },
-  stepLabelActive: { color: '#1A6A9A', fontWeight: '700' },
-  stepLabelDone:   { color: '#27AE60' },
+  stepDone: { backgroundColor: colores.marino },
+  stepActive: { backgroundColor: colores.celeste, width: 36, height: 36, borderRadius: 18 },
+  stepLabel:       { fontSize: 9, color: '#8C9BB0', textAlign: 'center', marginTop: 4, fontWeight: '500' },
+  stepLabelActive: { color: colores.marino, fontWeight: '800' },
+  stepLabelDone: { color: colores.marino },
   connector: {
     position: 'absolute', top: 16, right: -SCREEN_WIDTH * 0.12,
-    width: SCREEN_WIDTH * 0.22, height: 2, backgroundColor: '#E2E8F0', zIndex: 0,
+    width: SCREEN_WIDTH * 0.22, height: 2, backgroundColor: '#DCEEF3', zIndex: 0,
   },
-  connectorActive: { backgroundColor: '#27AE60' },
+  connectorActive: { backgroundColor: colores.marino },
 });
 
 const modalStyles = StyleSheet.create({
@@ -1004,49 +957,28 @@ const modalStyles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.2, shadowRadius: 20, elevation: 20,
   },
-  urgentHeader: {
-    backgroundColor: '#E67E22', borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 18, gap: 10,
-  },
+  urgentHeader: { backgroundColor: colores.marino, borderTopLeftRadius: 28, borderTopRightRadius: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 18, paddingHorizontal: 16, gap: 10 },
   urgentTitle: { color: '#fff', fontSize: 20, fontWeight: '800', flex: 1, textAlign: 'center' },
-  timerText: {
-    color: '#fff', fontSize: 18, fontWeight: '700',
-    backgroundColor: 'rgba(0,0,0,0.2)', paddingHorizontal: 10, paddingVertical: 4,
-    borderRadius: 20, minWidth: 44, textAlign: 'center',
-  },
-  progressBg:   { height: 5, backgroundColor: '#E2E8F0' },
+  timerText: { color: colores.marino, fontSize: 18, fontWeight: '800', backgroundColor: colores.celeste, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, minWidth: 48, textAlign: 'center' },
+  progressBg:   { height: 5, backgroundColor: '#DCEEF3' },
   progressFill: { height: 5 },
   body: { padding: 20 },
-  multiChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#EBF8FF', borderRadius: 12, padding: 10, marginBottom: 12,
-    borderWidth: 1, borderColor: '#BEE3F8',
-  },
-  multiChipText: { color: '#1A6A9A', fontSize: 12, fontWeight: '600', flex: 1 },
+  multiChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colores.celesteClaro, borderRadius: 14, padding: 12, marginBottom: 12 },
+  multiChipText: { color: '#001034', fontSize: 12, fontWeight: '600', flex: 1 },
   infoRow:   { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 8 },
-  infoLabel: { color: '#718096', fontSize: 13, fontWeight: '600', width: 80 },
-  infoValue: { color: '#1A202C', fontSize: 14, flex: 1, fontWeight: '500' },
+  infoLabel: { color: '#4B5B73', fontSize: 13, fontWeight: '600', width: 80 },
+  infoValue: { color: '#001034', fontSize: 14, flex: 1, fontWeight: '500' },
   totalRow: {
-    backgroundColor: '#F7FAFC', borderRadius: 14, padding: 14,
+    backgroundColor: '#F7FBFC', borderRadius: 14, padding: 14,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 8,
   },
-  totalLabel: { color: '#718096', fontSize: 15 },
-  totalValue: { color: '#1A202C', fontSize: 28, fontWeight: '900' },
+  totalLabel: { color: '#4B5B73', fontSize: 15 },
+  totalValue: { color: '#001034', fontSize: 28, fontWeight: '900' },
   pagoRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   pagoText:  { fontSize: 15, fontWeight: '700' },
   actions: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 8, gap: 12 },
-  btnRechazar: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#F5F7FA', borderRadius: 16, paddingVertical: 15, gap: 6,
-    borderWidth: 1.5, borderColor: '#E2E8F0',
-  },
-  btnRechazarText: { color: '#718096', fontSize: 15, fontWeight: '700' },
-  btnAceptar: {
-    flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#27AE60', borderRadius: 16, paddingVertical: 15, gap: 6,
-    shadowColor: '#27AE60', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35, shadowRadius: 10, elevation: 5,
-  },
-  btnAceptarText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  btnRechazar: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colores.blanco, borderRadius: 18, minHeight: 58, gap: 6, borderWidth: 2, borderColor: colores.borde },
+  btnRechazarText: { color: '#4B5B73', fontSize: 15, fontWeight: '700' },
+  btnAceptar: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colores.celeste, borderRadius: 18, minHeight: 58, gap: 6 },
+  btnAceptarText: { color: colores.marino, fontSize: 17, fontWeight: '800' },
 });

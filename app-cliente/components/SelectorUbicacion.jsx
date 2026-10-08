@@ -1,8 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import {
-  View, Text, StyleSheet, TouchableOpacity, Modal, TextInput,
-  ActivityIndicator, Platform, Switch,
-} from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Modal, ActivityIndicator, Platform, Switch } from 'react-native';
+import { Text, TextInput } from './Texto';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
@@ -144,7 +142,7 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerBtn} onPress={onClose}>
-            <Ionicons name="close" size={22} color="#1A202C" />
+            <Ionicons name="close" size={22} color="#001034" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>¿Dónde entregamos?</Text>
           <View style={{ width: 40 }} />
@@ -153,8 +151,8 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
         {/* Botón mi ubicación */}
         <TouchableOpacity style={styles.gpsBtn} onPress={usarMiUbicacion}>
           {buscandoGPS
-            ? <ActivityIndicator size="small" color="#1A6A9A" />
-            : <Ionicons name="locate" size={22} color="#1A6A9A" />}
+            ? <ActivityIndicator size="small" color="#001034" />
+            : <Ionicons name="locate" size={22} color="#001034" />}
         </TouchableOpacity>
 
         {/* Panel inferior */}
@@ -174,7 +172,7 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
                   <TextInput
                     style={styles.aliasInput}
                     placeholder='Alias (ej. "Casa", "Trabajo")'
-                    placeholderTextColor="#A0AEC0"
+                    placeholderTextColor="#8C9BB0"
                     value={alias}
                     onChangeText={setAlias}
                   />
@@ -183,7 +181,7 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
               <Switch
                 value={guardar}
                 onValueChange={setGuardar}
-                trackColor={{ false: '#E2E8F0', true: '#27AE60' }}
+                trackColor={{ false: '#DCEEF3', true: '#4DAD66' }}
                 thumbColor="#fff"
               />
             </View>
@@ -200,7 +198,7 @@ export default function SelectorUbicacion({ visible, onClose, onConfirmar, puede
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  container: { flex: 1, backgroundColor: '#F2F9FB' },
   pinCentro: {
     position: 'absolute', left: 0, right: 0, top: '50%',
     alignItems: 'center', marginTop: -40,
@@ -225,7 +223,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 9,
-    borderRadius: 20, fontSize: 14, fontWeight: '800', color: '#1A202C',
+    borderRadius: 20, fontSize: 14, fontWeight: '800', color: '#001034',
     shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 }, elevation: 4,
     overflow: 'hidden',
@@ -244,20 +242,20 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 12,
     shadowOffset: { width: 0, height: -4 }, elevation: 12,
   },
-  panelHint: { fontSize: 13, color: '#718096', textAlign: 'center', marginBottom: 4 },
-  coordsText: { fontSize: 11.5, color: '#A0AEC0', textAlign: 'center', marginBottom: 12, fontVariant: ['tabular-nums'] },
+  panelHint: { fontSize: 13, color: '#4B5B73', textAlign: 'center', marginBottom: 4 },
+  coordsText: { fontSize: 11.5, color: '#8C9BB0', textAlign: 'center', marginBottom: 12, fontVariant: ['tabular-nums'] },
   guardarRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#F7FAFC', borderRadius: 14, padding: 12, marginBottom: 14,
+    backgroundColor: '#F7FBFC', borderRadius: 14, padding: 12, marginBottom: 14,
   },
-  guardarLabel: { fontSize: 14, fontWeight: '700', color: '#1A202C' },
+  guardarLabel: { fontSize: 14, fontWeight: '700', color: '#001034' },
   aliasInput: {
-    marginTop: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0',
-    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#1A202C',
+    marginTop: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#DCEEF3',
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#001034',
   },
   confirmBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#27AE60', borderRadius: 14, paddingVertical: 15,
+    backgroundColor: '#4DAD66', borderRadius: 14, paddingVertical: 15,
   },
   confirmBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 });

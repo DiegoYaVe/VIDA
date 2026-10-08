@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView,
-  Image, ActivityIndicator, TouchableOpacity,
-} from 'react-native';
+import { View, StyleSheet, SafeAreaView, ScrollView, Image, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { Text } from '../components/Texto';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -24,10 +22,10 @@ export default function MiClubScreen() {
   useEffect(() => { cargar(); }, [cargar]);
 
   if (cargando) {
-    return <SafeAreaView style={styles.container}><ActivityIndicator style={{ marginTop: 60 }} color="#0A1E3F" /></SafeAreaView>;
+    return <SafeAreaView style={styles.container}><ActivityIndicator style={{ marginTop: 60 }} color="#001034" /></SafeAreaView>;
   }
 
-  const color = data?.color || '#0A1E3F';
+  const color = data?.color || '#001034';
   const sig = data?.siguiente;
   const ganados = data?.puntosGanados || 0;
   // progreso hacia el siguiente nivel
@@ -49,7 +47,7 @@ export default function MiClubScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         {/* Tarjeta digital */}
-        <LinearGradient colors={[color, '#0A1E3F']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
+        <LinearGradient colors={[color, '#001034']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
           <View style={styles.cardTop}>
             <View>
               <Text style={styles.brand}>VIDA</Text>
@@ -102,7 +100,7 @@ export default function MiClubScreen() {
           const alcanzado = ganados >= n.minPuntos;
           return (
             <View key={n.nivel} style={[styles.nivelRow, activo && { borderColor: color, borderWidth: 2 }]}>
-              <View style={[styles.dot, { backgroundColor: alcanzado ? (n.color || color) : '#E2E8F0' }]}>
+              <View style={[styles.dot, { backgroundColor: alcanzado ? (n.color || color) : '#DCEEF3' }]}>
                 <Text style={styles.dotText}>{n.nivel}</Text>
               </View>
               <View style={{ flex: 1 }}>
@@ -120,7 +118,7 @@ export default function MiClubScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7FAFC' },
+  container: { flex: 1, backgroundColor: '#F7FBFC' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: '800' },
   card: { borderRadius: 20, padding: 20, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, elevation: 4 },
@@ -135,19 +133,19 @@ const styles = StyleSheet.create({
   nivelNombre: { color: 'rgba(255,255,255,0.95)', fontSize: 14, fontWeight: '700', marginTop: 2 },
   codigo: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontFamily: 'monospace', marginTop: 8, letterSpacing: 1 },
   cardHint: { color: 'rgba(255,255,255,0.75)', fontSize: 11, marginTop: 16, textAlign: 'center' },
-  block: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginTop: 12, borderWidth: 1, borderColor: '#EDF2F7' },
+  block: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginTop: 12, borderWidth: 1, borderColor: '#E6F1F5' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  blockTitle: { fontSize: 14, fontWeight: '800', color: '#1A202C' },
-  blockPts: { fontSize: 13, fontWeight: '800', color: '#4A5568' },
-  barBg: { height: 10, borderRadius: 5, backgroundColor: '#EDF2F7', overflow: 'hidden', marginTop: 8 },
+  blockTitle: { fontSize: 14, fontWeight: '800', color: '#001034' },
+  blockPts: { fontSize: 13, fontWeight: '800', color: '#2C3D58' },
+  barBg: { height: 10, borderRadius: 5, backgroundColor: '#E6F1F5', overflow: 'hidden', marginTop: 8 },
   barFill: { height: 10, borderRadius: 5 },
-  faltan: { fontSize: 12, color: '#718096', marginTop: 6 },
-  beneficios: { fontSize: 13, color: '#4A5568', marginTop: 6, lineHeight: 20 },
-  laddTitle: { fontSize: 13, fontWeight: '800', color: '#4A5568', marginTop: 18, marginBottom: 8 },
-  nivelRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#EDF2F7' },
+  faltan: { fontSize: 12, color: '#4B5B73', marginTop: 6 },
+  beneficios: { fontSize: 13, color: '#2C3D58', marginTop: 6, lineHeight: 20 },
+  laddTitle: { fontSize: 13, fontWeight: '800', color: '#2C3D58', marginTop: 18, marginBottom: 8 },
+  nivelRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#E6F1F5' },
   dot: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   dotText: { color: '#fff', fontWeight: '900' },
-  nivelRowName: { fontSize: 14, fontWeight: '700', color: '#1A202C' },
-  nivelRowBen: { fontSize: 11, color: '#A0AEC0', marginTop: 1 },
-  nivelRowPts: { fontSize: 12, fontWeight: '700', color: '#718096' },
+  nivelRowName: { fontSize: 14, fontWeight: '700', color: '#001034' },
+  nivelRowBen: { fontSize: 11, color: '#8C9BB0', marginTop: 1 },
+  nivelRowPts: { fontSize: 12, fontWeight: '700', color: '#4B5B73' },
 });

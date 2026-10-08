@@ -1,17 +1,6 @@
 import { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  TextInput,
-  Image,
-  ActivityIndicator,
-  SafeAreaView,
-  Alert,
-  ScrollView,
-} from 'react-native';
+import { View, FlatList, TouchableOpacity, StyleSheet, Image, ActivityIndicator, SafeAreaView, Alert, ScrollView } from 'react-native';
+import { Text, TextInput } from '../../components/Texto';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -21,8 +10,10 @@ import useAuthStore from '../../store/authStore';
 import { absImg } from '../../constants/config';
 import SelectorUbicacion from '../../components/SelectorUbicacion';
 import * as ImagePicker from 'expo-image-picker';
+import { colores, fuentes, radios } from '../../constants/tema';
+import { useTasaReferencial, fmtVES } from '../../services/moneda';
 
-const PLACEHOLDER = 'https://via.placeholder.com/80/EBF8FF/1A6A9A?text=+';
+const PLACEHOLDER = 'https://via.placeholder.com/80/DDF2F8/001034?text=+';
 
 const METODOS = [
   { key: 'EFECTIVO',   label: 'Efectivo',   icon: 'cash-outline' },
@@ -36,6 +27,7 @@ export default function CarritoScreen() {
 
   const items = useCarritoStore((s) => s.items);
   const idPuntoVenta = useCarritoStore((s) => s.idPuntoVenta);
+  const nombreSucursalCarrito = useCarritoStore((s) => s.nombreSucursal);
   const agregarItem = useCarritoStore((s) => s.agregarItem);
   const quitarItem = useCarritoStore((s) => s.quitarItem);
   const limpiarCarrito = useCarritoStore((s) => s.limpiarCarrito);
@@ -134,6 +126,10 @@ export default function CarritoScreen() {
 
   const tasaVES=Number(cotizacion?.tasa?.VESporUSD)||0;
   const totalVES=Math.round(totalFinal*tasaVES*100)/100;
+  // Equivalente de referencia para el resumen (la tasa real se congela al pedir)
+  const tasaRef = useTasaReferencial();
+  const tcRef = tasaVES || Number(tasaRef?.tasa?.VESporUSD) || 0;
+  const totalVESRef = Math.round(totalFinal * tcRef * 100) / 100;
 
   const elegirComprobante = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -288,14 +284,14 @@ export default function CarritoScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar style="dark" />
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Mi carrito</Text>
+          <Text style={styles.headerTitle}>Tu pedido</Text>
         </View>
         <View style={styles.empty}>
-          <Ionicons name="cart-outline" size={80} color="#CBD5E0" />
+          <Ionicons name="cart-outline" size={80} color="#CFE4EB" />
           <Text style={styles.emptyTitle}>Tu carrito está vacío</Text>
-          <Text style={styles.emptyText}>Agrega productos desde nuestras tiendas</Text>
+          <Text style={styles.emptyText}>Agrega tu agua VIDA, Harina PAN y lo que te haga falta.</Text>
           <TouchableOpacity style={styles.exploreBtn} onPress={() => router.push('/(tabs)')}>
-            <Text style={styles.exploreBtnText}>Explorar tiendas</Text>
+            <Text style={styles.exploreBtnText}>Ir a comprar</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -306,8 +302,11 @@ export default function CarritoScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Mi carrito</Text>
-        <TouchableOpacity onPress={() => {
+        <View>
+          <Text style={styles.headerTitle}>Tu pedido</Text>
+          {nombreSucursalCarrito ? <Text style={styles.headerSub}>De {nombreSucursalCarrito}</Text> : null}
+        </View>
+        <TouchableOpacity style={styles.clearBtn} onPress={() => {
           Alert.alert('Vaciar carrito', '¿Estás seguro?', [
             { text: 'Cancelar', style: 'cancel' },
             { text: 'Vaciar', style: 'destructive', onPress: limpiarCarrito },
@@ -328,20 +327,19 @@ export default function CarritoScreen() {
             <View style={styles.itemInfo}>
               <Text style={styles.itemNombre} numberOfLines={2}>{item.Nombre}</Text>
               <Text style={styles.itemPrecioUnit}>${item.PrecioUSD.toFixed(2)} c/u</Text>
-              <Text style={styles.itemSubtotal}>
-                Subtotal: ${(item.PrecioUSD * item.Cantidad).toFixed(2)}
-              </Text>
+              <Text style={styles.itemSubtotal}>${(item.PrecioUSD * item.Cantidad).toFixed(2)}</Text>
             </View>
             <View style={styles.qtyCol}>
-              <TouchableOpacity style={styles.qtyBtn} onPress={() => quitarItem(item.idProducto)}>
-                <Ionicons name="remove" size={16} color="#1A6A9A" />
+              <TouchableOpacity style={styles.qtyBtn} onPress={() => quitarItem(item.idProducto)} accessibilityLabel="Quitar uno">
+                <Ionicons name="remove" size={16} color="#001034" />
               </TouchableOpacity>
               <Text style={styles.qtyText}>{item.Cantidad}</Text>
               <TouchableOpacity
                 style={styles.qtyBtn}
                 onPress={() => agregarItem({ ...item, Cantidad: 1 })}
+                accessibilityLabel="Agregar uno"
               >
-                <Ionicons name="add" size={16} color="#1A6A9A" />
+                <Ionicons name="add" size={16} color="#001034" />
               </TouchableOpacity>
             </View>
           </View>
@@ -362,7 +360,7 @@ export default function CarritoScreen() {
                 >
                   <Ionicons
                     name={(d.Alias || '').toLowerCase().includes('casa') ? 'home' : 'bookmark'}
-                    size={13} color="#1A6A9A"
+                    size={13} color="#001034"
                   />
                   <Text style={styles.dirChipText} numberOfLines={1}>
                     {d.Alias || d.Direccion}
@@ -376,7 +374,7 @@ export default function CarritoScreen() {
           <TextInput
             style={styles.input}
             placeholder="Ej: Av. Principal, Edificio X, Apto 3B"
-            placeholderTextColor="#A0AEC0"
+            placeholderTextColor="#8C9BB0"
             value={direccion}
             onChangeText={setDireccion}
             multiline
@@ -387,9 +385,9 @@ export default function CarritoScreen() {
             <Ionicons
               name={ubicacion ? 'checkmark-circle' : 'location-outline'}
               size={18}
-              color={ubicacion ? '#27AE60' : '#1A6A9A'}
+              color={ubicacion ? '#4DAD66' : '#001034'}
             />
-            <Text style={[styles.mapaBtnText, ubicacion && { color: '#27AE60' }]}>
+            <Text style={[styles.mapaBtnText, ubicacion && { color: '#4DAD66' }]}>
               {ubicacion ? 'Ubicación fijada en el mapa ✓ (tocar para cambiar)' : 'Fijar mi ubicación en el mapa'}
             </Text>
           </TouchableOpacity>
@@ -405,7 +403,7 @@ export default function CarritoScreen() {
                 <Ionicons
                   name={m.icon}
                   size={18}
-                  color={metodoPago === m.key ? '#fff' : '#718096'}
+                  color={metodoPago === m.key ? '#fff' : '#4B5B73'}
                 />
                 <Text style={[styles.metodoBtnText, metodoPago === m.key && styles.metodoBtnTextActive]}>
                   {m.label}
@@ -433,7 +431,7 @@ export default function CarritoScreen() {
           {metodoPago === 'PAGO_MOVIL' && (
             <View style={styles.pmCard}>
               {datosPM === null ? (
-                <ActivityIndicator size="small" color="#1A6A9A" />
+                <ActivityIndicator size="small" color="#001034" />
               ) : !datosPM.disponible ? (
                 <Text style={styles.pmNoDisponible}>
                   Pago Móvil no está configurado todavía. Elige otro método.
@@ -454,7 +452,7 @@ export default function CarritoScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="Ej: 001234567890"
-                    placeholderTextColor="#A0AEC0"
+                    placeholderTextColor="#8C9BB0"
                     value={referencia}
                     onChangeText={setReferencia}
                     keyboardType="number-pad"
@@ -464,13 +462,13 @@ export default function CarritoScreen() {
                     {comprobante ? (
                       <>
                         <Image source={{ uri: comprobante.uri }} style={styles.comprobanteThumb} />
-                        <Text style={[styles.comprobanteBtnText, { color: '#27AE60' }]}>
+                        <Text style={[styles.comprobanteBtnText, { color: '#4DAD66' }]}>
                           Comprobante adjunto ✓ (tocar para cambiar)
                         </Text>
                       </>
                     ) : (
                       <>
-                        <Ionicons name="image-outline" size={20} color="#1A6A9A" />
+                        <Ionicons name="image-outline" size={20} color="#001034" />
                         <Text style={styles.comprobanteBtnText}>Adjuntar captura del pago *</Text>
                       </>
                     )}
@@ -485,7 +483,7 @@ export default function CarritoScreen() {
           <TextInput
             style={[styles.input, styles.inputMulti]}
             placeholder="Ej: Sin cebolla, por favor..."
-            placeholderTextColor="#A0AEC0"
+            placeholderTextColor="#8C9BB0"
             value={notas}
             onChangeText={setNotas}
             multiline
@@ -498,7 +496,7 @@ export default function CarritoScreen() {
           <TouchableOpacity style={styles.puntosBox} activeOpacity={0.8}
             onPress={() => setUsarPuntos(v => !v)}>
             <View style={styles.puntosIco}>
-              <Ionicons name="star" size={18} color="#F59E0B" />
+              <Text style={styles.puntosIcoText}>pts</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.puntosBoxTitle}>Usar mis puntos</Text>
@@ -517,12 +515,12 @@ export default function CarritoScreen() {
           <View style={styles.cuponBox}>
             <View style={styles.cuponRow}>
               <View style={styles.cuponIco}>
-                <Ionicons name="pricetag" size={16} color="#7B3FBE" />
+                <Ionicons name="pricetag" size={16} color={colores.marino} />
               </View>
               <TextInput
                 style={styles.cuponInput}
                 placeholder="¿Tienes un cupón?"
-                placeholderTextColor="#A0AEC0"
+                placeholderTextColor="#8C9BB0"
                 autoCapitalize="characters"
                 value={cuponInput}
                 editable={!cuponOk}
@@ -543,7 +541,7 @@ export default function CarritoScreen() {
               )}
             </View>
             {cuponMsg ? (
-              <Text style={[styles.cuponMsg, { color: cuponOk ? '#27AE60' : '#E53E3E' }]}>{cuponMsg}</Text>
+              <Text style={[styles.cuponMsg, { color: cuponOk ? colores.verdeTexto : colores.error }]}>{cuponMsg}</Text>
             ) : null}
           </View>
         )}
@@ -556,19 +554,22 @@ export default function CarritoScreen() {
           </View>
           {descuentoPuntos > 0 && (
             <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: '#F59E0B' }]}>Descuento puntos ({puntosUsar.toLocaleString('es-VE')} pts)</Text>
-              <Text style={[styles.summaryValue, { color: '#F59E0B' }]}>−${descuentoPuntos.toFixed(2)}</Text>
+              <Text style={[styles.summaryLabel, { color: colores.verdeTexto }]}>Descuento puntos ({puntosUsar.toLocaleString('es-VE')} pts)</Text>
+              <Text style={[styles.summaryValue, { color: colores.verdeTexto }]}>−${descuentoPuntos.toFixed(2)}</Text>
             </View>
           )}
           {descuentoCupon > 0 && (
             <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: '#7B3FBE' }]}>Cupón {cuponCodigo}</Text>
-              <Text style={[styles.summaryValue, { color: '#7B3FBE' }]}>−${descuentoCupon.toFixed(2)}</Text>
+              <Text style={[styles.summaryLabel, { color: colores.verdeTexto }]}>Cupón {cuponCodigo}</Text>
+              <Text style={[styles.summaryValue, { color: colores.verdeTexto }]}>−${descuentoCupon.toFixed(2)}</Text>
             </View>
           )}
           <View style={[styles.summaryRow, styles.summaryTotal]}>
-            <Text style={styles.summaryTotalLabel}>Total</Text>
-            <Text style={styles.summaryTotalValue}>${totalFinal.toFixed(2)}</Text>
+            <Text style={styles.summaryTotalLabel}>Total a pagar</Text>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.summaryTotalValue}>${totalFinal.toFixed(2)}</Text>
+              {totalVESRef > 0 ? <Text style={styles.summaryTotalSec}>≈ {fmtVES(totalVESRef)} · tasa BCV</Text> : null}
+            </View>
           </View>
         </View>
 
@@ -581,8 +582,8 @@ export default function CarritoScreen() {
             <ActivityIndicator color="#fff" />
           ) : (
             <>
-              <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-              <Text style={styles.pedidoBtnText}>Hacer pedido — ${totalFinal.toFixed(2)}</Text>
+              <Text style={styles.pedidoBtnText}>Hacer pedido</Text>
+              <Text style={styles.pedidoBtnPrecio}>${totalFinal.toFixed(2)}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -610,196 +611,115 @@ function PMRow({ label, valor, destacado }) {
 }
 
 const pmStyles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  label: { fontSize: 13, color: '#718096' },
-  valor: { fontSize: 13.5, fontWeight: '700', color: '#1A202C' },
-  valorDestacado: { color: '#27AE60', fontSize: 15, fontWeight: '800' },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 30, gap: 10 },
+  label: { fontSize: 13, color: colores.textoSuave },
+  valor: { fontSize: 14, fontWeight: '800', color: colores.marino, flexShrink: 1, textAlign: 'right' },
+  valorDestacado: { fontSize: 17, color: colores.marino, fontFamily: fuentes.titulo },
 });
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  container: { flex: 1, backgroundColor: colores.fondo },
   pmCard: {
-    backgroundColor: '#F7FAFC', borderWidth: 1, borderColor: '#E2E8F0',
-    borderRadius: 14, padding: 14, marginTop: 10, marginBottom: 6,
+    backgroundColor: colores.fondo, borderWidth: 1, borderColor: colores.borde,
+    borderRadius: radios.medio, padding: 14, marginTop: 12, marginBottom: 6,
   },
-  pmNoDisponible: { fontSize: 13, color: '#E53E3E', textAlign: 'center' },
-  pmTitulo: { fontSize: 13.5, fontWeight: '800', color: '#1A202C', marginBottom: 6 },
-  pmDatos: {
-    backgroundColor: '#fff', borderRadius: 10, paddingHorizontal: 12,
-    paddingVertical: 8, marginBottom: 10,
-  },
+  pmNoDisponible: { fontSize: 13, color: colores.error, textAlign: 'center' },
+  pmTitulo: { fontSize: 14, fontWeight: '800', color: colores.marino, marginBottom: 8 },
+  pmDatos: { backgroundColor: colores.blanco, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10, borderWidth: 1, borderColor: colores.borde },
   comprobanteBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: '#EBF8FF', borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 12, marginTop: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56,
+    backgroundColor: colores.blanco, borderRadius: radios.medio, borderWidth: 2, borderStyle: 'dashed', borderColor: '#8ACFE2',
+    paddingHorizontal: 14, marginTop: 10,
   },
-  comprobanteBtnText: { color: '#1A6A9A', fontSize: 13.5, fontWeight: '700', flex: 1 },
-  comprobanteThumb: { width: 36, height: 36, borderRadius: 8 },
+  comprobanteBtnText: { color: colores.marino, fontSize: 14, fontWeight: '800', flex: 1 },
+  comprobanteThumb: { width: 40, height: 40, borderRadius: 10 },
   dirGuardadasRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   dirChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#EBF8FF', borderWidth: 1, borderColor: '#BEE3F8',
-    borderRadius: 16, paddingHorizontal: 12, paddingVertical: 7, maxWidth: 180,
+    flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 40,
+    backgroundColor: colores.celesteClaro, borderRadius: 999, paddingHorizontal: 14, maxWidth: 190,
   },
-  dirChipText: { color: '#1A6A9A', fontSize: 12.5, fontWeight: '700' },
+  dirChipText: { color: colores.marino, fontSize: 13, fontWeight: '800' },
   mapaBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#EBF8FF', borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 12, marginTop: 8, marginBottom: 4,
+    flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48,
+    backgroundColor: colores.celesteClaro, borderRadius: radios.medio, paddingHorizontal: 14, marginTop: 10, marginBottom: 4,
   },
-  mapaBtnText: { color: '#1A6A9A', fontSize: 13.5, fontWeight: '700', flex: 1 },
+  mapaBtnText: { color: colores.marino, fontSize: 14, fontWeight: '800', flex: 1 },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#EDF2F7',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
   },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: '#1A202C' },
-  clearText: { color: '#E53E3E', fontWeight: '600', fontSize: 14 },
-  scroll: { padding: 16, paddingBottom: 40 },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: colores.marino },
+  headerSub: { fontSize: 13, color: colores.textoSuave, marginTop: 1 },
+  clearBtn: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 6 },
+  clearText: { color: colores.error, fontWeight: '800', fontSize: 14 },
+  scroll: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 40 },
   itemCard: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    backgroundColor: colores.blanco, borderRadius: radios.grande, padding: 10,
+    flexDirection: 'row', alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: colores.borde,
   },
-  itemImg: { width: 68, height: 68, borderRadius: 10, resizeMode: 'cover' },
+  itemImg: { width: 62, height: 62, borderRadius: 14, resizeMode: 'cover', backgroundColor: colores.celesteClaro },
   itemInfo: { flex: 1, paddingHorizontal: 12 },
-  itemNombre: { fontSize: 14, fontWeight: '600', color: '#1A202C' },
-  itemPrecioUnit: { fontSize: 12, color: '#718096', marginTop: 2 },
-  itemSubtotal: { fontSize: 13, fontWeight: '700', color: '#27AE60', marginTop: 4 },
-  qtyCol: {
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  qtyBtn: { padding: 6, backgroundColor: '#F7FAFC' },
-  qtyText: { paddingVertical: 4, paddingHorizontal: 8, fontSize: 14, fontWeight: '700', color: '#1A202C' },
-  section: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#1A202C', marginBottom: 12 },
-  inputLabel: { fontSize: 13, fontWeight: '600', color: '#4A5568', marginBottom: 6, marginTop: 12 },
+  itemNombre: { fontSize: 14, fontWeight: '800', color: colores.marino },
+  itemPrecioUnit: { fontSize: 12, color: colores.textoSuave, marginTop: 2 },
+  itemSubtotal: { fontSize: 15, color: colores.marino, marginTop: 4, fontFamily: fuentes.titulo },
+  qtyCol: { flexDirection: 'row', alignItems: 'center', backgroundColor: colores.fondo, borderRadius: 16, padding: 2 },
+  qtyBtn: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
+  qtyText: { minWidth: 20, textAlign: 'center', fontSize: 15, fontWeight: '800', color: colores.marino },
+  section: { backgroundColor: colores.blanco, borderRadius: radios.grande, padding: 16, marginTop: 6, borderWidth: 1, borderColor: colores.borde },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: colores.marino, marginBottom: 6 },
+  inputLabel: { fontSize: 13, fontWeight: '800', color: colores.marino, marginBottom: 6, marginTop: 14 },
   input: {
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#1A202C',
-    backgroundColor: '#FAFAFA',
+    borderWidth: 1.5, borderColor: colores.bordeFuerte, borderRadius: radios.medio,
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: colores.marino, backgroundColor: colores.blanco, minHeight: 50,
   },
-  inputMulti: { minHeight: 70, textAlignVertical: 'top' },
-  metodoRow: { flexDirection: 'row', gap: 10 },
+  inputMulti: { minHeight: 76, textAlignVertical: 'top' },
+  metodoRow: { flexDirection: 'row', gap: 8 },
   metodoBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F7FAFC',
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 50,
+    borderRadius: radios.medio, borderWidth: 1.5, borderColor: colores.borde, backgroundColor: colores.blanco,
   },
-  metodoBtnActive: { backgroundColor: '#1A6A9A', borderColor: '#1A6A9A' },
-  metodoBtnText: { fontWeight: '700', color: '#718096', fontSize: 13 },
-  metodoBtnTextActive: { color: '#fff' },
-  summary: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
+  metodoBtnActive: { backgroundColor: colores.celesteClaro, borderColor: colores.marino, borderWidth: 2 },
+  metodoBtnText: { fontWeight: '800', color: colores.textoSuave, fontSize: 13 },
+  metodoBtnTextActive: { color: colores.marino },
+  summary: { backgroundColor: colores.blanco, borderRadius: radios.grande, padding: 16, marginTop: 12, borderWidth: 1, borderColor: colores.borde },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  summaryLabel: { color: '#718096', fontSize: 14 },
-  summaryValue: { color: '#1A202C', fontSize: 14, fontWeight: '600' },
+  summaryLabel: { color: colores.textoSuave, fontSize: 14 },
+  summaryValue: { color: colores.marino, fontSize: 14, fontWeight: '700' },
   puntosBox: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A',
-    borderRadius: 14, padding: 14, marginHorizontal: 16, marginTop: 8,
+    backgroundColor: colores.verdeClaro, borderRadius: radios.medio, padding: 14, marginTop: 12,
   },
-  puntosIco: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center' },
-  puntosBoxTitle: { fontSize: 14, fontWeight: '800', color: '#92400E' },
-  puntosBoxSub: { fontSize: 12, color: '#B45309', marginTop: 2 },
-  toggle: { width: 44, height: 26, borderRadius: 13, backgroundColor: '#E2E8F0', padding: 3, justifyContent: 'center' },
-  toggleOn: { backgroundColor: '#F59E0B' },
-  toggleDot: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff' },
+  puntosIco: { width: 40, height: 40, borderRadius: 13, backgroundColor: colores.verde, alignItems: 'center', justifyContent: 'center' },
+  puntosIcoText: { color: colores.marino, fontSize: 13, fontFamily: fuentes.tituloFuerte },
+  puntosBoxTitle: { fontSize: 14, fontWeight: '800', color: colores.marino },
+  puntosBoxSub: { fontSize: 12, color: colores.verdeTexto, marginTop: 2 },
+  toggle: { width: 46, height: 28, borderRadius: 14, backgroundColor: colores.bordeFuerte, padding: 3, justifyContent: 'center' },
+  toggleOn: { backgroundColor: colores.verde },
+  toggleDot: { width: 22, height: 22, borderRadius: 11, backgroundColor: colores.blanco },
   toggleDotOn: { alignSelf: 'flex-end' },
-  cuponBox: {
-    backgroundColor: '#FAF5FF', borderWidth: 1, borderColor: '#E9D8FD',
-    borderRadius: 14, padding: 12, marginHorizontal: 16, marginTop: 8,
-  },
+  cuponBox: { backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.borde, borderRadius: radios.medio, padding: 12, marginTop: 10 },
   cuponRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cuponIco: { width: 32, height: 32, borderRadius: 9, backgroundColor: '#EDE9FE', alignItems: 'center', justifyContent: 'center' },
-  cuponInput: { flex: 1, fontSize: 14, fontWeight: '700', color: '#1A202C', paddingVertical: 6, letterSpacing: 1 },
-  cuponBtn: { backgroundColor: '#7B3FBE', borderRadius: 10, paddingHorizontal: 16, paddingVertical: 9 },
-  cuponBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  cuponBtnQuitar: { borderWidth: 1, borderColor: '#E9D8FD', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
-  cuponBtnQuitarText: { color: '#7B3FBE', fontWeight: '800', fontSize: 13 },
-  cuponMsg: { fontSize: 12, fontWeight: '600', marginTop: 8, marginLeft: 4 },
-  summaryTotal: {
-    borderTopWidth: 1,
-    borderTopColor: '#EDF2F7',
-    marginTop: 8,
-    paddingTop: 12,
-  },
-  summaryTotalLabel: { fontSize: 16, fontWeight: '800', color: '#1A202C' },
-  summaryTotalValue: { fontSize: 18, fontWeight: '900', color: '#1A6A9A' },
+  cuponIco: { width: 36, height: 36, borderRadius: 11, backgroundColor: colores.celesteClaro, alignItems: 'center', justifyContent: 'center' },
+  cuponInput: { flex: 1, fontSize: 15, fontWeight: '800', color: colores.marino, paddingVertical: 8, letterSpacing: 1 },
+  cuponBtn: { backgroundColor: colores.marino, borderRadius: 12, paddingHorizontal: 16, minHeight: 44, justifyContent: 'center' },
+  cuponBtnText: { color: colores.blanco, fontWeight: '800', fontSize: 14 },
+  cuponBtnQuitar: { borderWidth: 1.5, borderColor: colores.bordeFuerte, borderRadius: 12, paddingHorizontal: 14, minHeight: 44, justifyContent: 'center' },
+  cuponBtnQuitarText: { color: colores.marino, fontWeight: '800', fontSize: 14 },
+  cuponMsg: { fontSize: 12, fontWeight: '700', marginTop: 8, marginLeft: 4 },
+  summaryTotal: { borderTopWidth: 1, borderTopColor: colores.borde, marginTop: 8, paddingTop: 12, alignItems: 'flex-start' },
+  summaryTotalLabel: { fontSize: 16, fontWeight: '800', color: colores.marino, marginTop: 4 },
+  summaryTotalValue: { fontSize: 24, color: colores.marino, fontFamily: fuentes.tituloFuerte },
+  summaryTotalSec: { fontSize: 12, color: colores.textoSuave },
   pedidoBtn: {
-    backgroundColor: '#27AE60',
-    borderRadius: 16,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 16,
-    shadowColor: '#27AE60',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
+    backgroundColor: colores.marino, borderRadius: 18, minHeight: 58, paddingHorizontal: 20,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16,
   },
   btnDisabled: { opacity: 0.6 },
-  pedidoBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  pedidoBtnText: { color: colores.blanco, fontSize: 17, fontWeight: '800' },
+  pedidoBtnPrecio: { color: colores.blanco, fontSize: 18, fontFamily: fuentes.titulo },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
-  emptyTitle: { fontSize: 22, fontWeight: '800', color: '#1A202C', marginTop: 16 },
-  emptyText: { color: '#718096', textAlign: 'center', marginTop: 8, fontSize: 14 },
-  exploreBtn: {
-    marginTop: 24,
-    backgroundColor: '#1A6A9A',
-    borderRadius: 14,
-    paddingHorizontal: 28,
-    paddingVertical: 13,
-  },
-  exploreBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  emptyTitle: { fontSize: 22, fontWeight: '800', color: colores.marino, marginTop: 16 },
+  emptyText: { color: colores.textoSuave, textAlign: 'center', marginTop: 8, fontSize: 14, lineHeight: 20 },
+  exploreBtn: { marginTop: 24, backgroundColor: colores.marino, borderRadius: radios.medio, paddingHorizontal: 28, minHeight: 50, justifyContent: 'center' },
+  exploreBtnText: { color: colores.blanco, fontWeight: '800', fontSize: 15 },
 });

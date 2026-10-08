@@ -1,15 +1,12 @@
 import { useState } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, KeyboardAvoidingView, Platform,
-  ScrollView, Dimensions,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Dimensions, Image } from 'react-native';
+import { Text, TextInput } from '../components/Texto';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
 import { ID_BRANCH, ID_CUENTA } from '../constants/config';
+import { colores, logos, radios } from '../constants/tema';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -23,11 +20,11 @@ const VEHICULOS = [
 function Campo({ icon, rightIcon, onRightPress, ...props }) {
   return (
     <View style={styles.campo}>
-      <Ionicons name={icon} size={19} color="#94A3B8" style={{ marginRight: 8 }} />
-      <TextInput style={styles.campoInput} placeholderTextColor="#A0AEC0" {...props} />
+      <Ionicons name={icon} size={19} color="#8C9BB0" style={{ marginRight: 8 }} />
+      <TextInput style={styles.campoInput} placeholderTextColor="#8C9BB0" {...props} />
       {rightIcon ? (
         <TouchableOpacity onPress={onRightPress} style={{ padding: 6 }}>
-          <Ionicons name={rightIcon} size={20} color="#94A3B8" />
+          <Ionicons name={rightIcon} size={20} color="#8C9BB0" />
         </TouchableOpacity>
       ) : null}
     </View>
@@ -121,14 +118,6 @@ export default function LoginScreen() {
     <View style={styles.root}>
       <StatusBar style="light" />
 
-      <LinearGradient
-        colors={['#0D1B2A', '#11304A', '#14507A']}
-        style={StyleSheet.absoluteFill}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0.7, y: 1 }}
-      />
-      <View style={[styles.deco, styles.decoUno]} />
-      <View style={[styles.deco, styles.decoDos]} />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -141,19 +130,11 @@ export default function LoginScreen() {
         >
           {/* Hero */}
           <View style={styles.hero}>
-            <LinearGradient
-              colors={['#27AE60', '#1A6A9A']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.logoBadge}
-            >
-              <Ionicons name="bicycle" size={42} color="#fff" />
-            </LinearGradient>
-            <Text style={styles.logoText}>VIDA</Text>
+            <Image source={logos.completoOscuro} style={styles.logoImg} resizeMode="contain" accessibilityLabel="Comercializadora VIDA" />
             <View style={styles.repartidorChip}>
-              <Text style={styles.repartidorChipText}>REPARTIDOR</Text>
+              <Text style={styles.repartidorChipText}>APP DE REPARTO</Text>
             </View>
-            <Text style={styles.tagline}>Entrega. Gana. Repite.</Text>
+            <Text style={styles.tagline}>Entrega en tu zona y cobra tus comisiones cada día.</Text>
           </View>
 
           {/* Tarjeta */}
@@ -202,7 +183,7 @@ export default function LoginScreen() {
 
                 {tab === 'login' ? (
                   <>
-                    <Text style={styles.cardTitle}>Bienvenido de vuelta 👋</Text>
+                    <Text style={styles.cardTitle}>Bienvenido de vuelta</Text>
                     <Text style={styles.cardSubtitle}>Ingresa con tu teléfono y contraseña</Text>
                     <View style={{ gap: 10 }}>
                       <Campo
@@ -227,7 +208,7 @@ export default function LoginScreen() {
                   </>
                 ) : (
                   <>
-                    <Text style={styles.cardTitle}>Únete al equipo 🛵</Text>
+                    <Text style={styles.cardTitle}>Únete al equipo VIDA</Text>
                     <Text style={styles.cardSubtitle}>
                       Llena tus datos y el administrador aprobará tu cuenta
                     </Text>
@@ -243,7 +224,7 @@ export default function LoginScreen() {
                             style={[styles.vehiculoBtn, vehiculo === v.key && styles.vehiculoBtnActive]}
                             onPress={() => setVehiculo(v.key)}
                           >
-                            <Ionicons name={v.icon} size={20} color={vehiculo === v.key ? '#fff' : '#64748B'} />
+                            <Ionicons name={v.icon} size={20} color={vehiculo === v.key ? '#fff' : '#4B5B73'} />
                             <Text style={[styles.vehiculoText, vehiculo === v.key && styles.vehiculoTextActive]}>
                               {v.key}
                             </Text>
@@ -274,22 +255,17 @@ export default function LoginScreen() {
                   activeOpacity={0.9}
                   style={loading ? { opacity: 0.7 } : null}
                 >
-                  <LinearGradient
-                    colors={['#27AE60', '#1F9E56']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.primaryBtn}
-                  >
+                  <View style={styles.primaryBtn}>
                     {loading
-                      ? <ActivityIndicator color="#fff" />
+                      ? <ActivityIndicator color={colores.marino} />
                       : <>
                           <Text style={styles.primaryBtnText}>
                             {tab === 'login' ? 'Comenzar a repartir' : 'Enviar solicitud'}
                           </Text>
-                          <Ionicons name="arrow-forward" size={18} color="#fff" />
+                          <Ionicons name="arrow-forward" size={18} color={colores.marino} />
                         </>
                     }
-                  </LinearGradient>
+                  </View>
                 </TouchableOpacity>
               </>
             )}
@@ -304,7 +280,7 @@ export default function LoginScreen() {
             ].map((b) => (
               <View key={b.icon} style={styles.beneficioRow}>
                 <View style={styles.beneficioIcon}>
-                  <Ionicons name={b.icon} size={16} color="#7FDCA4" />
+                  <Ionicons name={b.icon} size={16} color={colores.verde} />
                 </View>
                 <Text style={styles.beneficioText}>{b.texto}</Text>
               </View>
@@ -317,99 +293,67 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0D1B2A' },
+  root: { flex: 1, backgroundColor: colores.marino },
   scroll: { flexGrow: 1, paddingBottom: 30 },
 
-  deco: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.05)' },
-  decoUno: { width: 300, height: 300, top: -110, left: -90 },
-  decoDos: { width: 220, height: 220, top: SCREEN_HEIGHT * 0.3, right: -110, backgroundColor: 'rgba(39,174,96,0.12)' },
-
-  hero: { alignItems: 'center', paddingTop: SCREEN_HEIGHT * 0.07, paddingBottom: 26 },
-  logoBadge: {
-    width: 84, height: 84, borderRadius: 42,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
-    shadowColor: '#27AE60', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.45, shadowRadius: 16, elevation: 10,
-  },
-  logoText: { fontSize: 40, fontWeight: '900', color: '#fff', letterSpacing: 12, marginLeft: 12 },
-  repartidorChip: {
-    backgroundColor: 'rgba(39,174,96,0.2)',
-    borderWidth: 1, borderColor: 'rgba(39,174,96,0.5)',
-    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 4, marginTop: 8,
-  },
-  repartidorChipText: { color: '#7FDCA4', fontSize: 12, fontWeight: '800', letterSpacing: 3 },
-  tagline: { color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 10, fontWeight: '600' },
+  hero: { alignItems: 'center', paddingTop: SCREEN_HEIGHT * 0.06, paddingBottom: 24, paddingHorizontal: 24, gap: 12 },
+  logoImg: { width: 270, height: 130 },
+  repartidorChip: { backgroundColor: colores.verde, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
+  repartidorChipText: { color: colores.marino, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 },
+  tagline: { color: colores.celesteClaro, fontSize: 15, fontWeight: '600', textAlign: 'center' },
 
   card: {
-    marginHorizontal: 18, backgroundColor: '#fff', borderRadius: 28, padding: 22,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.3, shadowRadius: 32, elevation: 14,
+    marginHorizontal: 18, backgroundColor: colores.blanco, borderRadius: radios.enorme, padding: 22,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.3, shadowRadius: 32, elevation: 14,
   },
-  tabs: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 14, padding: 4, marginBottom: 16 },
+  tabs: { flexDirection: 'row', backgroundColor: colores.fondo, borderRadius: 14, padding: 4, marginBottom: 16 },
   tabBtn: { flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: 'center' },
-  tabBtnActive: {
-    backgroundColor: '#fff',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 6, elevation: 2,
-  },
-  tabText: { color: '#94A3B8', fontWeight: '600', fontSize: 14 },
-  tabTextActive: { color: '#1A6A9A', fontWeight: '800' },
+  tabBtnActive: { backgroundColor: colores.marino },
+  tabText: { color: colores.textoSuave, fontWeight: '700', fontSize: 14 },
+  tabTextActive: { color: colores.blanco, fontWeight: '800' },
 
-  cardTitle: { fontSize: 20, fontWeight: '800', color: '#1A202C', marginBottom: 4 },
-  cardSubtitle: { fontSize: 13.5, color: '#718096', marginBottom: 16, lineHeight: 19 },
+  cardTitle: { fontSize: 20, fontWeight: '800', color: colores.marino, marginBottom: 4 },
+  cardSubtitle: { fontSize: 14, color: colores.textoSuave, marginBottom: 16, lineHeight: 20 },
 
   alertError: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#FFF5F5', borderRadius: 12, padding: 11,
-    borderWidth: 1, borderColor: '#FED7D7', marginBottom: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colores.errorClaro,
+    borderRadius: 12, padding: 11, borderWidth: 1, borderColor: '#F5C2C2', marginBottom: 12,
   },
-  alertErrorText: { color: '#C53030', fontSize: 13, flex: 1 },
+  alertErrorText: { color: colores.error, fontSize: 13, flex: 1 },
 
   campo: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F7FAFC', borderWidth: 1.5, borderColor: '#E8EEF4',
-    borderRadius: 14, paddingHorizontal: 12,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colores.blanco,
+    borderWidth: 1.5, borderColor: colores.bordeFuerte, borderRadius: radios.medio, paddingHorizontal: 14, minHeight: 52,
   },
-  campoInput: { flex: 1, paddingVertical: 13, fontSize: 15, color: '#1A202C' },
+  campoInput: { flex: 1, paddingVertical: 13, fontSize: 16, color: colores.marino },
 
   vehiculosRow: { flexDirection: 'row', gap: 8 },
   vehiculoBtn: {
-    flex: 1, alignItems: 'center', gap: 4,
-    backgroundColor: '#F1F5F9', borderRadius: 12, paddingVertical: 10,
-    borderWidth: 1.5, borderColor: 'transparent',
+    flex: 1, alignItems: 'center', gap: 4, minHeight: 56, justifyContent: 'center',
+    backgroundColor: colores.fondo, borderRadius: 14, borderWidth: 1.5, borderColor: colores.borde,
   },
-  vehiculoBtnActive: { backgroundColor: '#1A6A9A', borderColor: '#1A6A9A' },
-  vehiculoText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
-  vehiculoTextActive: { color: '#fff' },
+  vehiculoBtnActive: { backgroundColor: colores.marino, borderColor: colores.marino },
+  vehiculoText: { fontSize: 12, fontWeight: '800', color: colores.textoSuave },
+  vehiculoTextActive: { color: colores.blanco },
 
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderRadius: 16, paddingVertical: 16, marginTop: 18,
-    shadowColor: '#27AE60', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
+    borderRadius: 18, minHeight: 58, marginTop: 18, backgroundColor: colores.celeste,
   },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
+  primaryBtnText: { color: colores.marino, fontSize: 17, fontWeight: '800' },
 
   pendienteWrap: { alignItems: 'center', paddingVertical: 10 },
   pendienteIcon: {
-    width: 76, height: 76, borderRadius: 38, backgroundColor: '#FFFBEB',
+    width: 76, height: 76, borderRadius: 38, backgroundColor: colores.avisoClaro,
     alignItems: 'center', justifyContent: 'center', marginBottom: 14,
-    borderWidth: 1, borderColor: '#FDE68A',
   },
-  pendienteTitle: { fontSize: 19, fontWeight: '800', color: '#1A202C', marginBottom: 8 },
-  pendienteText: { fontSize: 13.5, color: '#718096', textAlign: 'center', lineHeight: 20, marginBottom: 18 },
-  pendienteBtn: {
-    borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12,
-    paddingHorizontal: 28, paddingVertical: 11,
-  },
-  pendienteBtnText: { color: '#4A5568', fontWeight: '700', fontSize: 14 },
+  pendienteTitle: { fontSize: 20, fontWeight: '800', color: colores.marino, marginBottom: 8 },
+  pendienteText: { fontSize: 14, color: colores.textoSuave, textAlign: 'center', lineHeight: 20, marginBottom: 18 },
+  pendienteBtn: { borderWidth: 1.5, borderColor: colores.bordeFuerte, borderRadius: 14, paddingHorizontal: 28, minHeight: 46, justifyContent: 'center' },
+  pendienteBtnText: { color: colores.marino, fontWeight: '800', fontSize: 14 },
 
-  beneficios: { marginTop: 26, paddingHorizontal: 40, gap: 12 },
+  beneficios: { marginTop: 26, paddingHorizontal: 36, gap: 12 },
   beneficioRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  beneficioIcon: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: 'rgba(39,174,96,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  beneficioText: { color: 'rgba(255,255,255,0.75)', fontSize: 13.5, fontWeight: '600' },
+  beneficioIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colores.marinoClaro, alignItems: 'center', justifyContent: 'center' },
+  beneficioText: { color: colores.celesteClaro, fontSize: 14, fontWeight: '600' },
 });

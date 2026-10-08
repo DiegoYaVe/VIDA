@@ -3,10 +3,8 @@
 // temario, reproductor (video embebido/subido, texto, PDF, quiz), progreso,
 // comentarios y constancia con QR al completar (+ puntos VIDA).
 import { useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView, TextInput,
-  TouchableOpacity, ActivityIndicator, Alert, Image, Dimensions,
-} from 'react-native';
+import { View, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image, Dimensions } from 'react-native';
+import { Text, TextInput } from '../components/Texto';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -54,7 +52,7 @@ export default function AcademiaScreen() {
         <View style={{ width: 22 }} />
       </View>
 
-      {cargando ? <ActivityIndicator style={{ marginTop: 40 }} color="#0A1E3F" /> : (
+      {cargando ? <ActivityIndicator style={{ marginTop: 40 }} color="#001034" /> : (
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           <View style={styles.resumen}>
             <View style={styles.resItem}><Text style={styles.resNum}>{resumen.completados}/{resumen.total}</Text><Text style={styles.resLbl}>Cursos</Text></View>
@@ -64,8 +62,8 @@ export default function AcademiaScreen() {
 
           {cursos.length === 0 ? (
             <View style={{ alignItems: 'center', marginTop: 60 }}>
-              <Ionicons name="school-outline" size={48} color="#CBD5E0" />
-              <Text style={{ color: '#A0AEC0', marginTop: 8 }}>Aún no hay cursos disponibles.</Text>
+              <Ionicons name="school-outline" size={48} color="#CFE4EB" />
+              <Text style={{ color: '#8C9BB0', marginTop: 8 }}>Aún no hay cursos disponibles.</Text>
             </View>
           ) : cursos.map(c => (
             <TouchableOpacity key={c.idCurso} style={styles.card} onPress={() => setAbierto(c.idCurso)} activeOpacity={0.85}>
@@ -80,7 +78,7 @@ export default function AcademiaScreen() {
                 <View style={styles.metaRow}>
                   <Text style={styles.metaTxt}><Ionicons name="time-outline" size={12} /> {c.DuracionMin} min</Text>
                   <Text style={styles.metaTxt}><Ionicons name="star-outline" size={12} /> {c.Puntos} pts</Text>
-                  {c.Completado ? <Text style={[styles.metaTxt, { color: '#16A34A' }]}><Ionicons name="checkmark-circle" size={12} /> Completado</Text> : null}
+                  {c.Completado ? <Text style={[styles.metaTxt, { color: '#1F7A3F' }]}><Ionicons name="checkmark-circle" size={12} /> Completado</Text> : null}
                 </View>
               </View>
             </TouchableOpacity>
@@ -145,7 +143,7 @@ function CursoDetalle({ idCurso, onBack }) {
   if (cargando) return (
     <SafeAreaView style={styles.container}><StatusBar style="light" />
       <View style={styles.header}><TouchableOpacity onPress={onBack}><Ionicons name="arrow-back" size={22} color="#fff" /></TouchableOpacity><Text style={styles.headerTitle}>Curso</Text><View style={{ width: 22 }} /></View>
-      <ActivityIndicator style={{ marginTop: 40 }} color="#0A1E3F" />
+      <ActivityIndicator style={{ marginTop: 40 }} color="#001034" />
     </SafeAreaView>
   );
 
@@ -177,7 +175,7 @@ function CursoDetalle({ idCurso, onBack }) {
               <Text style={styles.btnMainTxt}>{leccion.Completado ? 'Lección completada' : proc ? 'Guardando…' : 'Marcar como completada'}</Text>
             </TouchableOpacity>
             {!leccion.Completado && !tocable && leccion.TipoLeccion === 'VIDEO' ? (
-              <Text style={{ fontSize: 11, color: '#A0AEC0', textAlign: 'center', marginBottom: 8 }}>Termina el video para poder completar.</Text>
+              <Text style={{ fontSize: 11, color: '#8C9BB0', textAlign: 'center', marginBottom: 8 }}>Termina el video para poder completar.</Text>
             ) : null}
           </>
         ) : null}
@@ -191,8 +189,8 @@ function CursoDetalle({ idCurso, onBack }) {
             <Text style={styles.modTitle}>{m.Titulo}</Text>
             {m.lecciones.map(l => (
               <TouchableOpacity key={l.idLeccion} style={[styles.lecRow, sel === l.idLeccion && styles.lecRowOn]} onPress={() => setSel(l.idLeccion)}>
-                <Ionicons name={l.Completado ? 'checkmark-circle' : (TIPO_ICON[l.TipoLeccion] || 'play-circle')} size={18} color={l.Completado ? '#16A34A' : '#718096'} />
-                <Text style={[styles.lecTxt, l.Completado && { color: '#A0AEC0' }]} numberOfLines={1}>{l.Titulo}</Text>
+                <Ionicons name={l.Completado ? 'checkmark-circle' : (TIPO_ICON[l.TipoLeccion] || 'play-circle')} size={18} color={l.Completado ? '#1F7A3F' : '#4B5B73'} />
+                <Text style={[styles.lecTxt, l.Completado && { color: '#8C9BB0' }]} numberOfLines={1}>{l.Titulo}</Text>
                 <Text style={styles.lecMin}>{l.DuracionMin}m</Text>
               </TouchableOpacity>
             ))}
@@ -234,7 +232,7 @@ function LeccionMedia({ leccion, onEnded }) {
   if (TipoLeccion === 'PDF' && ArchivoUrl) {
     return (
       <TouchableOpacity style={styles.pdfBtn} onPress={() => WebBrowser.openBrowserAsync(absImg(ArchivoUrl))}>
-        <Ionicons name="document" size={20} color="#0A1E3F" />
+        <Ionicons name="document" size={20} color="#001034" />
         <Text style={styles.pdfTxt}>Abrir documento PDF</Text>
       </TouchableOpacity>
     );
@@ -258,10 +256,10 @@ function limpiarHtml(s) { return String(s || '').replace(/<script[\s\S]*?<\/scri
 function alturaTexto(html) { const n = String(html || '').length; return Math.max(120, Math.min(900, 160 + n * 0.35)); }
 function htmlTexto(titulo, contenido) {
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>body{font-family:-apple-system,Roboto,sans-serif;color:#2D3748;margin:0;padding:14px;font-size:15px;line-height:1.6}
-  h1,h2,h3{color:#0A1E3F}a{color:#0A1E3F}img{max-width:100%}blockquote{border-left:3px solid #54C4E0;margin:0;padding-left:12px;color:#4A5568}
-  pre,code{background:#f1f5f9;border-radius:6px;padding:2px 4px}</style></head>
-  <body>${limpiarHtml(contenido) || '<p style="color:#A0AEC0">Sin contenido.</p>'}</body></html>`;
+  <style>body{font-family:-apple-system,Roboto,sans-serif;color:#1B2A45;margin:0;padding:14px;font-size:15px;line-height:1.6}
+  h1,h2,h3{color:#001034}a{color:#001034}img{max-width:100%}blockquote{border-left:3px solid #62C6DE;margin:0;padding-left:12px;color:#2C3D58}
+  pre,code{background:#EEF6F8;border-radius:6px;padding:2px 4px}</style></head>
+  <body>${limpiarHtml(contenido) || '<p style="color:#8C9BB0">Sin contenido.</p>'}</body></html>`;
 }
 function htmlVideoArchivo(uri) {
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
@@ -331,14 +329,14 @@ function Quiz({ leccion, onDone }) {
             <Text style={styles.quizPreg}>{i + 1}. {p.Texto}{tipo === 'OPCION_MULTIPLE' ? '  (varias correctas)' : ''}</Text>
             {tipo === 'RESPUESTA_CORTA' ? (
               <TextInput value={resp[p.idPregunta] || ''} onChangeText={v => setTexto(p.idPregunta, v)}
-                placeholder="Tu respuesta…" placeholderTextColor="#A0AEC0"
-                style={{ borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14, marginTop: 4 }} />
+                placeholder="Tu respuesta…" placeholderTextColor="#8C9BB0"
+                style={{ borderWidth: 1, borderColor: '#DCEEF3', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14, marginTop: 4 }} />
             ) : tipo === 'OPCION_MULTIPLE' ? (
               p.opciones.map(o => {
                 const on = Array.isArray(resp[p.idPregunta]) && resp[p.idPregunta].includes(o.idOpcion);
                 return (
                   <TouchableOpacity key={o.idOpcion} style={[styles.quizOpc, on && styles.quizOpcOn]} onPress={() => toggleMulti(p.idPregunta, o.idOpcion)}>
-                    <Ionicons name={on ? 'checkbox' : 'square-outline'} size={16} color="#0A1E3F" />
+                    <Ionicons name={on ? 'checkbox' : 'square-outline'} size={16} color="#001034" />
                     <Text style={styles.quizOpcTxt}>{o.Texto}</Text>
                   </TouchableOpacity>
                 );
@@ -348,7 +346,7 @@ function Quiz({ leccion, onDone }) {
                 const on = resp[p.idPregunta] === o.idOpcion;
                 return (
                   <TouchableOpacity key={o.idOpcion} style={[styles.quizOpc, on && styles.quizOpcOn]} onPress={() => setUnica(p.idPregunta, o.idOpcion)}>
-                    <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={16} color="#0A1E3F" />
+                    <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={16} color="#001034" />
                     <Text style={styles.quizOpcTxt}>{o.Texto}</Text>
                   </TouchableOpacity>
                 );
@@ -357,7 +355,7 @@ function Quiz({ leccion, onDone }) {
           </View>
         );
       })}
-      {res ? <Text style={{ color: res.aprobado ? '#16A34A' : '#DC2626', fontWeight: '700', marginBottom: 8 }}>{res.correctas}/{res.total} ({res.puntaje}%) — {res.aprobado ? 'Aprobado' : 'No aprobado'}</Text> : null}
+      {res ? <Text style={{ color: res.aprobado ? '#1F7A3F' : '#DC2626', fontWeight: '700', marginBottom: 8 }}>{res.correctas}/{res.total} ({res.puntaje}%) — {res.aprobado ? 'Aprobado' : 'No aprobado'}</Text> : null}
       <TouchableOpacity style={[styles.btnMain, (proc || contestadas < preguntas.length) && { opacity: 0.5 }]} onPress={enviar} disabled={proc || contestadas < preguntas.length}>
         <Text style={styles.btnMainTxt}>{proc ? 'Enviando…' : 'Enviar respuestas'}</Text>
       </TouchableOpacity>
@@ -388,10 +386,10 @@ function Comentarios({ idCurso, idLeccion }) {
     <View style={{ marginTop: 16 }}>
       <Text style={styles.secTitle}>Comentarios</Text>
       <View style={styles.comInputRow}>
-        <TextInput style={styles.comInput} value={texto} onChangeText={setTexto} placeholder="Escribe un comentario…" placeholderTextColor="#A0AEC0" />
+        <TextInput style={styles.comInput} value={texto} onChangeText={setTexto} placeholder="Escribe un comentario…" placeholderTextColor="#8C9BB0" />
         <TouchableOpacity style={styles.comSend} onPress={enviar}><Ionicons name="send" size={16} color="#fff" /></TouchableOpacity>
       </View>
-      {lista.length === 0 ? <Text style={{ color: '#A0AEC0', fontSize: 12 }}>Sé el primero en comentar.</Text> :
+      {lista.length === 0 ? <Text style={{ color: '#8C9BB0', fontSize: 12 }}>Sé el primero en comentar.</Text> :
         lista.map(cm => (
           <View key={cm.idComentario} style={styles.comItem}>
             <Text style={styles.comAutor}>{cm.Autor}</Text>
@@ -403,43 +401,43 @@ function Comentarios({ idCurso, idLeccion }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7FAFC' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0A1E3F', paddingHorizontal: 16, paddingVertical: 14 },
+  container: { flex: 1, backgroundColor: '#F7FBFC' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#001034', paddingHorizontal: 16, paddingVertical: 14 },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: '800', flex: 1, textAlign: 'center', marginHorizontal: 8 },
-  resumen: { flexDirection: 'row', backgroundColor: '#0A1E3F', borderRadius: 16, padding: 16, marginBottom: 16, alignItems: 'center' },
+  resumen: { flexDirection: 'row', backgroundColor: '#001034', borderRadius: 16, padding: 16, marginBottom: 16, alignItems: 'center' },
   resItem: { flex: 1, alignItems: 'center' }, resDiv: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.2)' },
   resNum: { color: '#fff', fontSize: 22, fontWeight: '900' }, resLbl: { color: 'rgba(255,255,255,0.7)', fontSize: 11, marginTop: 2 },
   card: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 12, gap: 12, elevation: 1 },
-  cardIcon: { width: 46, height: 46, borderRadius: 12, backgroundColor: '#54C4E0', alignItems: 'center', justifyContent: 'center' },
-  cardTitle: { fontSize: 15, fontWeight: '800', color: '#1A202C' }, cardSub: { fontSize: 12, color: '#718096', marginTop: 2 },
+  cardIcon: { width: 46, height: 46, borderRadius: 12, backgroundColor: '#62C6DE', alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontSize: 15, fontWeight: '800', color: '#001034' }, cardSub: { fontSize: 12, color: '#4B5B73', marginTop: 2 },
   progWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  progBar: { flex: 1, height: 6, backgroundColor: '#E2E8F0', borderRadius: 3, overflow: 'hidden' },
-  progFill: { height: '100%', backgroundColor: '#5BBE6A', borderRadius: 3 },
-  progTxt: { fontSize: 11, color: '#718096', fontWeight: '700' },
-  metaRow: { flexDirection: 'row', gap: 12, marginTop: 6 }, metaTxt: { fontSize: 11, color: '#A0AEC0' },
+  progBar: { flex: 1, height: 6, backgroundColor: '#DCEEF3', borderRadius: 3, overflow: 'hidden' },
+  progFill: { height: '100%', backgroundColor: '#4DAD66', borderRadius: 3 },
+  progTxt: { fontSize: 11, color: '#4B5B73', fontWeight: '700' },
+  metaRow: { flexDirection: 'row', gap: 12, marginTop: 6 }, metaTxt: { fontSize: 11, color: '#8C9BB0' },
   media: { width: '100%', borderRadius: 12, overflow: 'hidden', backgroundColor: '#000', marginBottom: 12 },
   texto: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12 },
-  textoTitle: { fontSize: 15, fontWeight: '800', color: '#1A202C', marginBottom: 6 }, textoBody: { fontSize: 14, color: '#4A5568', lineHeight: 21 },
-  pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#EDF2F7', borderRadius: 12, padding: 16, marginBottom: 12, justifyContent: 'center' },
-  pdfTxt: { color: '#0A1E3F', fontWeight: '700' },
-  btnMain: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#5BBE6A', borderRadius: 12, paddingVertical: 13, marginBottom: 8 },
-  btnDone: { backgroundColor: '#A0AEC0' }, btnMainTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  secTitle: { fontSize: 14, fontWeight: '800', color: '#2D3748', marginTop: 8, marginBottom: 8 },
-  modTitle: { fontSize: 12, fontWeight: '700', color: '#A0AEC0', textTransform: 'uppercase', marginBottom: 4 },
+  textoTitle: { fontSize: 15, fontWeight: '800', color: '#001034', marginBottom: 6 }, textoBody: { fontSize: 14, color: '#2C3D58', lineHeight: 21 },
+  pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#E6F1F5', borderRadius: 12, padding: 16, marginBottom: 12, justifyContent: 'center' },
+  pdfTxt: { color: '#001034', fontWeight: '700' },
+  btnMain: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#4DAD66', borderRadius: 12, paddingVertical: 13, marginBottom: 8 },
+  btnDone: { backgroundColor: '#8C9BB0' }, btnMainTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  secTitle: { fontSize: 14, fontWeight: '800', color: '#1B2A45', marginTop: 8, marginBottom: 8 },
+  modTitle: { fontSize: 12, fontWeight: '700', color: '#8C9BB0', textTransform: 'uppercase', marginBottom: 4 },
   lecRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 6 },
-  lecRowOn: { borderWidth: 1.5, borderColor: '#0A1E3F' },
-  lecTxt: { flex: 1, fontSize: 13, color: '#2D3748' }, lecMin: { fontSize: 11, color: '#CBD5E0' },
-  diploma: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginTop: 16, borderWidth: 2, borderColor: '#5BBE6A', alignItems: 'center' },
-  diplomaTitle: { fontSize: 15, fontWeight: '800', color: '#0A1E3F' },
-  diplomaFolio: { fontSize: 12, color: '#4A5568', fontWeight: '700' }, diplomaSub: { fontSize: 11, color: '#A0AEC0', marginTop: 2 },
+  lecRowOn: { borderWidth: 1.5, borderColor: '#001034' },
+  lecTxt: { flex: 1, fontSize: 13, color: '#1B2A45' }, lecMin: { fontSize: 11, color: '#CFE4EB' },
+  diploma: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginTop: 16, borderWidth: 2, borderColor: '#4DAD66', alignItems: 'center' },
+  diplomaTitle: { fontSize: 15, fontWeight: '800', color: '#001034' },
+  diplomaFolio: { fontSize: 12, color: '#2C3D58', fontWeight: '700' }, diplomaSub: { fontSize: 11, color: '#8C9BB0', marginTop: 2 },
   quiz: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12 },
-  quizHint: { fontSize: 12, color: '#718096', marginBottom: 10 },
-  quizPreg: { fontSize: 14, fontWeight: '700', color: '#2D3748', marginBottom: 6 },
-  quizOpc: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, padding: 10, marginBottom: 6 },
-  quizOpcOn: { borderColor: '#0A1E3F', backgroundColor: '#EBF4FF' }, quizOpcTxt: { fontSize: 13, color: '#2D3748', flex: 1 },
+  quizHint: { fontSize: 12, color: '#4B5B73', marginBottom: 10 },
+  quizPreg: { fontSize: 14, fontWeight: '700', color: '#1B2A45', marginBottom: 6 },
+  quizOpc: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#DCEEF3', borderRadius: 10, padding: 10, marginBottom: 6 },
+  quizOpcOn: { borderColor: '#001034', backgroundColor: '#EBF4FF' }, quizOpcTxt: { fontSize: 13, color: '#1B2A45', flex: 1 },
   comInputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  comInput: { flex: 1, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 12, paddingVertical: 8, fontSize: 13 },
-  comSend: { backgroundColor: '#0A1E3F', borderRadius: 10, width: 42, alignItems: 'center', justifyContent: 'center' },
+  comInput: { flex: 1, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#DCEEF3', paddingHorizontal: 12, paddingVertical: 8, fontSize: 13 },
+  comSend: { backgroundColor: '#001034', borderRadius: 10, width: 42, alignItems: 'center', justifyContent: 'center' },
   comItem: { backgroundColor: '#fff', borderRadius: 10, padding: 10, marginBottom: 6 },
-  comAutor: { fontSize: 12, fontWeight: '700', color: '#2D3748' }, comTxt: { fontSize: 13, color: '#4A5568', marginTop: 2 },
+  comAutor: { fontSize: 12, fontWeight: '700', color: '#1B2A45' }, comTxt: { fontSize: 13, color: '#2C3D58', marginTop: 2 },
 });

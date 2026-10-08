@@ -2,7 +2,8 @@
 // (sucursales 🏪 y entregas numeradas) y la polilínea de la ruta completa.
 // Usa Leaflet + OpenStreetMap en un WebView (sin API key, igual que MapaPedido).
 import { useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { Text } from './Texto';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
@@ -55,12 +56,12 @@ function mkIcon(html){
   return L.divIcon({html:html,className:'',iconAnchor:[16,16]});
 }
 function iconYo(){
-  return mkIcon('<div style="background:#4A5568;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🛵</div>');
+  return mkIcon('<div style="background:#2C3D58;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🛵</div>');
 }
 function iconStop(s){
   if(s.tipo==='PICKUP')
-    return mkIcon('<div style="background:#1A6A9A;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🏪</div>');
-  return mkIcon('<div style="background:#27AE60;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">'+s.num+'</div>');
+    return mkIcon('<div style="background:#001034;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🏪</div>');
+  return mkIcon('<div style="background:#4DAD66;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">'+s.num+'</div>');
 }
 
 window.update=function(data){
@@ -71,7 +72,7 @@ window.update=function(data){
     capas.push(L.marker([s.lat,s.lon],{icon:iconStop(s)}).bindPopup(s.label).addTo(map));
     seq.push([s.lat,s.lon]);
   });
-  if(seq.length>=2) capas.push(L.polyline(seq,{color:'#1A6A9A',weight:3,dashArray:'8,6'}).addTo(map));
+  if(seq.length>=2) capas.push(L.polyline(seq,{color:'#001034',weight:3,dashArray:'8,6'}).addTo(map));
   if(seq.length>=2){ map.fitBounds(L.latLngBounds(seq).pad(0.25)); }
   else if(seq.length===1){ map.setView(seq[0],15); }
 };
@@ -114,7 +115,7 @@ function MapaRutaGoogle({ yo, stops }) {
     >
       {yo && (
         <Maps.Marker coordinate={{ latitude: yo.lat, longitude: yo.lon }} title="Tú" anchor={{ x: 0.5, y: 0.5 }}>
-          <View style={[styles.pinNativo, { backgroundColor: '#4A5568' }]}>
+          <View style={[styles.pinNativo, { backgroundColor: '#2C3D58' }]}>
             <Text style={styles.pinNativoEmoji}>🛵</Text>
           </View>
         </Maps.Marker>
@@ -127,18 +128,18 @@ function MapaRutaGoogle({ yo, stops }) {
           anchor={{ x: 0.5, y: 0.5 }}
         >
           {s.tipo === 'PICKUP' ? (
-            <View style={[styles.pinNativo, { backgroundColor: '#1A6A9A' }]}>
+            <View style={[styles.pinNativo, { backgroundColor: '#001034' }]}>
               <Text style={styles.pinNativoEmoji}>🏪</Text>
             </View>
           ) : (
-            <View style={[styles.pinNativo, { backgroundColor: '#27AE60' }]}>
+            <View style={[styles.pinNativo, { backgroundColor: '#4DAD66' }]}>
               <Text style={styles.pinNativoNum}>{s.num}</Text>
             </View>
           )}
         </Maps.Marker>
       ))}
       {seq.length >= 2 && (
-        <Maps.Polyline coordinates={seq} strokeColor="#1A6A9A" strokeWidth={3} lineDashPattern={[8, 6]} />
+        <Maps.Polyline coordinates={seq} strokeColor="#001034" strokeWidth={3} lineDashPattern={[8, 6]} />
       )}
     </MapView>
   );
@@ -159,7 +160,7 @@ export default function MapaRuta({ ubicacion, paradas }) {
   if (!yo && !stops.length) {
     return (
       <View style={styles.placeholder}>
-        <Ionicons name="map-outline" size={48} color="#CBD5E0" />
+        <Ionicons name="map-outline" size={48} color="#CFE4EB" />
         <Text style={styles.placeholderText}>Esperando ubicación GPS...</Text>
       </View>
     );
@@ -200,8 +201,8 @@ export default function MapaRuta({ ubicacion, paradas }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EDF2F7' },
-  placeholderText: { color: '#A0AEC0', marginTop: 8, fontSize: 13 },
+  placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E6F1F5' },
+  placeholderText: { color: '#8C9BB0', marginTop: 8, fontSize: 13 },
   pinNativo: {
     width: 34, height: 34, borderRadius: 17,
     alignItems: 'center', justifyContent: 'center',
@@ -214,7 +215,7 @@ const styles = StyleSheet.create({
   navBtn: {
     position: 'absolute', top: 12, right: 12,
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#1A6A9A', paddingHorizontal: 14, paddingVertical: 9,
+    backgroundColor: '#001034', paddingHorizontal: 14, paddingVertical: 9,
     borderRadius: 22, elevation: 5,
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
   },

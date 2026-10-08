@@ -3,7 +3,8 @@
 // en Expo Go cae a Leaflet + OpenStreetMap en WebView (react-native-maps
 // requiere build nativo con la API key de app.json).
 import { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { Text } from './Texto';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
@@ -64,7 +65,7 @@ function MapaGoogle({ repartidor, destino, enCamino }) {
           title="Repartidor"
           anchor={{ x: 0.5, y: 0.5 }}
         >
-          <Pin color="#1A6A9A">🛵</Pin>
+          <Pin color="#001034">🛵</Pin>
         </Maps.Marker>
       )}
       {destino && (
@@ -73,13 +74,13 @@ function MapaGoogle({ repartidor, destino, enCamino }) {
           title="Tu dirección"
           anchor={{ x: 0.5, y: 0.5 }}
         >
-          <Pin color="#27AE60">🏠</Pin>
+          <Pin color="#4DAD66">🏠</Pin>
         </Maps.Marker>
       )}
       {repartidor && destino && (
         <Maps.Polyline
           coordinates={coords}
-          strokeColor={enCamino ? '#27AE60' : '#A0AEC0'}
+          strokeColor={enCamino ? '#4DAD66' : '#8C9BB0'}
           strokeWidth={3}
           lineDashPattern={[8, 6]}
         />
@@ -91,12 +92,12 @@ function MapaGoogle({ repartidor, destino, enCamino }) {
 // ── Versión Expo Go: Leaflet en WebView ──────────────────────────────────
 function buildHTML(repartidor, destino, enCamino) {
   const points = [];
-  if (repartidor) points.push({ lat: repartidor.lat, lon: repartidor.lon, color: '#1A6A9A', icon: '🛵', label: 'Repartidor' });
-  if (destino)    points.push({ lat: destino.lat,    lon: destino.lon,    color: '#27AE60', icon: '🏠', label: 'Destino' });
+  if (repartidor) points.push({ lat: repartidor.lat, lon: repartidor.lon, color: '#001034', icon: '🛵', label: 'Repartidor' });
+  if (destino)    points.push({ lat: destino.lat,    lon: destino.lon,    color: '#4DAD66', icon: '🏠', label: 'Destino' });
 
   const centerLat = points[0]?.lat ?? 10.4806;
   const centerLon = points[0]?.lon ?? -66.9036;
-  const lineColor = enCamino ? '#27AE60' : '#A0AEC0';
+  const lineColor = enCamino ? '#4DAD66' : '#8C9BB0';
 
   return `<!DOCTYPE html><html><head>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
@@ -135,8 +136,8 @@ window.updatePositions = function(rep, dst, lineClr) {
   markers = [];
   if(polyline){ map.removeLayer(polyline); polyline=null; }
   var newPts = [];
-  if(rep) newPts.push({lat:rep.lat,lon:rep.lon,color:'#1A6A9A',icon:'🛵'});
-  if(dst) newPts.push({lat:dst.lat,lon:dst.lon,color:'#27AE60',icon:'🏠'});
+  if(rep) newPts.push({lat:rep.lat,lon:rep.lon,color:'#001034',icon:'🛵'});
+  if(dst) newPts.push({lat:dst.lat,lon:dst.lon,color:'#4DAD66',icon:'🏠'});
   newPts.forEach(function(p){
     var icon = L.divIcon({
       html:'<div style="background:'+p.color+';width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)">'+p.icon+'</div>',
@@ -160,7 +161,7 @@ function MapaLeaflet({ repartidor, destino, enCamino }) {
     if (!webRef.current) return;
     const r = repartidor ? JSON.stringify(repartidor) : 'null';
     const d = destino    ? JSON.stringify(destino)    : 'null';
-    const c = `'${enCamino ? '#27AE60' : '#A0AEC0'}'`;
+    const c = `'${enCamino ? '#4DAD66' : '#8C9BB0'}'`;
     webRef.current.injectJavaScript(`window.updatePositions(${r},${d},${c}); true;`);
   }, [repartidor?.lat, repartidor?.lon, destino?.lat, destino?.lon, enCamino]);
 
@@ -190,7 +191,7 @@ export default function MapaTracking({ estado, enCamino }) {
   if (!repartidor && !destino) {
     return (
       <View style={styles.placeholder}>
-        <Ionicons name="map-outline" size={40} color="#CBD5E0" />
+        <Ionicons name="map-outline" size={40} color="#CFE4EB" />
         <Text style={styles.placeholderText}>
           El mapa se activará cuando el repartidor comparta su ubicación
         </Text>
@@ -220,12 +221,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginHorizontal: 16,
     marginBottom: 16,
-    backgroundColor: '#EDF2F7',
+    backgroundColor: '#E6F1F5',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  placeholderText: { color: '#A0AEC0', fontSize: 12, marginTop: 6, textAlign: 'center' },
+  placeholderText: { color: '#8C9BB0', fontSize: 12, marginTop: 6, textAlign: 'center' },
   pin: {
     width: 34, height: 34, borderRadius: 17,
     alignItems: 'center', justifyContent: 'center',

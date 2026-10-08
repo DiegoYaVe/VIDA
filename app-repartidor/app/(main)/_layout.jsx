@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Tabs, useRouter, useSegments } from 'expo-router';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { Text } from '../../components/Texto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import usePedidoStore from '../../store/pedidoStore';
@@ -17,10 +18,10 @@ const STATUS_LABELS = {
 const TABS_SECUNDARIAS = ['ganancias', 'historial', 'perfil'];
 
 const STATUS_COLORS = {
-  IR_A_SUCURSAL: '#1A6A9A',
-  EN_SUCURSAL: '#7B3FBE',
+  IR_A_SUCURSAL: '#001034',
+  EN_SUCURSAL: '#0C2A5E',
   EN_CAMINO: '#E67E22',
-  ENTREGADO: '#27AE60',
+  ENTREGADO: '#4DAD66',
 };
 
 export default function MainLayout() {
@@ -51,7 +52,7 @@ export default function MainLayout() {
   // Al agregar una tab nueva hay que sumarla aqui (igual que su Tabs.Screen).
   const isInicio = !segments.some((seg) => TABS_SECUNDARIAS.includes(seg));
   const showBanner = !!pedidoActivo && !isInicio;
-  const bannerColor = STATUS_COLORS[pedidoActivo?.Status] || '#1A6A9A';
+  const bannerColor = STATUS_COLORS[pedidoActivo?.Status] || '#001034';
 
   return (
     <View style={{ flex: 1 }}>
@@ -77,8 +78,8 @@ export default function MainLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: '#1A6A9A',
-          tabBarInactiveTintColor: '#A0AEC0',
+          tabBarActiveTintColor: '#001034',
+          tabBarInactiveTintColor: '#8C9BB0',
           tabBarStyle: styles.tabBar,
           tabBarLabelStyle: styles.tabLabel,
         }}
@@ -153,7 +154,7 @@ const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: '#fff',
     borderTopWidth: 1,
-    borderTopColor: '#EDF2F7',
+    borderTopColor: '#E6F1F5',
     paddingBottom: Platform.OS === 'ios' ? 20 : 8,
     paddingTop: 8,
     height: Platform.OS === 'ios' ? 82 : 64,
@@ -163,7 +164,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  tabLabel: { fontSize: 11, fontWeight: '600', marginTop: 2 },
+  tabLabel: { fontSize: 12, fontFamily: 'NunitoSans_800ExtraBold', marginTop: 2 },
   tabIconWrap: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
   badge: {
     position: 'absolute',

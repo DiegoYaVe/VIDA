@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
-import {
-  View, Text, StyleSheet, TouchableOpacity, Alert,
-  ScrollView, Image, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform,
-} from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, ScrollView, Image, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { Text, TextInput } from '../../components/Texto';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,8 +11,8 @@ import api from '../../services/api';
 const API_BASE = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') ?? '';
 
 const COLORS = {
-  primary: '#1A6A9A', green: '#27AE60', red: '#E53E3E',
-  fondo: '#F5F7FA', texto: '#1A202C', texto2: '#718096', card: '#FFFFFF',
+  primary: '#001034', green: '#4DAD66', red: '#E53E3E',
+  fondo: '#F2F9FB', texto: '#001034', texto2: '#4B5B73', card: '#FFFFFF',
 };
 
 function Stars({ value }) {
@@ -135,7 +133,7 @@ export default function Perfil() {
   };
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#F5F7FA' }}>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: '#F2F9FB' }}>
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
@@ -303,7 +301,7 @@ function FormField({ icon, label, value, onChangeText, placeholder, keyboardType
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor="#CBD5E0"
+          placeholderTextColor="#CFE4EB"
           keyboardType={keyboardType ?? 'default'}
           autoCapitalize={autoCapitalize ?? 'words'}
           style={styles.fieldInput}
@@ -317,7 +315,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.fondo },
   content: { padding: 16, paddingBottom: 40 },
   avatarSection: { alignItems: 'center', paddingVertical: 24 },
-  fotoCircle: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#EDF2F7' },
+  fotoCircle: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#E6F1F5' },
   avatar: {
     width: 90, height: 90, borderRadius: 45,
     backgroundColor: COLORS.primary,
@@ -342,7 +340,7 @@ const styles = StyleSheet.create({
   statBox: { flex: 1, alignItems: 'center' },
   statNum: { fontSize: 24, fontWeight: '800', color: COLORS.primary },
   statLbl: { fontSize: 12, color: COLORS.texto2, marginTop: 3, textAlign: 'center' },
-  statDivider: { width: 1, height: 40, backgroundColor: '#EDF2F7', marginHorizontal: 8 },
+  statDivider: { width: 1, height: 40, backgroundColor: '#E6F1F5', marginHorizontal: 8 },
   card: {
     backgroundColor: COLORS.card, borderRadius: 12, padding: 16, marginBottom: 12,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
@@ -350,10 +348,10 @@ const styles = StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   cardTitle: { fontSize: 13, fontWeight: '700', color: COLORS.texto2, textTransform: 'uppercase', letterSpacing: 0.5 },
-  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EBF8FF', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
+  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#DDF2F8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
   editBtnText: { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
   editActions: { flexDirection: 'row', gap: 8 },
-  cancelBtn: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#EDF2F7' },
+  cancelBtn: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#E6F1F5' },
   cancelBtnText: { fontSize: 13, color: COLORS.texto2, fontWeight: '600' },
   saveBtn: { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 5, backgroundColor: COLORS.primary, minWidth: 70, alignItems: 'center' },
   saveBtnText: { fontSize: 13, color: '#fff', fontWeight: '700' },
@@ -361,7 +359,7 @@ const styles = StyleSheet.create({
   infoIcon: { marginRight: 12 },
   infoLabel: { fontSize: 11, color: COLORS.texto2 },
   infoValue: { fontSize: 15, color: COLORS.texto, fontWeight: '500', marginTop: 1 },
-  fieldRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#EDF2F7' },
+  fieldRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#E6F1F5' },
   fieldInner: { flex: 1 },
   fieldInput: {
     fontSize: 15, color: COLORS.texto, fontWeight: '500', marginTop: 2,

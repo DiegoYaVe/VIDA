@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView, TextInput,
-  TouchableOpacity, ActivityIndicator, Alert,
-} from 'react-native';
+import { View, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { Text, TextInput } from '../components/Texto';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import api from '../services/api';
+import { colores, fuentes, radios } from '../constants/tema';
 import { useTasaReferencial, precioEnLinea } from '../services/moneda';
 
 const MONTOS = [1, 2, 5, 10, 20];
@@ -16,7 +15,7 @@ const METODOS = [
   { k: 'TRANSFERENCIA', l: 'Transferencia' },
   { k: 'TARJETA', l: 'Tarjeta' },
 ];
-const ESTADO_COLOR = { PROCESANDO: '#F59E0B', COMPLETADO: '#16A34A', RECHAZADO: '#DC2626' };
+const ESTADO_COLOR = { PROCESANDO: '#F59E0B', COMPLETADO: '#1F7A3F', RECHAZADO: '#DC2626' };
 
 export default function ServiciosScreen() {
   const tasa = useTasaReferencial();
@@ -52,7 +51,7 @@ export default function ServiciosScreen() {
       const r = await api.post('/delivery/cliente/servicios', {
         idOperadora: sel.idOperadora, NumeroDestino: numero.trim(), MontoUSD: m, MetodoPago: metodo,
       });
-      Alert.alert('¡Solicitud recibida! 🎉',
+      Alert.alert('¡Solicitud recibida!',
         `${sel.Nombre} · $${m.toFixed(2)}\nReferencia: ${r.data.referencia}\nGanaste ${r.data.puntosGanados} puntos.\n\nTu recarga se procesará en breve.`);
       reset(); cargar();
     } catch (e) {
@@ -73,7 +72,7 @@ export default function ServiciosScreen() {
         <View style={{ width: 22 }} />
       </View>
 
-      {cargando ? <ActivityIndicator style={{ marginTop: 40 }} color="#0A1E3F" /> : (
+      {cargando ? <ActivityIndicator style={{ marginTop: 40 }} color="#001034" /> : (
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           {!sel ? (
             <>
@@ -83,7 +82,7 @@ export default function ServiciosScreen() {
                   <View style={styles.grid}>
                     {ops.map(o => (
                       <TouchableOpacity key={o.idOperadora} style={styles.op} onPress={() => setSel(o)} activeOpacity={0.85}>
-                        <View style={[styles.opDot, { backgroundColor: o.Color || '#0A1E3F' }]}>
+                        <View style={[styles.opDot, { backgroundColor: o.Color || '#001034' }]}>
                           <Text style={styles.opDotText}>{o.Nombre.slice(0, 1)}</Text>
                         </View>
                         <Text style={styles.opName}>{o.Nombre}</Text>
@@ -102,7 +101,7 @@ export default function ServiciosScreen() {
                         <Text style={styles.ordName}>{o.NombreOperadora} · {o.NumeroDestino}</Text>
                         <Text style={styles.ordSub}>{o.Referencia} · ${Number(o.MontoUSD).toFixed(2)}</Text>
                       </View>
-                      <Text style={[styles.ordEstado, { color: ESTADO_COLOR[o.Status] || '#718096' }]}>{o.Status}</Text>
+                      <Text style={[styles.ordEstado, { color: ESTADO_COLOR[o.Status] || '#4B5B73' }]}>{o.Status}</Text>
                     </View>
                   ))}
                 </>
@@ -112,10 +111,10 @@ export default function ServiciosScreen() {
             <>
               <Text style={styles.label}>{esMovil ? 'Número de teléfono' : 'Número de cuenta / contrato'}</Text>
               <TextInput style={styles.input} value={numero} onChangeText={setNumero}
-                keyboardType={esMovil ? 'phone-pad' : 'default'} placeholder={esMovil ? '0412 000 0000' : 'N° de cuenta'} placeholderTextColor="#A0AEC0" />
+                keyboardType={esMovil ? 'phone-pad' : 'default'} placeholder={esMovil ? '0412 000 0000' : 'N° de cuenta'} placeholderTextColor="#8C9BB0" />
 
               <Text style={styles.label}>Monto (USD)</Text>
-              <TextInput style={styles.input} value={monto} onChangeText={setMonto} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#A0AEC0" />
+              <TextInput style={styles.input} value={monto} onChangeText={setMonto} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#8C9BB0" />
               <View style={styles.montosRow}>
                 {MONTOS.map(m => (
                   <TouchableOpacity key={m} style={[styles.montoChip, Number(monto) === m && styles.montoChipOn]} onPress={() => setMonto(String(m))}>
@@ -146,30 +145,30 @@ export default function ServiciosScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7FAFC' },
-  header: { backgroundColor: '#0A1E3F', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
-  headerTitle: { color: '#fff', fontSize: 17, fontWeight: '800' },
-  catTitle: { fontSize: 13, fontWeight: '800', color: '#4A5568', marginBottom: 8, marginTop: 4 },
+  container: { flex: 1, backgroundColor: colores.fondo },
+  header: { backgroundColor: colores.marino, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, minHeight: 60 },
+  headerTitle: { color: colores.blanco, fontSize: 18, fontWeight: '700' },
+  catTitle: { fontSize: 14, fontWeight: '800', color: colores.marino, marginBottom: 8, marginTop: 6 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  op: { width: '30%', backgroundColor: '#fff', borderRadius: 14, paddingVertical: 16, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#EDF2F7' },
-  opDot: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  opDotText: { color: '#fff', fontWeight: '900', fontSize: 18 },
-  opName: { fontSize: 12, fontWeight: '700', color: '#1A202C' },
-  ordRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#EDF2F7' },
-  ordName: { fontSize: 13, fontWeight: '700', color: '#1A202C' },
-  ordSub: { fontSize: 11, color: '#A0AEC0', marginTop: 2 },
+  op: { width: '30%', backgroundColor: colores.blanco, borderRadius: radios.medio, paddingVertical: 16, alignItems: 'center', gap: 8, borderWidth: 1, borderColor: colores.borde },
+  opDot: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  opDotText: { color: colores.blanco, fontWeight: '900', fontSize: 18 },
+  opName: { fontSize: 13, fontWeight: '800', color: colores.marino },
+  ordRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colores.blanco, borderRadius: radios.medio, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colores.borde },
+  ordName: { fontSize: 14, fontWeight: '800', color: colores.marino },
+  ordSub: { fontSize: 12, color: colores.textoSuave, marginTop: 2 },
   ordEstado: { fontSize: 11, fontWeight: '800' },
-  label: { fontSize: 13, fontWeight: '700', color: '#4A5568', marginTop: 14, marginBottom: 6 },
-  input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, color: '#1A202C' },
+  label: { fontSize: 14, fontWeight: '800', color: colores.marino, marginTop: 16, marginBottom: 6 },
+  input: { backgroundColor: colores.blanco, borderWidth: 1.5, borderColor: colores.bordeFuerte, borderRadius: radios.medio, paddingHorizontal: 14, paddingVertical: 13, fontSize: 18, color: colores.marino, fontFamily: fuentes.tituloMedio },
   montosRow: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' },
-  montoChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0' },
-  montoChipOn: { backgroundColor: '#0A1E3F', borderColor: '#0A1E3F' },
-  montoChipText: { fontWeight: '800', color: '#4A5568' },
+  montoChip: { paddingHorizontal: 18, minHeight: 48, justifyContent: 'center', borderRadius: radios.medio, backgroundColor: colores.blanco, borderWidth: 1.5, borderColor: colores.bordeFuerte },
+  montoChipOn: { backgroundColor: colores.marino, borderColor: colores.marino },
+  montoChipText: { fontWeight: '800', color: colores.marino, fontSize: 15 },
   metodosRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  metodoChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0' },
-  metodoChipOn: { backgroundColor: '#2CA6C4', borderColor: '#2CA6C4' },
-  metodoChipText: { fontWeight: '700', color: '#4A5568', fontSize: 13 },
-  confirmBtn: { backgroundColor: '#5BBE6A', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 22 },
-  confirmText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  hint: { fontSize: 11, color: '#A0AEC0', textAlign: 'center', marginTop: 10 },
+  metodoChip: { paddingHorizontal: 14, minHeight: 44, justifyContent: 'center', borderRadius: radios.medio, backgroundColor: colores.blanco, borderWidth: 1.5, borderColor: colores.bordeFuerte },
+  metodoChipOn: { backgroundColor: colores.celesteClaro, borderColor: colores.marino },
+  metodoChipText: { fontWeight: '800', color: colores.marino, fontSize: 13 },
+  confirmBtn: { backgroundColor: colores.marino, borderRadius: 18, minHeight: 58, alignItems: 'center', justifyContent: 'center', marginTop: 22 },
+  confirmText: { color: colores.blanco, fontSize: 17, fontWeight: '800' },
+  hint: { fontSize: 12, color: colores.verdeTexto, textAlign: 'center', marginTop: 10, fontWeight: '700' },
 });

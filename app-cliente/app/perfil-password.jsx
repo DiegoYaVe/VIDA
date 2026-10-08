@@ -1,8 +1,6 @@
 import { useState } from 'react';
-import {
-  View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
-  ScrollView, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
-} from 'react-native';
+import { View, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { Text, TextInput } from '../components/Texto';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -14,18 +12,18 @@ function PasswordField({ label, value, onChangeText, placeholder }) {
     <View style={styles.fieldWrap}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <View style={styles.fieldRow}>
-        <Ionicons name="lock-closed-outline" size={18} color="#A0AEC0" style={{ marginRight: 10 }} />
+        <Ionicons name="lock-closed-outline" size={18} color="#8C9BB0" style={{ marginRight: 10 }} />
         <TextInput
           style={styles.fieldInput}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor="#CBD5E0"
+          placeholderTextColor="#CFE4EB"
           secureTextEntry={!show}
           autoCapitalize="none"
         />
         <TouchableOpacity onPress={() => setShow(v => !v)}>
-          <Ionicons name={show ? 'eye-off-outline' : 'eye-outline'} size={18} color="#A0AEC0" />
+          <Ionicons name={show ? 'eye-off-outline' : 'eye-outline'} size={18} color="#8C9BB0" />
         </TouchableOpacity>
       </View>
     </View>
@@ -67,7 +65,7 @@ export default function PerfilPasswordScreen() {
       <StatusBar style="dark" />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#1A202C" />
+          <Ionicons name="arrow-back" size={22} color="#001034" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Cambiar contraseña</Text>
         <View style={{ width: 40 }} />
@@ -76,7 +74,7 @@ export default function PerfilPasswordScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.infoBox}>
-            <Ionicons name="information-circle-outline" size={18} color="#4299E1" />
+            <Ionicons name="information-circle-outline" size={18} color="#62C6DE" />
             <Text style={styles.infoText}>
               Si tu cuenta fue creada con Google, deja el campo "Contraseña actual" vacío.
             </Text>
@@ -98,30 +96,30 @@ export default function PerfilPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  container: { flex: 1, backgroundColor: '#F2F9FB' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff',
-    borderBottomWidth: 1, borderBottomColor: '#EDF2F7',
+    borderBottomWidth: 1, borderBottomColor: '#E6F1F5',
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: '#1A202C' },
+  headerTitle: { fontSize: 17, fontWeight: '800', color: '#001034' },
   scroll: { padding: 20, gap: 16 },
   infoBox: {
     flexDirection: 'row', gap: 8, alignItems: 'flex-start',
-    backgroundColor: '#EBF8FF', borderRadius: 12, padding: 14,
+    backgroundColor: '#DDF2F8', borderRadius: 12, padding: 14,
   },
   infoText: { flex: 1, fontSize: 13, color: '#2B6CB0', lineHeight: 19 },
   fieldWrap: { gap: 6 },
-  fieldLabel: { fontSize: 13, fontWeight: '700', color: '#4A5568' },
+  fieldLabel: { fontSize: 13, fontWeight: '700', color: '#2C3D58' },
   fieldRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-    borderWidth: 1.5, borderColor: '#E2E8F0',
+    borderWidth: 1.5, borderColor: '#DCEEF3',
   },
-  fieldInput: { flex: 1, fontSize: 15, color: '#1A202C' },
+  fieldInput: { flex: 1, fontSize: 15, color: '#001034' },
   saveBtn: {
-    marginTop: 8, backgroundColor: '#1A6A9A', borderRadius: 14,
+    marginTop: 8, backgroundColor: '#001034', borderRadius: 14,
     paddingVertical: 15, alignItems: 'center',
   },
   saveBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },

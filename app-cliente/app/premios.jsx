@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView,
-  TouchableOpacity, ActivityIndicator, Alert,
-} from 'react-native';
+import { View, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { Text } from '../components/Texto';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import api from '../services/api';
 
-const AMBAR = '#F59E0B';
-const ESTADO_COLOR = { PENDIENTE: '#F59E0B', ENTREGADO: '#16A34A', CANCELADO: '#DC2626' };
+// Marino para encabezados; verde = puntos y canje (identidad VIDA)
+const AMBAR = '#001034';
+const VERDE = '#4DAD66';
+const ESTADO_COLOR = { PENDIENTE: '#F59E0B', ENTREGADO: '#1F7A3F', CANCELADO: '#DC2626' };
 
 export default function PremiosScreen() {
   const router = useRouter();
@@ -60,7 +60,7 @@ export default function PremiosScreen() {
       </View>
 
       <View style={styles.saldoBar}>
-        <Ionicons name="star" size={18} color="#fff" />
+        <Ionicons name="star" size={18} color={VERDE} />
         <Text style={styles.saldoText}>{saldo.toLocaleString('es-VE')} puntos disponibles</Text>
       </View>
 
@@ -71,7 +71,7 @@ export default function PremiosScreen() {
             const agotado = p.Stock === 0;
             return (
               <View key={p.idPremio} style={styles.card}>
-                <View style={styles.cardIco}><Ionicons name="gift" size={24} color={AMBAR} /></View>
+                <View style={styles.cardIco}><Ionicons name="gift" size={24} color="#1F7A3F" /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardName}>{p.Nombre}</Text>
                   {p.Descripcion ? <Text style={styles.cardDesc}>{p.Descripcion}</Text> : null}
@@ -100,7 +100,7 @@ export default function PremiosScreen() {
                     <Text style={styles.canjeName}>{c.NombrePremio}</Text>
                     <Text style={styles.canjeCod}>{c.Codigo} · {c.CostoPuntos} pts</Text>
                   </View>
-                  <Text style={[styles.canjeEstado, { color: ESTADO_COLOR[c.Status] || '#718096' }]}>{c.Status}</Text>
+                  <Text style={[styles.canjeEstado, { color: ESTADO_COLOR[c.Status] || '#4B5B73' }]}>{c.Status}</Text>
                 </View>
               ))}
             </>
@@ -112,23 +112,23 @@ export default function PremiosScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7FAFC' },
+  container: { flex: 1, backgroundColor: '#F7FBFC' },
   header: { backgroundColor: AMBAR, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: '800' },
   saldoBar: { backgroundColor: AMBAR, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingBottom: 14 },
   saldoText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  card: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#EDF2F7' },
-  cardIco: { width: 46, height: 46, borderRadius: 12, backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center' },
-  cardName: { fontSize: 14, fontWeight: '800', color: '#1A202C' },
-  cardDesc: { fontSize: 12, color: '#718096', marginTop: 1 },
-  cardCosto: { fontSize: 12, fontWeight: '700', color: AMBAR, marginTop: 3 },
-  btn: { backgroundColor: AMBAR, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9 },
-  btnOff: { backgroundColor: '#CBD5E0' },
-  btnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
-  vence: { fontSize: 12, color: '#718096', textAlign: 'center', marginTop: 8, marginBottom: 4 },
-  histTitle: { fontSize: 13, fontWeight: '800', color: '#4A5568', marginTop: 16, marginBottom: 8 },
-  canjeRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#EDF2F7' },
-  canjeName: { fontSize: 13, fontWeight: '700', color: '#1A202C' },
-  canjeCod: { fontSize: 11, color: '#A0AEC0', marginTop: 2 },
+  card: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E6F1F5' },
+  cardIco: { width: 46, height: 46, borderRadius: 14, backgroundColor: '#E3F3E7', alignItems: 'center', justifyContent: 'center' },
+  cardName: { fontSize: 14, fontWeight: '800', color: '#001034' },
+  cardDesc: { fontSize: 12, color: '#4B5B73', marginTop: 1 },
+  cardCosto: { fontSize: 13, fontWeight: '800', color: '#1F7A3F', marginTop: 3 },
+  btn: { backgroundColor: VERDE, borderRadius: 12, paddingHorizontal: 14, minHeight: 44, justifyContent: 'center' },
+  btnOff: { backgroundColor: '#CFE4EB' },
+  btnText: { color: '#001034', fontWeight: '800', fontSize: 13 },
+  vence: { fontSize: 12, color: '#4B5B73', textAlign: 'center', marginTop: 8, marginBottom: 4 },
+  histTitle: { fontSize: 13, fontWeight: '800', color: '#2C3D58', marginTop: 16, marginBottom: 8 },
+  canjeRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#E6F1F5' },
+  canjeName: { fontSize: 13, fontWeight: '700', color: '#001034' },
+  canjeCod: { fontSize: 11, color: '#8C9BB0', marginTop: 2 },
   canjeEstado: { fontSize: 11, fontWeight: '800' },
 });

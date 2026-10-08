@@ -1,28 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, RefreshControl,
-} from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { Text } from '../../components/Texto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import { efectivoCobrado } from '../../services/cobro';
 
 const COLORS = {
-  primary: '#1A6A9A',
-  green: '#27AE60',
-  fondo: '#F5F7FA',
-  texto: '#1A202C',
-  texto2: '#718096',
+  primary: '#001034',
+  green: '#4DAD66',
+  fondo: '#F2F9FB',
+  texto: '#001034',
+  texto2: '#4B5B73',
   card: '#FFFFFF',
 };
 
 function BadgeMetodo({ metodo }) {
   const cfg = metodo === 'EFECTIVO'
-    ? { color: '#27AE60', bg: '#F0FFF4', label: 'Efectivo' }
+    ? { color: '#4DAD66', bg: '#E3F3E7', label: 'Efectivo' }
     : metodo === 'PAGO_MOVIL'
       ? { color: '#6B46C1', bg: '#FAF5FF', label: 'Pago Móvil' }
-      : { color: '#1A6A9A', bg: '#EBF8FF', label: 'Tarjeta' };
+      : { color: '#001034', bg: '#DDF2F8', label: 'Tarjeta' };
   return (
     <View style={[styles.badge, { backgroundColor: cfg.bg }]}>
       <Text style={[styles.badgeText, { color: cfg.color }]}>{cfg.label}</Text>
@@ -154,7 +152,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.fondo },
   header: {
     paddingHorizontal: 20, paddingVertical: 14,
-    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#EDF2F7',
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E6F1F5',
   },
   headerTitle: { fontSize: 20, fontWeight: '800', color: COLORS.texto },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },

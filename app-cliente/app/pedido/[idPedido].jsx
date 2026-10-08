@@ -1,19 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  SafeAreaView,
-  Animated,
-  Linking,
-  ActivityIndicator,
-  Easing,
-  Image,
-  Alert,
-  TextInput,
-} from 'react-native';
+import { View, TouchableOpacity, StyleSheet, ScrollView, SafeAreaView, Animated, Linking, ActivityIndicator, Easing, Image, Alert } from 'react-native';
+import { Text, TextInput } from '../../components/Texto';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +10,7 @@ import useAuthStore from '../../store/authStore';
 import { WS_URL } from '../../constants/config';
 import MapaTracking from '../../components/MapaTracking';
 import { montoVESDelPedido, fmtUSD } from '../../services/moneda';
+import { colores, fuentes, radios } from '../../constants/tema';
 
 const PASOS = [
   { key: 'BUSCANDO', label: 'Buscando\nrepartidor', icon: 'search-outline' },
@@ -275,11 +263,12 @@ export default function SeguimientoScreen() {
         options={{
           headerShown: true,
           headerTitle: `Pedido #${idPedido}`,
-          headerStyle: { backgroundColor: '#fff' },
-          headerTitleStyle: { fontWeight: '800', color: '#1A202C' },
+          headerStyle: { backgroundColor: colores.fondo },
+          headerShadowVisible: false,
+          headerTitleStyle: { fontFamily: fuentes.titulo, color: colores.marino },
           headerLeft: () => (
-            <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={{ marginLeft: 4 }}>
-              <Ionicons name="close" size={24} color="#718096" />
+            <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.headerCerrar} accessibilityLabel="Cerrar">
+              <Ionicons name="close" size={22} color={colores.marino} />
             </TouchableOpacity>
           ),
         }}
@@ -287,7 +276,7 @@ export default function SeguimientoScreen() {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#1A6A9A" />
+          <ActivityIndicator size="large" color="#001034" />
           <Text style={styles.loadingText}>Cargando tu pedido...</Text>
         </View>
       ) : error ? (
@@ -303,10 +292,10 @@ export default function SeguimientoScreen() {
           {esperandoPago && (
             <View style={{backgroundColor:pagoRechazado?'#FFF5F5':'#FFFBEB',borderColor:pagoRechazado?'#FEB2B2':'#FBD38D',borderWidth:1,borderRadius:18,padding:18,marginBottom:16}}>
               <Ionicons name={pagoRechazado?'alert-circle':comprobanteEnRevision?'time-outline':'cloud-upload-outline'} size={34} color={pagoRechazado?'#C53030':'#B7791F'} />
-              <Text style={{fontSize:18,fontWeight:'800',color:'#1A202C',marginTop:8}}>
+              <Text style={{fontSize:18,fontWeight:'800',color:'#001034',marginTop:8}}>
                 {pagoRechazado?'Comprobante rechazado':comprobanteEnRevision?'Estamos revisando tu pago':'Envía tu comprobante de pago'}
               </Text>
-              <Text style={{color:'#718096',marginTop:5,lineHeight:20}}>
+              <Text style={{color:'#4B5B73',marginTop:5,lineHeight:20}}>
                 {pagoRechazado?'Envía un nuevo comprobante. El pedido todavía no fue asignado a un repartidor.'
                   :comprobanteEnRevision?'Cuando aprobemos el comprobante comenzará automáticamente la búsqueda de repartidor.'
                   :'Haz el Pago Móvil y sube la captura con su referencia. Cuando lo aprobemos empezará la búsqueda de repartidor.'}
@@ -317,8 +306,8 @@ export default function SeguimientoScreen() {
                 </Text>
               )}
               {!comprobanteEnRevision && <>
-                <TextInput value={referenciaPago} onChangeText={setReferenciaPago} placeholder={pagoRechazado?'Nueva referencia':'Referencia del pago'} keyboardType="number-pad" style={{backgroundColor:'#fff',borderWidth:1,borderColor:'#E2E8F0',borderRadius:12,padding:12,marginTop:14}} />
-                <TouchableOpacity disabled={reenviandoPago} onPress={reenviarComprobante} style={{backgroundColor:'#1A6A9A',borderRadius:12,padding:13,alignItems:'center',marginTop:10,opacity:reenviandoPago?0.6:1}}>
+                <TextInput value={referenciaPago} onChangeText={setReferenciaPago} placeholder={pagoRechazado?'Nueva referencia':'Referencia del pago'} keyboardType="number-pad" style={{backgroundColor:'#fff',borderWidth:1,borderColor:'#DCEEF3',borderRadius:12,padding:12,marginTop:14}} />
+                <TouchableOpacity disabled={reenviandoPago} onPress={reenviarComprobante} style={{backgroundColor:'#001034',borderRadius:12,padding:13,alignItems:'center',marginTop:10,opacity:reenviandoPago?0.6:1}}>
                   <Text style={{color:'#fff',fontWeight:'800'}}>{reenviandoPago?'Enviando…':pagoRechazado?'Elegir foto y reenviar':'Elegir foto y enviar'}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={cancelarPedido} style={{alignItems:'center',marginTop:12}}>
@@ -331,7 +320,7 @@ export default function SeguimientoScreen() {
           {/* Delivered celebration */}
           {isDelivered && (
             <Animated.View style={[styles.celebrationBanner, { transform: [{ scale: confettiAnim }] }]}>
-              <Text style={styles.celebrationEmoji}>🎉</Text>
+              <Ionicons name="checkmark-circle" size={48} color={colores.verde} />
               <Text style={styles.celebrationTitle}>¡Tu pedido llegó!</Text>
               <Text style={styles.celebrationSub}>Gracias por usar VIDA</Text>
             </Animated.View>
@@ -393,28 +382,22 @@ export default function SeguimientoScreen() {
           {/* Progress bar */}
           {!isCancelado && (
           <>
+          {/* Avance: un segmento por etapa; el actual en celeste */}
           <View style={styles.progressContainer}>
-            {PASOS.map((paso, idx) => {
-              const done = idx <= stepIndex;
-              const active = idx === stepIndex;
-              return (
-                <View key={paso.key} style={styles.stepWrapper}>
-                  <Animated.View
-                    style={[
-                      styles.stepCircle,
-                      done && styles.stepCircleDone,
-                      active && { transform: [{ scale: active && isBuscando ? pulseAnim : 1 }] },
-                    ]}
-                  >
-                    <Ionicons name={paso.icon} size={16} color={done ? '#fff' : '#CBD5E0'} />
-                  </Animated.View>
-                  <Text style={[styles.stepLabel, done && styles.stepLabelDone]}>{paso.label}</Text>
-                  {idx < PASOS.length - 1 && (
-                    <View style={[styles.stepLine, idx < stepIndex && styles.stepLineDone]} />
-                  )}
-                </View>
-              );
-            })}
+            <View style={styles.segmentos}>
+              {PASOS.map((paso, idx) => (
+                <Animated.View
+                  key={paso.key}
+                  style={[
+                    styles.segmento,
+                    idx < stepIndex && styles.segmentoHecho,
+                    idx === stepIndex && styles.segmentoActual,
+                    idx === stepIndex && isBuscando && { transform: [{ scaleY: pulseAnim }] },
+                  ]}
+                />
+              ))}
+            </View>
+            <Text style={styles.progresoTexto}>Etapa {Math.max(0, stepIndex) + 1} de {PASOS.length}</Text>
           </View>
 
           {/* Status card */}
@@ -423,7 +406,7 @@ export default function SeguimientoScreen() {
               <Ionicons
                 name={PASOS[Math.max(0, stepIndex)].icon}
                 size={32}
-                color="#1A6A9A"
+                color="#001034"
               />
             </View>
             <View style={styles.statusInfo}>
@@ -461,7 +444,7 @@ export default function SeguimientoScreen() {
                 )}
                 {estado?.ParadasAntes > 0 && (
                   <View style={styles.etaParadasChip}>
-                    <Ionicons name="layers-outline" size={12} color="#1A6A9A" />
+                    <Ionicons name="layers-outline" size={12} color="#001034" />
                     <Text style={styles.etaParadasText}>
                       El repartidor tiene {estado.ParadasAntes} entrega{estado.ParadasAntes !== 1 ? 's' : ''} antes que la tuya
                     </Text>
@@ -504,15 +487,16 @@ export default function SeguimientoScreen() {
                   <TouchableOpacity
                     style={styles.callBtn}
                     onPress={() => Linking.openURL(`tel:${repartidor.Telefono}`)}
+                    accessibilityLabel="Llamar al repartidor"
                   >
-                    <Ionicons name="call" size={18} color="#fff" />
+                    <Ionicons name="call" size={20} color={colores.marino} />
                   </TouchableOpacity>
                 )}
               </View>
 
               {(repartidor.Vehiculo || repartidor.PlacaVehiculo) && (
                 <View style={styles.repartidorVehiculo}>
-                  <Ionicons name="bicycle-outline" size={15} color="#718096" />
+                  <Ionicons name="bicycle-outline" size={15} color="#4B5B73" />
                   <Text style={styles.repartidorVehiculoText}>
                     {[repartidor.Vehiculo, repartidor.PlacaVehiculo].filter(Boolean).join(' · ')}
                   </Text>
@@ -540,13 +524,13 @@ export default function SeguimientoScreen() {
                       </TouchableOpacity>
                     ))}
                   </View>
-                  {enviandoCalif && <ActivityIndicator size="small" color="#1A6A9A" style={{ marginTop: 8 }} />}
+                  {enviandoCalif && <ActivityIndicator size="small" color="#001034" style={{ marginTop: 8 }} />}
                 </View>
               )}
 
               {isDelivered && calificado && (
                 <View style={styles.califDone}>
-                  <Ionicons name="checkmark-circle" size={18} color="#27AE60" />
+                  <Ionicons name="checkmark-circle" size={18} color="#4DAD66" />
                   <Text style={styles.califDoneText}>Calificación enviada. ¡Gracias!</Text>
                 </View>
               )}
@@ -589,7 +573,7 @@ export default function SeguimientoScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Dirección de entrega</Text>
               <View style={styles.addressRow}>
-                <Ionicons name="location-outline" size={18} color="#1A6A9A" />
+                <Ionicons name="location-outline" size={18} color="#001034" />
                 <Text style={styles.addressText}>{estado.DireccionEntrega}</Text>
               </View>
             </View>
@@ -606,255 +590,113 @@ export default function SeguimientoScreen() {
   );
 }
 
+const tarjeta = {
+  backgroundColor: colores.blanco, borderRadius: radios.grande, padding: 16, marginBottom: 12,
+  borderWidth: 1, borderColor: colores.borde,
+};
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  container: { flex: 1, backgroundColor: colores.fondo },
+  headerCerrar: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  loadingText: { marginTop: 12, color: '#718096' },
-  errorText: { color: '#E53E3E', textAlign: 'center' },
-  retryBtn: { marginTop: 12, backgroundColor: '#1A6A9A', borderRadius: 10, paddingHorizontal: 20, paddingVertical: 9 },
-  retryBtnText: { color: '#fff', fontWeight: '700' },
+  loadingText: { marginTop: 12, color: colores.textoSuave },
+  errorText: { color: colores.error, textAlign: 'center' },
+  retryBtn: { marginTop: 12, backgroundColor: colores.marino, borderRadius: 14, paddingHorizontal: 22, minHeight: 44, justifyContent: 'center' },
+  retryBtnText: { color: colores.blanco, fontWeight: '800' },
   scroll: { padding: 16, paddingBottom: 40 },
 
-  celebrationBanner: {
-    backgroundColor: '#F0FFF4',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 1.5,
-    borderColor: '#27AE60',
-  },
+  celebrationBanner: { ...tarjeta, alignItems: 'center', padding: 22, backgroundColor: colores.verdeClaro, borderColor: '#A8DDB6' },
   celebrationEmoji: { fontSize: 40 },
-  celebrationTitle: { fontSize: 22, fontWeight: '900', color: '#27AE60', marginTop: 8 },
-  celebrationSub: { color: '#48BB78', marginTop: 4 },
+  celebrationTitle: { fontSize: 24, fontWeight: '800', color: colores.marino, marginTop: 8 },
+  celebrationSub: { color: colores.verdeTexto, marginTop: 4, fontWeight: '700' },
 
-  canceladoBanner: {
-    backgroundColor: '#FFF5F5',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 1.5,
-    borderColor: '#FEB2B2',
-  },
-  canceladoTitle: { fontSize: 20, fontWeight: '900', color: '#E53E3E', marginTop: 10 },
-  canceladoSub: { color: '#C53030', fontSize: 13, textAlign: 'center', marginTop: 8, lineHeight: 19 },
-  canceladoBtn: {
-    backgroundColor: '#E53E3E', borderRadius: 14,
-    paddingVertical: 12, paddingHorizontal: 28, marginTop: 16,
-  },
-  canceladoBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+  canceladoBanner: { ...tarjeta, alignItems: 'center', padding: 24, backgroundColor: colores.errorClaro, borderColor: '#F5C2C2' },
+  canceladoTitle: { fontSize: 20, fontWeight: '800', color: colores.error, marginTop: 10 },
+  canceladoSub: { color: colores.error, fontSize: 13, textAlign: 'center', marginTop: 8, lineHeight: 19 },
+  canceladoBtn: { backgroundColor: colores.marino, borderRadius: radios.medio, minHeight: 48, paddingHorizontal: 28, marginTop: 16, justifyContent: 'center' },
+  canceladoBtnText: { color: colores.blanco, fontWeight: '800', fontSize: 14 },
 
-  sinRepCard: {
-    backgroundColor: '#FFFAF0',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1.5,
-    borderColor: '#FBD38D',
-  },
+  sinRepCard: { ...tarjeta, backgroundColor: colores.avisoClaro, borderColor: '#F6D58A' },
   sinRepHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sinRepTitle: { fontSize: 15, fontWeight: '800', color: '#C05621', flex: 1 },
-  sinRepSub: { fontSize: 13, color: '#975A16', lineHeight: 19, marginTop: 8 },
+  sinRepTitle: { fontSize: 15, fontWeight: '800', color: colores.marino, flex: 1 },
+  sinRepSub: { fontSize: 13, color: '#7A5A12', lineHeight: 19, marginTop: 8 },
   sinRepActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
   sinRepBtnEsperar: {
     flex: 1.4, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    backgroundColor: '#DD6B20', borderRadius: 12, paddingVertical: 12,
+    backgroundColor: colores.marino, borderRadius: radios.medio, minHeight: 48,
   },
-  sinRepBtnEsperarText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  sinRepBtnEsperarText: { color: colores.blanco, fontWeight: '800', fontSize: 14 },
   sinRepBtnCancelar: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#fff', borderRadius: 12, paddingVertical: 12,
-    borderWidth: 1.5, borderColor: '#E53E3E',
+    flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 48,
+    backgroundColor: colores.blanco, borderRadius: radios.medio, borderWidth: 1.5, borderColor: colores.error,
   },
-  sinRepBtnCancelarText: { color: '#E53E3E', fontWeight: '700', fontSize: 13 },
+  sinRepBtnCancelarText: { color: colores.error, fontWeight: '800', fontSize: 14 },
 
-  progressContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  stepWrapper: { alignItems: 'center', flex: 1, minWidth: 50 },
-  stepCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#EDF2F7',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stepCircleDone: { backgroundColor: '#1A6A9A' },
-  stepLabel: { fontSize: 10, color: '#A0AEC0', textAlign: 'center', marginTop: 4, fontWeight: '500' },
-  stepLabelDone: { color: '#1A6A9A', fontWeight: '700' },
-  stepLine: {
-    position: 'absolute',
-    top: 17,
-    right: -20,
-    width: 40,
-    height: 2,
-    backgroundColor: '#EDF2F7',
-    zIndex: -1,
-  },
-  stepLineDone: { backgroundColor: '#1A6A9A' },
+  progressContainer: { ...tarjeta, gap: 10 },
+  segmentos: { flexDirection: 'row', gap: 6 },
+  segmento: { flex: 1, height: 8, borderRadius: 4, backgroundColor: colores.borde },
+  segmentoHecho: { backgroundColor: colores.marino },
+  segmentoActual: { backgroundColor: colores.celeste },
+  progresoTexto: { fontSize: 12, fontWeight: '800', color: colores.textoSuave },
 
-  statusCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
+  statusCard: { ...tarjeta, flexDirection: 'row', alignItems: 'center' },
   statusIconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: '#EBF8FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 14,
+    width: 56, height: 56, borderRadius: 18, backgroundColor: colores.celesteClaro,
+    justifyContent: 'center', alignItems: 'center', marginRight: 14,
   },
   statusInfo: { flex: 1 },
-  statusTitle: { fontSize: 16, fontWeight: '800', color: '#1A202C' },
-  statusSub: { fontSize: 13, color: '#718096', marginTop: 3 },
+  statusTitle: { fontSize: 20, fontWeight: '700', color: colores.marino },
+  statusSub: { fontSize: 14, color: colores.textoSuave, marginTop: 3 },
 
   etaCard: {
-    backgroundColor: '#1A6A9A',
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    marginBottom: 12,
-    shadowColor: '#1A6A9A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
+    backgroundColor: colores.marino, borderRadius: radios.grande, padding: 18,
+    flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 12,
   },
-  etaIconWrap: {
-    width: 48, height: 48, borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  etaTitle: { color: '#fff', fontSize: 19, fontWeight: '900' },
-  etaSub: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 2 },
+  etaIconWrap: { width: 50, height: 50, borderRadius: 25, backgroundColor: colores.marinoClaro, justifyContent: 'center', alignItems: 'center' },
+  etaTitle: { color: colores.blanco, fontSize: 24, fontWeight: '800' },
+  etaSub: { color: colores.sobreMarino, fontSize: 13, marginTop: 2 },
   etaParadasChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#fff', borderRadius: 20,
-    paddingHorizontal: 10, paddingVertical: 5, marginTop: 8,
-    alignSelf: 'flex-start',
+    flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colores.celeste,
+    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, marginTop: 8, alignSelf: 'flex-start',
   },
-  etaParadasText: { color: '#1A6A9A', fontSize: 11, fontWeight: '700' },
+  etaParadasText: { color: colores.marino, fontSize: 11, fontWeight: '800' },
 
-  repartidorCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
+  repartidorCard: tarjeta,
   repartidorTop: { flexDirection: 'row', alignItems: 'center' },
-  repartidorFoto: {
-    width: 52, height: 52, borderRadius: 26,
-    marginRight: 12, backgroundColor: '#EDF2F7',
-  },
-  repartidorAvatar: {
-    width: 52, height: 52, borderRadius: 26,
-    backgroundColor: '#1A6A9A',
-    justifyContent: 'center', alignItems: 'center', marginRight: 12,
-  },
-  repartidorInitial: { color: '#fff', fontSize: 20, fontWeight: '800' },
+  repartidorFoto: { width: 54, height: 54, borderRadius: 27, marginRight: 12, backgroundColor: colores.celesteClaro },
+  repartidorAvatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: colores.marino, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  repartidorInitial: { color: colores.blanco, fontSize: 20, fontWeight: '800' },
   repartidorInfo: { flex: 1 },
-  repartidorNombre: { fontSize: 15, fontWeight: '700', color: '#1A202C' },
-  repartidorLabel: { fontSize: 12, color: '#718096' },
+  repartidorNombre: { fontSize: 16, fontWeight: '800', color: colores.marino },
+  repartidorLabel: { fontSize: 12, color: colores.textoSuave },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3 },
-  ratingText: { fontSize: 13, fontWeight: '700', color: '#F6AD55' },
-  ratingTotal: { fontSize: 11, color: '#A0AEC0', fontWeight: '400' },
-  repartidorVehiculo: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    marginTop: 10, paddingTop: 10,
-    borderTopWidth: 1, borderTopColor: '#EDF2F7',
-  },
-  repartidorVehiculoText: { fontSize: 13, color: '#718096' },
-  callBtn: {
-    backgroundColor: '#27AE60',
-    width: 40, height: 40, borderRadius: 20,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  califSection: {
-    marginTop: 12, paddingTop: 12,
-    borderTopWidth: 1, borderTopColor: '#EDF2F7',
-    alignItems: 'center',
-  },
-  califTitle: { fontSize: 14, fontWeight: '700', color: '#4A5568', marginBottom: 10 },
+  ratingText: { fontSize: 13, fontWeight: '800', color: colores.marino },
+  ratingTotal: { fontSize: 11, color: colores.textoSuave, fontWeight: '400' },
+  repartidorVehiculo: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colores.borde },
+  repartidorVehiculoText: { fontSize: 13, color: colores.textoSuave },
+  callBtn: { backgroundColor: colores.celeste, width: 48, height: 48, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  califSection: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colores.borde, alignItems: 'center' },
+  califTitle: { fontSize: 15, fontWeight: '800', color: colores.marino, marginBottom: 10 },
   starsRow: { flexDirection: 'row', alignItems: 'center' },
-  califDone: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    marginTop: 12, paddingTop: 12,
-    borderTopWidth: 1, borderTopColor: '#EDF2F7',
-    justifyContent: 'center',
-  },
-  califDoneText: { fontSize: 13, color: '#27AE60', fontWeight: '600' },
+  califDone: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colores.borde, justifyContent: 'center' },
+  califDoneText: { fontSize: 13, color: colores.verdeTexto, fontWeight: '700' },
 
-  mapPlaceholder: {
-    height: 160,
-    backgroundColor: '#E2E8F0',
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  mapPlaceholderText: { color: '#A0AEC0', marginTop: 8, fontSize: 13 },
+  mapPlaceholder: { height: 160, backgroundColor: colores.borde, borderRadius: radios.grande, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  mapPlaceholderText: { color: colores.textoSuave, marginTop: 8, fontSize: 13 },
 
-  section: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  sectionTitle: { fontSize: 15, fontWeight: '800', color: '#1A202C', marginBottom: 10 },
-  orderItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5 },
-  orderItemQty: { fontSize: 14, fontWeight: '700', color: '#1A6A9A', width: 28 },
-  orderItemName: { flex: 1, fontSize: 14, color: '#1A202C' },
-  orderItemPrice: { fontSize: 14, fontWeight: '700', color: '#1A202C' },
-  divider: { height: 1, backgroundColor: '#EDF2F7', marginVertical: 8 },
-  orderTotal: { flexDirection: 'row', justifyContent: 'space-between' },
-  orderTotalLabel: { fontSize: 15, fontWeight: '800', color: '#1A202C' },
-  orderTotalValue: { fontSize: 16, fontWeight: '900', color: '#1A6A9A' },
+  section: tarjeta,
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: colores.marino, marginBottom: 10 },
+  orderItem: { flexDirection: 'row', alignItems: 'center', minHeight: 32 },
+  orderItemQty: { fontSize: 14, fontWeight: '800', color: colores.marino, width: 32 },
+  orderItemName: { flex: 1, fontSize: 14, color: colores.marino },
+  orderItemPrice: { fontSize: 14, fontWeight: '800', color: colores.marino },
+  divider: { height: 1, backgroundColor: colores.borde, marginVertical: 8 },
+  orderTotal: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  orderTotalLabel: { fontSize: 15, fontWeight: '800', color: colores.marino },
+  orderTotalValue: { fontSize: 16, color: colores.marino, fontFamily: fuentes.titulo, flexShrink: 1, textAlign: 'right' },
   addressRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
-  addressText: { flex: 1, color: '#4A5568', fontSize: 14, lineHeight: 20 },
+  addressText: { flex: 1, color: '#2C3D58', fontSize: 14, lineHeight: 20 },
 
-  homeBtn: {
-    backgroundColor: '#1A6A9A',
-    borderRadius: 16,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  homeBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  homeBtn: { backgroundColor: colores.marino, borderRadius: 18, minHeight: 56, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  homeBtnText: { color: colores.blanco, fontSize: 16, fontWeight: '800' },
 });

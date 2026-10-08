@@ -1,4 +1,5 @@
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from './Texto';
 import { precioMonedas } from '../services/moneda';
 
 // Precio principal con su equivalente en la otra moneda debajo (si la cuenta
@@ -9,7 +10,7 @@ export default function Precio({ usd, tasa, style, styleSecundario, align = 'lef
     <View style={{ alignItems: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start' }}>
       <Text style={style}>{principal}</Text>
       {secundario ? (
-        <Text style={[{ fontSize: 11, color: '#718096', marginTop: 1 }, styleSecundario]}>{secundario}</Text>
+        <Text style={[{ fontSize: 11, color: '#4B5B73', marginTop: 1 }, styleSecundario]}>{secundario}</Text>
       ) : null}
     </View>
   );

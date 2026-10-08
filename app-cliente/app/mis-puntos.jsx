@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, SafeAreaView, FlatList,
-  ActivityIndicator, TouchableOpacity, RefreshControl,
-} from 'react-native';
+import { View, StyleSheet, SafeAreaView, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl } from 'react-native';
+import { Text } from '../components/Texto';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -34,13 +32,13 @@ export default function MisPuntosScreen() {
     return (
       <View style={styles.movRow}>
         <View style={[styles.movIcon, { backgroundColor: gana ? '#DCFCE7' : '#FEE2E2' }]}>
-          <Ionicons name={gana ? 'add' : 'remove'} size={18} color={gana ? '#16A34A' : '#DC2626'} />
+          <Ionicons name={gana ? 'add' : 'remove'} size={18} color={gana ? '#1F7A3F' : '#DC2626'} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.movDesc}>{item.Descripcion || (gana ? 'Puntos ganados' : 'Puntos canjeados')}</Text>
           <Text style={styles.movFecha}>{fecha(item.FechaAlta)}</Text>
         </View>
-        <Text style={[styles.movPts, { color: gana ? '#16A34A' : '#DC2626' }]}>
+        <Text style={[styles.movPts, { color: gana ? '#1F7A3F' : '#DC2626' }]}>
           {gana ? '+' : ''}{item.Puntos.toLocaleString('es-VE')}
         </Text>
       </View>
@@ -60,7 +58,7 @@ export default function MisPuntosScreen() {
 
       {/* Billetera */}
       <View style={styles.wallet}>
-        <Ionicons name="star" size={26} color="#fff" />
+        <Ionicons name="star" size={26} color="#4DAD66" />
         <Text style={styles.walletSaldo}>{(data?.saldo ?? 0).toLocaleString('es-VE')}</Text>
         <Text style={styles.walletLabel}>puntos disponibles</Text>
         {data?.puntosPorDolar ? (
@@ -69,14 +67,14 @@ export default function MisPuntosScreen() {
       </View>
 
       <TouchableOpacity style={styles.canjearBtn} onPress={() => router.push('/premios')} activeOpacity={0.85}>
-        <Ionicons name="gift" size={18} color="#fff" />
+        <Ionicons name="gift" size={20} color="#001034" />
         <Text style={styles.canjearText}>Canjear por premios</Text>
-        <Ionicons name="chevron-forward" size={18} color="#fff" />
+        <Ionicons name="chevron-forward" size={18} color="#001034" />
       </TouchableOpacity>
 
       <Text style={styles.histTitle}>Historial</Text>
       {cargando ? (
-        <ActivityIndicator style={{ marginTop: 30 }} color="#F59E0B" />
+        <ActivityIndicator style={{ marginTop: 30 }} color="#001034" />
       ) : (
         <FlatList
           data={data?.movimientos || []}
@@ -86,7 +84,7 @@ export default function MisPuntosScreen() {
           refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => { setRefrescando(true); cargar(); }} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Ionicons name="star-outline" size={40} color="#CBD5E0" />
+              <Ionicons name="star-outline" size={40} color="#CFE4EB" />
               <Text style={styles.emptyText}>Aún no tienes movimientos.</Text>
               <Text style={styles.emptySub}>Haz tu primer pedido y empieza a ganar puntos.</Text>
             </View>
@@ -98,30 +96,30 @@ export default function MisPuntosScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7FAFC' },
+  container: { flex: 1, backgroundColor: '#F7FBFC' },
   header: {
-    backgroundColor: '#F59E0B', flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#001034', flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14,
   },
   backBtn: { padding: 2 },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: '800' },
-  wallet: { backgroundColor: '#F59E0B', alignItems: 'center', paddingBottom: 24, paddingTop: 4 },
+  wallet: { backgroundColor: '#001034', alignItems: 'center', paddingBottom: 24, paddingTop: 4 },
   walletSaldo: { color: '#fff', fontSize: 40, fontWeight: '900', marginTop: 4 },
   walletLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600' },
   walletHint: { color: 'rgba(255,255,255,0.85)', fontSize: 11, marginTop: 8 },
-  canjearBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F59E0B', marginHorizontal: 16, marginTop: 16, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 16 },
-  canjearText: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '800' },
-  histTitle: { fontSize: 13, fontWeight: '800', color: '#4A5568', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
+  canjearBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#4DAD66', marginHorizontal: 16, marginTop: 16, borderRadius: 18, minHeight: 56, paddingHorizontal: 16 },
+  canjearText: { flex: 1, color: '#001034', fontSize: 16, fontWeight: '800' },
+  histTitle: { fontSize: 13, fontWeight: '800', color: '#2C3D58', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
   movRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 8,
-    borderWidth: 1, borderColor: '#EDF2F7',
+    borderWidth: 1, borderColor: '#E6F1F5',
   },
   movIcon: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  movDesc: { fontSize: 14, fontWeight: '700', color: '#1A202C' },
-  movFecha: { fontSize: 12, color: '#A0AEC0', marginTop: 2 },
+  movDesc: { fontSize: 14, fontWeight: '700', color: '#001034' },
+  movFecha: { fontSize: 12, color: '#8C9BB0', marginTop: 2 },
   movPts: { fontSize: 16, fontWeight: '900' },
   empty: { alignItems: 'center', paddingVertical: 50, gap: 6 },
-  emptyText: { fontSize: 14, fontWeight: '700', color: '#718096' },
-  emptySub: { fontSize: 12, color: '#A0AEC0' },
+  emptyText: { fontSize: 14, fontWeight: '700', color: '#4B5B73' },
+  emptySub: { fontSize: 12, color: '#8C9BB0' },
 });

@@ -1,8 +1,6 @@
 import { useState } from 'react';
-import {
-  View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
-  ScrollView, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
-} from 'react-native';
+import { View, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { Text, TextInput } from '../components/Texto';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -14,13 +12,13 @@ function Field({ label, icon, value, onChangeText, placeholder, keyboardType, au
     <View style={styles.fieldWrap}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <View style={styles.fieldRow}>
-        <Ionicons name={icon} size={18} color="#A0AEC0" style={{ marginRight: 10 }} />
+        <Ionicons name={icon} size={18} color="#8C9BB0" style={{ marginRight: 10 }} />
         <TextInput
           style={styles.fieldInput}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor="#CBD5E0"
+          placeholderTextColor="#CFE4EB"
           keyboardType={keyboardType ?? 'default'}
           autoCapitalize={autoCapitalize ?? 'words'}
         />
@@ -64,7 +62,7 @@ export default function PerfilEditarScreen() {
       <StatusBar style="dark" />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#1A202C" />
+          <Ionicons name="arrow-back" size={22} color="#001034" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Editar perfil</Text>
         <View style={{ width: 40 }} />
@@ -105,25 +103,25 @@ export default function PerfilEditarScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  container: { flex: 1, backgroundColor: '#F2F9FB' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff',
-    borderBottomWidth: 1, borderBottomColor: '#EDF2F7',
+    borderBottomWidth: 1, borderBottomColor: '#E6F1F5',
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: '#1A202C' },
+  headerTitle: { fontSize: 17, fontWeight: '800', color: '#001034' },
   scroll: { padding: 20, gap: 16 },
   fieldWrap: { gap: 6 },
-  fieldLabel: { fontSize: 13, fontWeight: '700', color: '#4A5568' },
+  fieldLabel: { fontSize: 13, fontWeight: '700', color: '#2C3D58' },
   fieldRow: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-    borderWidth: 1.5, borderColor: '#E2E8F0',
+    borderWidth: 1.5, borderColor: '#DCEEF3',
   },
-  fieldInput: { flex: 1, fontSize: 15, color: '#1A202C' },
+  fieldInput: { flex: 1, fontSize: 15, color: '#001034' },
   saveBtn: {
-    marginTop: 8, backgroundColor: '#1A6A9A', borderRadius: 14,
+    marginTop: 8, backgroundColor: '#001034', borderRadius: 14,
     paddingVertical: 15, alignItems: 'center',
   },
   saveBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },

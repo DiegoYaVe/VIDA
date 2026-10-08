@@ -69,7 +69,8 @@
         }
       ],
       "expo-task-manager",
-      "expo-router"
+      "expo-router",
+      "expo-font"
     ],
     "scheme": "vida-repartidor",
     "extra": {

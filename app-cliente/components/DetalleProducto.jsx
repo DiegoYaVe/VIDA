@@ -1,17 +1,16 @@
-// Detalle de producto estilo Uber Eats: imagen grande, info, stepper de
-// cantidad y botón sticky "Agregar N al carrito • $total".
+// Detalle de producto (diseño Agua VIDA): foto grande, hoja blanca con el
+// nombre, sello de marca propia, precio en USD y bolívares, stepper y botón
+// fijo "Agregar N al carrito · $total".
 import { useState, useEffect } from 'react';
-import {
-  View, Text, StyleSheet, TouchableOpacity, Modal, Image,
-  ScrollView, Dimensions, Platform,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, StyleSheet, TouchableOpacity, Modal, Image, ScrollView, Dimensions, Platform } from 'react-native';
+import { Text } from './Texto';
 import { Ionicons } from '@expo/vector-icons';
 import { absImg } from '../constants/config';
 import { useTasaReferencial, precioMonedas } from '../services/moneda';
+import { colores, fuentes, radios } from '../constants/tema';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const PLACEHOLDER = 'https://via.placeholder.com/600/EBF8FF/1A6A9A?text=VIDA';
+const PLACEHOLDER = 'https://via.placeholder.com/600/DDF2F8/001034?text=VIDA';
 
 export default function DetalleProducto({ producto, onClose, onAgregar }) {
   const tasa = useTasaReferencial();
@@ -25,6 +24,7 @@ export default function DetalleProducto({ producto, onClose, onAgregar }) {
   const stock = parseFloat(producto.StockDisponible ?? 0);
   const total = precio * cantidad;
   const maxAlcanzado = stock > 0 && cantidad >= stock;
+  const marcaVida = /\bvida\b/i.test(producto.Nombre || '');
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
@@ -36,16 +36,20 @@ export default function DetalleProducto({ producto, onClose, onAgregar }) {
               source={{ uri: absImg(producto.ImagenProducto) || PLACEHOLDER }}
               style={styles.imagen}
             />
-            <TouchableOpacity style={styles.cerrarBtn} onPress={onClose}>
-              <Ionicons name="arrow-back" size={22} color="#1A202C" />
+            <TouchableOpacity style={styles.cerrarBtn} onPress={onClose} accessibilityLabel="Volver">
+              <Ionicons name="arrow-back" size={22} color="#001034" />
             </TouchableOpacity>
           </View>
 
           <View style={styles.contenido}>
-            {/* Sucursal */}
-            <View style={styles.sucChip}>
-              <Ionicons name="storefront-outline" size={13} color="#1A6A9A" />
-              <Text style={styles.sucChipText}>{producto.NombreSucursal}</Text>
+            <View style={styles.chips}>
+              {marcaVida ? (
+                <View style={styles.chipMarca}><Text style={styles.chipMarcaText}>Marca VIDA</Text></View>
+              ) : null}
+              <View style={styles.sucChip}>
+                <Ionicons name="storefront-outline" size={13} color={colores.marino} />
+                <Text style={styles.sucChipText}>{producto.NombreSucursal}</Text>
+              </View>
             </View>
 
             <Text style={styles.nombre}>{producto.Nombre}</Text>
@@ -60,7 +64,7 @@ export default function DetalleProducto({ producto, onClose, onAgregar }) {
 
             {producto.NombreCategoria ? (
               <View style={styles.metaRow}>
-                <Ionicons name="pricetag-outline" size={14} color="#94A3B8" />
+                <Ionicons name="pricetag-outline" size={14} color="#8C9BB0" />
                 <Text style={styles.metaText}>{producto.NombreCategoria}</Text>
               </View>
             ) : null}
@@ -81,15 +85,17 @@ export default function DetalleProducto({ producto, onClose, onAgregar }) {
             <TouchableOpacity
               style={styles.stepperBtn}
               onPress={() => setCantidad(c => Math.max(1, c - 1))}
+              accessibilityLabel="Quitar uno"
             >
-              <Ionicons name="remove" size={20} color={cantidad <= 1 ? '#CBD5E0' : '#1A202C'} />
+              <Ionicons name="remove" size={20} color={cantidad <= 1 ? '#CFE4EB' : '#001034'} />
             </TouchableOpacity>
             <Text style={styles.stepperNum}>{cantidad}</Text>
             <TouchableOpacity
-              style={styles.stepperBtn}
+              style={[styles.stepperBtn, styles.stepperBtnMas]}
               onPress={() => !maxAlcanzado && setCantidad(c => c + 1)}
+              accessibilityLabel="Agregar uno"
             >
-              <Ionicons name="add" size={20} color={maxAlcanzado ? '#CBD5E0' : '#1A202C'} />
+              <Ionicons name="add" size={20} color={maxAlcanzado ? colores.bordeFuerte : colores.blanco} />
             </TouchableOpacity>
           </View>
 
@@ -98,17 +104,12 @@ export default function DetalleProducto({ producto, onClose, onAgregar }) {
             activeOpacity={0.9}
             onPress={() => { onAgregar(producto, cantidad); onClose(); }}
           >
-            <LinearGradient
-              colors={['#27AE60', '#1F9E56']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.agregarBtn}
-            >
+            <View style={styles.agregarBtn}>
               <Text style={styles.agregarBtnText}>
                 Agregar {cantidad} al carrito
               </Text>
               <Text style={styles.agregarBtnPrecio}>{precioMonedas(total, tasa).principal}</Text>
-            </LinearGradient>
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -117,51 +118,47 @@ export default function DetalleProducto({ producto, onClose, onAgregar }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  imagen: { width: '100%', height: SCREEN_HEIGHT * 0.38, resizeMode: 'cover', backgroundColor: '#EDF2F7' },
+  container: { flex: 1, backgroundColor: colores.blanco },
+  imagen: { width: '100%', height: SCREEN_HEIGHT * 0.42, resizeMode: 'cover', backgroundColor: colores.celesteClaro },
   cerrarBtn: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 54 : 42,
-    left: 16,
-    width: 42, height: 42, borderRadius: 21, backgroundColor: '#fff',
+    position: 'absolute', top: Platform.OS === 'ios' ? 54 : 42, left: 16,
+    width: 46, height: 46, borderRadius: 23, backgroundColor: colores.blanco,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 }, elevation: 5,
+    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 5,
   },
-  contenido: { padding: 20 },
+  contenido: {
+    marginTop: -28, backgroundColor: colores.blanco, borderTopLeftRadius: radios.enorme, borderTopRightRadius: radios.enorme,
+    paddingHorizontal: 22, paddingTop: 24,
+  },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  chipMarca: { backgroundColor: colores.marino, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  chipMarcaText: { color: colores.blanco, fontSize: 12, fontWeight: '800' },
   sucChip: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    alignSelf: 'flex-start',
-    backgroundColor: '#EBF8FF', borderRadius: 12,
-    paddingHorizontal: 10, paddingVertical: 5, marginBottom: 12,
+    backgroundColor: colores.celesteClaro, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6,
   },
-  sucChipText: { color: '#1A6A9A', fontSize: 12.5, fontWeight: '700' },
-  nombre: { fontSize: 26, fontWeight: '900', color: '#1A202C', marginBottom: 6 },
-  precio: { fontSize: 24, fontWeight: '800', color: '#1A6A9A', marginBottom: 14 },
-  precioSufijo: { fontSize: 13, fontWeight: '600', color: '#94A3B8' },
-  descripcion: { fontSize: 15, color: '#4A5568', lineHeight: 22, marginBottom: 16 },
+  sucChipText: { color: colores.marino, fontSize: 12, fontWeight: '800' },
+  nombre: { fontSize: 28, fontWeight: '800', color: colores.marino, marginBottom: 10, lineHeight: 34 },
+  precio: { fontSize: 32, color: colores.marino, fontFamily: fuentes.tituloFuerte, marginBottom: 2 },
+  precioSufijo: { fontSize: 14, fontWeight: '600', color: colores.textoSuave, marginBottom: 14 },
+  descripcion: { fontSize: 15, color: '#2C3D58', lineHeight: 23, marginTop: 6, marginBottom: 16 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  metaText: { fontSize: 13.5, color: '#94A3B8' },
+  metaText: { fontSize: 14, color: colores.textoSuave },
 
   barraInferior: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#fff', padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 16,
-    borderTopWidth: 1, borderTopColor: '#F1F5F9',
-    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12,
-    shadowOffset: { width: 0, height: -4 }, elevation: 12,
+    backgroundColor: colores.blanco, padding: 16, paddingBottom: Platform.OS === 'ios' ? 30 : 16,
+    borderTopWidth: 1, borderTopColor: colores.borde,
   },
-  stepper: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F1F5F9', borderRadius: 24, paddingHorizontal: 4,
-  },
-  stepperBtn: { width: 42, height: 46, alignItems: 'center', justifyContent: 'center' },
-  stepperNum: { fontSize: 17, fontWeight: '800', color: '#1A202C', minWidth: 26, textAlign: 'center' },
+  stepper: { flexDirection: 'row', alignItems: 'center', backgroundColor: colores.fondo, borderRadius: 18, padding: 4, gap: 2 },
+  stepperBtn: { width: 44, height: 46, borderRadius: 14, backgroundColor: colores.blanco, alignItems: 'center', justifyContent: 'center' },
+  stepperBtnMas: { backgroundColor: colores.marino },
+  stepperNum: { fontSize: 18, color: colores.marino, minWidth: 30, textAlign: 'center', fontFamily: fuentes.titulo },
   agregarBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderRadius: 16, paddingHorizontal: 18, paddingVertical: 15,
+    borderRadius: 18, paddingHorizontal: 18, minHeight: 56, backgroundColor: colores.marino,
   },
-  agregarBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  agregarBtnPrecio: { color: '#fff', fontSize: 15, fontWeight: '900' },
+  agregarBtnText: { color: colores.blanco, fontSize: 15, fontWeight: '800' },
+  agregarBtnPrecio: { color: colores.blanco, fontSize: 16, fontFamily: fuentes.titulo },
 });

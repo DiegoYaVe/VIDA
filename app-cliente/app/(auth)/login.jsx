@@ -1,10 +1,6 @@
 import { useState, useRef } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, KeyboardAvoidingView, Platform,
-  ScrollView, Dimensions, Image,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Dimensions, Image } from 'react-native';
+import { Text, TextInput } from '../../components/Texto';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,6 +9,7 @@ import Constants from 'expo-constants';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import { ID_BRANCH, ID_CUENTA, GOOGLE_WEB_CLIENT_ID } from '../../constants/config';
+import { colores, logos, radios } from '../../constants/tema';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Google Sign-In es un módulo NATIVO que Expo Go no incluye: importarlo en Expo
@@ -36,15 +33,15 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 function Campo({ icon, rightIcon, onRightPress, ...props }) {
   return (
     <View style={styles.campo}>
-      <Ionicons name={icon} size={19} color="#94A3B8" style={styles.campoIcon} />
+      <Ionicons name={icon} size={19} color="#8C9BB0" style={styles.campoIcon} />
       <TextInput
         style={styles.campoInput}
-        placeholderTextColor="#A0AEC0"
+        placeholderTextColor="#8C9BB0"
         {...props}
       />
       {rightIcon ? (
         <TouchableOpacity onPress={onRightPress} style={styles.campoRight}>
-          <Ionicons name={rightIcon} size={20} color="#94A3B8" />
+          <Ionicons name={rightIcon} size={20} color="#8C9BB0" />
         </TouchableOpacity>
       ) : null}
     </View>
@@ -159,15 +156,6 @@ export default function LoginScreen() {
     <View style={styles.root}>
       <StatusBar style="light" />
 
-      {/* Fondo degradado a pantalla completa con adornos */}
-      <LinearGradient
-        colors={['#0D1B2A', '#14507A', '#1A6A9A']}
-        style={StyleSheet.absoluteFill}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0.8, y: 1 }}
-      />
-      <View style={[styles.deco, styles.decoUno]} />
-      <View style={[styles.deco, styles.decoDos]} />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -178,16 +166,10 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Hero con logo */}
+          {/* Hero con el logo de Comercializadora VIDA (fondo marino = el del logo) */}
           <View style={styles.hero}>
-            <View style={styles.logoRing}>
-              <Image source={require('../../assets/icon.png')} style={styles.logoImg} />
-            </View>
-            <Text style={styles.logoText}>VIDA</Text>
-            <View style={styles.taglinePill}>
-              <Ionicons name="bicycle" size={14} color="#7FDCA4" />
-              <Text style={styles.taglineText}>Tu tienda favorita, a tu puerta</Text>
-            </View>
+            <Image source={logos.completoOscuro} style={styles.logoImg} resizeMode="contain" accessibilityLabel="Comercializadora VIDA" />
+            <Text style={styles.tagline}>Tu bodega y tu agua,{'\n'}en la puerta de tu casa.</Text>
           </View>
 
           {/* Tarjeta */}
@@ -289,12 +271,7 @@ export default function LoginScreen() {
               activeOpacity={0.9}
               style={loading ? { opacity: 0.7 } : null}
             >
-              <LinearGradient
-                colors={['#27AE60', '#1F9E56']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.primaryBtn}
-              >
+              <View style={styles.primaryBtn}>
                 {loading
                   ? <ActivityIndicator color="#fff" />
                   : <>
@@ -304,7 +281,7 @@ export default function LoginScreen() {
                       <Ionicons name="arrow-forward" size={18} color="#fff" />
                     </>
                 }
-              </LinearGradient>
+              </View>
             </TouchableOpacity>
 
             {tab === 'registro' && (
@@ -331,96 +308,73 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0D1B2A' },
+  root: { flex: 1, backgroundColor: colores.marino },
   scroll: { flexGrow: 1, paddingBottom: 30 },
 
-  // Adornos del fondo
-  deco: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.05)' },
-  decoUno: { width: 280, height: 280, top: -90, right: -80 },
-  decoDos: { width: 200, height: 200, top: SCREEN_HEIGHT * 0.28, left: -100, backgroundColor: 'rgba(39,174,96,0.12)' },
-
   // Hero
-  hero: { alignItems: 'center', paddingTop: SCREEN_HEIGHT * 0.075, paddingBottom: 28 },
-  logoRing: {
-    width: 92, height: 92, borderRadius: 46,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
-  },
-  logoImg: { width: 62, height: 62, borderRadius: 31 },
-  logoText: { fontSize: 44, fontWeight: '900', color: '#fff', letterSpacing: 14, marginLeft: 14 },
-  taglinePill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, marginTop: 10,
-  },
-  taglineText: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600' },
+  hero: { alignItems: 'center', paddingTop: SCREEN_HEIGHT * 0.07, paddingBottom: 26, paddingHorizontal: 24, gap: 16 },
+  logoImg: { width: 280, height: 135 },
+  tagline: { color: colores.celesteClaro, fontSize: 18, fontWeight: '600', textAlign: 'center', lineHeight: 25 },
 
   // Tarjeta
   card: {
-    marginHorizontal: 18, backgroundColor: '#fff', borderRadius: 28, padding: 22,
+    marginHorizontal: 18, backgroundColor: colores.blanco, borderRadius: radios.enorme, padding: 22,
     shadowColor: '#000', shadowOffset: { width: 0, height: 16 },
     shadowOpacity: 0.25, shadowRadius: 32, elevation: 14,
   },
-  tabs: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 14, padding: 4, marginBottom: 16 },
+  tabs: { flexDirection: 'row', backgroundColor: colores.fondo, borderRadius: 14, padding: 4, marginBottom: 16 },
   tabBtn: { flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: 'center' },
-  tabBtnActive: {
-    backgroundColor: '#fff',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08, shadowRadius: 6, elevation: 2,
-  },
-  tabText: { color: '#94A3B8', fontWeight: '600', fontSize: 14 },
-  tabTextActive: { color: '#1A6A9A', fontWeight: '800' },
+  tabBtnActive: { backgroundColor: colores.marino },
+  tabText: { color: colores.textoSuave, fontWeight: '700', fontSize: 14 },
+  tabTextActive: { color: colores.blanco, fontWeight: '800' },
 
   alertError: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#FFF5F5', borderRadius: 12, padding: 11,
-    borderWidth: 1, borderColor: '#FED7D7', marginBottom: 12,
+    backgroundColor: colores.errorClaro, borderRadius: 12, padding: 11,
+    borderWidth: 1, borderColor: '#F5C2C2', marginBottom: 12,
   },
-  alertErrorText: { color: '#C53030', fontSize: 13, flex: 1 },
+  alertErrorText: { color: colores.error, fontSize: 13, flex: 1 },
   alertOk: {
-    backgroundColor: '#F0FFF4', borderRadius: 12, padding: 11,
-    borderWidth: 1, borderColor: '#9AE6B4', marginBottom: 12,
+    backgroundColor: colores.verdeClaro, borderRadius: 12, padding: 11,
+    borderWidth: 1, borderColor: '#A8DDB6', marginBottom: 12,
   },
-  alertOkText: { color: '#276749', fontSize: 13, textAlign: 'center' },
+  alertOkText: { color: colores.verdeTexto, fontSize: 13, textAlign: 'center' },
 
   googleBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 14,
-    paddingVertical: 13, gap: 10, backgroundColor: '#fff',
+    borderWidth: 1.5, borderColor: colores.bordeFuerte, borderRadius: radios.medio,
+    paddingVertical: 14, gap: 10, backgroundColor: colores.blanco,
   },
   googleIcon: { fontSize: 18, fontWeight: '900', color: '#EA4335' },
-  googleBtnText: { fontSize: 15, fontWeight: '700', color: '#374151' },
+  googleBtnText: { fontSize: 15, fontWeight: '800', color: colores.texto },
 
   dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, gap: 10 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
-  dividerText: { color: '#A0AEC0', fontSize: 12, fontWeight: '600' },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colores.borde },
+  dividerText: { color: colores.textoSuave, fontSize: 12, fontWeight: '600' },
 
   form: { gap: 10 },
   campo: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F7FAFC', borderWidth: 1.5, borderColor: '#E8EEF4',
-    borderRadius: 14, paddingHorizontal: 12,
+    backgroundColor: colores.blanco, borderWidth: 1.5, borderColor: colores.bordeFuerte,
+    borderRadius: radios.medio, paddingHorizontal: 14, minHeight: 52,
   },
   campoIcon: { marginRight: 8 },
-  campoInput: { flex: 1, paddingVertical: 13, fontSize: 15, color: '#1A202C' },
-  campoRight: { padding: 6 },
+  campoInput: { flex: 1, paddingVertical: 13, fontSize: 16, color: colores.texto },
+  campoRight: { padding: 8 },
 
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderRadius: 16, paddingVertical: 16, marginTop: 18,
-    shadowColor: '#27AE60', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
+    borderRadius: 18, minHeight: 56, marginTop: 18, backgroundColor: colores.marino,
   },
-  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
-  microcopy: { color: '#A0AEC0', fontSize: 11.5, textAlign: 'center', marginTop: 12 },
+  primaryBtnText: { color: colores.blanco, fontSize: 17, fontWeight: '800' },
+  microcopy: { color: colores.textoSuave, fontSize: 12, textAlign: 'center', marginTop: 12 },
 
   guestBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-    alignSelf: 'center', marginTop: 20,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 24, paddingHorizontal: 20, paddingVertical: 12,
+    alignSelf: 'center', marginTop: 20, minHeight: 48,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)',
+    borderRadius: 24, paddingHorizontal: 20,
   },
-  guestBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  guestBtnText: { color: colores.blanco, fontSize: 14, fontWeight: '700' },
 });

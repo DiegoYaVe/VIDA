@@ -1,4 +1,5 @@
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, Linking } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, Linking } from 'react-native';
+import { Text } from '../components/Texto';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -37,7 +38,7 @@ function FaqItem({ q, a }) {
     <View style={styles.faqItem}>
       <TouchableOpacity style={styles.faqQ} onPress={() => setOpen(v => !v)} activeOpacity={0.7}>
         <Text style={styles.faqQText}>{q}</Text>
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#A0AEC0" />
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#8C9BB0" />
       </TouchableOpacity>
       {open && <Text style={styles.faqA}>{a}</Text>}
     </View>
@@ -51,7 +52,7 @@ export default function AyudaScreen() {
       <StatusBar style="dark" />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={22} color="#1A202C" />
+          <Ionicons name="arrow-back" size={22} color="#001034" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Ayuda</Text>
         <View style={{ width: 40 }} />
@@ -68,28 +69,28 @@ export default function AyudaScreen() {
             style={styles.contactItem}
             onPress={() => Linking.openURL('https://wa.me/584140000000')}
           >
-            <View style={[styles.contactIcon, { backgroundColor: '#F0FFF4' }]}>
-              <Ionicons name="logo-whatsapp" size={22} color="#27AE60" />
+            <View style={[styles.contactIcon, { backgroundColor: '#E3F3E7' }]}>
+              <Ionicons name="logo-whatsapp" size={22} color="#4DAD66" />
             </View>
             <View style={styles.contactInfo}>
               <Text style={styles.contactTitle}>WhatsApp</Text>
               <Text style={styles.contactSub}>Respuesta en menos de 1 hora</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color="#CBD5E0" />
+            <Ionicons name="chevron-forward" size={16} color="#CFE4EB" />
           </TouchableOpacity>
           <View style={styles.divider} />
           <TouchableOpacity
             style={styles.contactItem}
             onPress={() => Linking.openURL('mailto:soporte@vidadelivery.com')}
           >
-            <View style={[styles.contactIcon, { backgroundColor: '#EBF8FF' }]}>
-              <Ionicons name="mail-outline" size={22} color="#1A6A9A" />
+            <View style={[styles.contactIcon, { backgroundColor: '#DDF2F8' }]}>
+              <Ionicons name="mail-outline" size={22} color="#001034" />
             </View>
             <View style={styles.contactInfo}>
               <Text style={styles.contactTitle}>Correo electrónico</Text>
               <Text style={styles.contactSub}>soporte@vidadelivery.com</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color="#CBD5E0" />
+            <Ionicons name="chevron-forward" size={16} color="#CFE4EB" />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -98,28 +99,28 @@ export default function AyudaScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  container: { flex: 1, backgroundColor: '#F2F9FB' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#fff',
-    borderBottomWidth: 1, borderBottomColor: '#EDF2F7',
+    borderBottomWidth: 1, borderBottomColor: '#E6F1F5',
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: '#1A202C' },
+  headerTitle: { fontSize: 17, fontWeight: '800', color: '#001034' },
   scroll: { padding: 16, gap: 16, paddingBottom: 40 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: '#A0AEC0', textTransform: 'uppercase', letterSpacing: 0.8, marginLeft: 4 },
+  sectionTitle: { fontSize: 12, fontWeight: '700', color: '#8C9BB0', textTransform: 'uppercase', letterSpacing: 0.8, marginLeft: 4 },
   card: {
     backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
   },
-  faqItem: { borderBottomWidth: 1, borderBottomColor: '#F5F7FA' },
+  faqItem: { borderBottomWidth: 1, borderBottomColor: '#F2F9FB' },
   faqQ: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-  faqQText: { flex: 1, fontSize: 14, fontWeight: '600', color: '#1A202C', marginRight: 8 },
-  faqA: { fontSize: 13, color: '#718096', lineHeight: 20, paddingHorizontal: 16, paddingBottom: 14 },
+  faqQText: { flex: 1, fontSize: 14, fontWeight: '600', color: '#001034', marginRight: 8 },
+  faqA: { fontSize: 13, color: '#4B5B73', lineHeight: 20, paddingHorizontal: 16, paddingBottom: 14 },
   contactItem: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14 },
   contactIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   contactInfo: { flex: 1 },
-  contactTitle: { fontSize: 15, fontWeight: '600', color: '#1A202C' },
-  contactSub: { fontSize: 12, color: '#718096', marginTop: 2 },
-  divider: { height: 1, backgroundColor: '#F5F7FA', marginLeft: 74 },
+  contactTitle: { fontSize: 15, fontWeight: '600', color: '#001034' },
+  contactSub: { fontSize: 12, color: '#4B5B73', marginTop: 2 },
+  divider: { height: 1, backgroundColor: '#F2F9FB', marginLeft: 74 },
 });

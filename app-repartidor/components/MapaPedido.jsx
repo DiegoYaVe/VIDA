@@ -1,5 +1,6 @@
 import { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Linking, Platform } from 'react-native';
+import { Text } from './Texto';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -7,13 +8,13 @@ const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : nu
 
 function buildHTML(yo, sucursal, destino, enCamino) {
   const pts = [];
-  if (yo)       pts.push({ lat: yo.lat,       lon: yo.lon,       color: '#4A5568', icon: '🛵', label: 'Tú' });
-  if (sucursal) pts.push({ lat: sucursal.lat,  lon: sucursal.lon, color: '#1A6A9A', icon: '🏪', label: 'Sucursal' });
-  if (destino)  pts.push({ lat: destino.lat,   lon: destino.lon,  color: '#27AE60', icon: '🏠', label: 'Entrega' });
+  if (yo)       pts.push({ lat: yo.lat,       lon: yo.lon,       color: '#2C3D58', icon: '🛵', label: 'Tú' });
+  if (sucursal) pts.push({ lat: sucursal.lat,  lon: sucursal.lon, color: '#001034', icon: '🏪', label: 'Sucursal' });
+  if (destino)  pts.push({ lat: destino.lat,   lon: destino.lon,  color: '#4DAD66', icon: '🏠', label: 'Entrega' });
 
   const center = pts[0] ?? { lat: 10.4806, lon: -66.9036 };
   const objetivo = enCamino ? destino : (sucursal || destino);
-  const lineColor = enCamino ? '#27AE60' : '#1A6A9A';
+  const lineColor = enCamino ? '#4DAD66' : '#001034';
 
   return `<!DOCTYPE html><html><head>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
@@ -36,7 +37,7 @@ function mkIcon(color,icon){
 }
 pts.forEach(function(p){ markers.push(L.marker([p.lat,p.lon],{icon:mkIcon(p.color,p.icon)}).bindPopup(p.label).addTo(map)); });
 if(yo&&obj) lines.push(L.polyline([[yo.lat,yo.lon],[obj.lat,obj.lon]],{color:'${lineColor}',weight:3,dashArray:'8,6'}).addTo(map));
-if(suc&&dst) lines.push(L.polyline([[suc.lat,suc.lon],[dst.lat,dst.lon]],{color:'#A0AEC0',weight:2,dashArray:'4,6'}).addTo(map));
+if(suc&&dst) lines.push(L.polyline([[suc.lat,suc.lon],[dst.lat,dst.lon]],{color:'#8C9BB0',weight:2,dashArray:'4,6'}).addTo(map));
 
 if(markers.length>=2){ var g=L.featureGroup(markers); map.fitBounds(g.getBounds().pad(0.3)); }
 
@@ -46,7 +47,7 @@ window.update=function(data){
   yo=data.yo; obj=data.obj; suc=data.suc; dst=data.dst;
   data.pts.forEach(function(p){ markers.push(L.marker([p.lat,p.lon],{icon:mkIcon(p.color,p.icon)}).addTo(map)); });
   if(yo&&obj) lines.push(L.polyline([[yo.lat,yo.lon],[obj.lat,obj.lon]],{color:data.lineColor,weight:3,dashArray:'8,6'}).addTo(map));
-  if(suc&&dst) lines.push(L.polyline([[suc.lat,suc.lon],[dst.lat,dst.lon]],{color:'#A0AEC0',weight:2,dashArray:'4,6'}).addTo(map));
+  if(suc&&dst) lines.push(L.polyline([[suc.lat,suc.lon],[dst.lat,dst.lon]],{color:'#8C9BB0',weight:2,dashArray:'4,6'}).addTo(map));
   if(markers.length>=2){ var g=L.featureGroup(markers); map.fitBounds(g.getBounds().pad(0.3)); }
   else if(markers.length===1){ map.setView([markers[0].getLatLng().lat,markers[0].getLatLng().lng],16); }
 };
@@ -72,17 +73,17 @@ export default function MapaPedido({ ubicacion, pedido }) {
   useEffect(() => {
     if (!webRef.current) return;
     const pts = [];
-    if (yo)       pts.push({ lat: yo.lat,       lon: yo.lon,       color: '#4A5568', icon: '🛵' });
-    if (sucursal) pts.push({ lat: sucursal.lat,  lon: sucursal.lon, color: '#1A6A9A', icon: '🏪' });
-    if (destino)  pts.push({ lat: destino.lat,   lon: destino.lon,  color: '#27AE60', icon: '🏠' });
-    const data = JSON.stringify({ pts, yo, obj: objetivo, suc: sucursal, dst: destino, lineColor: enCamino ? '#27AE60' : '#1A6A9A' });
+    if (yo)       pts.push({ lat: yo.lat,       lon: yo.lon,       color: '#2C3D58', icon: '🛵' });
+    if (sucursal) pts.push({ lat: sucursal.lat,  lon: sucursal.lon, color: '#001034', icon: '🏪' });
+    if (destino)  pts.push({ lat: destino.lat,   lon: destino.lon,  color: '#4DAD66', icon: '🏠' });
+    const data = JSON.stringify({ pts, yo, obj: objetivo, suc: sucursal, dst: destino, lineColor: enCamino ? '#4DAD66' : '#001034' });
     webRef.current.injectJavaScript(`window.update(${data}); true;`);
   }, [yoLat, yoLon, sLat, dLat, enCamino]);
 
   if (!yo && !sucursal && !destino) {
     return (
       <View style={styles.placeholder}>
-        <Ionicons name="map-outline" size={48} color="#CBD5E0" />
+        <Ionicons name="map-outline" size={48} color="#CFE4EB" />
         <Text style={styles.placeholderText}>Esperando ubicación GPS...</Text>
       </View>
     );
@@ -114,12 +115,12 @@ export default function MapaPedido({ ubicacion, pedido }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EDF2F7' },
-  placeholderText: { color: '#A0AEC0', marginTop: 8, fontSize: 13 },
+  placeholder: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E6F1F5' },
+  placeholderText: { color: '#8C9BB0', marginTop: 8, fontSize: 13 },
   navBtn: {
     position: 'absolute', top: 12, right: 12,
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#1A6A9A', paddingHorizontal: 14, paddingVertical: 9,
+    backgroundColor: '#001034', paddingHorizontal: 14, paddingVertical: 9,
     borderRadius: 22, elevation: 5,
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
   },

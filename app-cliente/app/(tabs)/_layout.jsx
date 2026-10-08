@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { Text } from '../../components/Texto';
 import { Ionicons } from '@expo/vector-icons';
 import useCarritoStore from '../../store/carritoStore';
 import useAuthStore from '../../store/authStore';
 import { registrarPushToken, escucharTapsNotificacion } from '../../services/push';
+import { colores, fuentes } from '../../constants/tema';
 
 function CartTabIcon({ color, focused }) {
   const items = useCarritoStore((s) => s.items);
@@ -42,21 +44,22 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#fff',
+          backgroundColor: colores.blanco,
           borderTopWidth: 1,
-          borderTopColor: '#E2E8F0',
-          height: 60,
-          paddingBottom: 8,
+          borderTopColor: colores.borde,
+          height: 66,
+          paddingBottom: 10,
+          paddingTop: 6,
         },
-        tabBarActiveTintColor: '#27AE60',
-        tabBarInactiveTintColor: '#A0AEC0',
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarActiveTintColor: colores.marino,
+        tabBarInactiveTintColor: colores.textoTenue,
+        tabBarLabelStyle: { fontSize: 12, fontFamily: fuentes.textoFuerte },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Tiendas',
+          title: 'Inicio',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'storefront' : 'storefront-outline'} size={24} color={color} />
           ),
@@ -87,13 +90,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: -6,
     top: -4,
-    backgroundColor: '#E53E3E',
-    borderRadius: 8,
-    minWidth: 16,
-    height: 16,
+    backgroundColor: colores.celeste,
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 3,
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: colores.blanco,
   },
-  badgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
+  badgeText: { color: colores.marino, fontSize: 9, fontWeight: '800' },
 });

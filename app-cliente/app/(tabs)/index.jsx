@@ -1,24 +1,10 @@
-// Home calcado del layout de Uber Eats con colores VIDA:
-// header blanco con selector de tienda + carrito, categorías con íconos
-// grandes, búsqueda tipo píldora, "Destacados" y tarjetas planas con
-// imagen protagonista. Navegable sin cuenta.
+// Inicio de la app cliente (diseño "Agua VIDA"): saludo con el símbolo VIDA,
+// selector de tienda, tarjeta de hidratación, acceso rápido al agua VIDA,
+// categorías en píldoras y productos con precio en USD y bolívares.
+// Navegable sin cuenta: la hidratación solo aparece con sesión.
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  TextInput,
-  Image,
-  Alert,
-  ActivityIndicator,
-  ScrollView,
-  RefreshControl,
-  Platform,
-  Modal,
-  Dimensions,
-} from 'react-native';
+import { View, FlatList, TouchableOpacity, StyleSheet, Image, Alert, ActivityIndicator, ScrollView, RefreshControl, Platform, Modal, Dimensions } from 'react-native';
+import { Text, TextInput } from '../../components/Texto';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -26,37 +12,25 @@ import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import useCarritoStore from '../../store/carritoStore';
 import { absImg } from '../../constants/config';
+import { colores, logos, radios } from '../../constants/tema';
 import DetalleProducto from '../../components/DetalleProducto';
 import Precio from '../../components/Precio';
 import { useTasaReferencial, precioMonedas } from '../../services/moneda';
 
-const PLACEHOLDER = 'https://via.placeholder.com/300/F1F5F9/94A3B8?text=VIDA';
+const PLACEHOLDER = 'https://via.placeholder.com/300/EEF6F8/8C9BB0?text=VIDA';
 const { width: SCREEN_W } = Dimensions.get('window');
 // Ancho fijo por tarjeta: así el último producto impar NO se estira
-const CARD_W = (SCREEN_W - 16 * 2 - 14) / 2;
+const CARD_W = (SCREEN_W - 16 * 2 - 12) / 2;
 
-// Emoji por nombre de categoría
-function emojiCategoria(nombre = '') {
-  const n = nombre.toLowerCase();
-  if (n.includes('bebida') || n.includes('refresco') || n.includes('jugo')) return '🥤';
-  if (n.includes('snack') || n.includes('botana') || n.includes('fritura')) return '🍟';
-  if (n.includes('lácteo') || n.includes('lacteo') || n.includes('leche')) return '🥛';
-  if (n.includes('limpieza') || n.includes('hogar')) return '🧼';
-  if (n.includes('pan') || n.includes('bagel') || n.includes('reposter')) return '🥞';
-  if (n.includes('dulce') || n.includes('chocolate') || n.includes('postre')) return '🍩';
-  if (n.includes('carne') || n.includes('charcuter')) return '🥩';
-  if (n.includes('fruta') || n.includes('verdura')) return '🍎';
-  if (n.includes('comida') || n.includes('sandwich') || n.includes('sánd')) return '🌮';
-  if (n.includes('licor') || n.includes('cerveza') || n.includes('vino')) return '🍺';
-  if (n.includes('café') || n.includes('cafe')) return '☕';
-  if (n.includes('pizza')) return '🍕';
-  return '🛍️';
+function saludo() {
+  const h = new Date().getHours();
+  return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
 }
 
 export default function HomeScreen() {
   const tasa = useTasaReferencial();
   const router = useRouter();
-  const { idBranch, idCuenta, cliente } = useAuthStore();
+  const { idBranch, idCuenta, cliente, token } = useAuthStore();
 
   const [productos, setProductos] = useState([]);
   const [sucursales, setSucursales] = useState([]);
@@ -68,6 +42,8 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [productoAbierto, setProductoAbierto] = useState(null);
+  const [hidra, setHidra] = useState(null);
+  const [vasoOcupado, setVasoOcupado] = useState(false);
 
   const items = useCarritoStore((s) => s.items);
   const idPVCarrito = useCarritoStore((s) => s.idPuntoVenta);
@@ -96,9 +72,29 @@ export default function HomeScreen() {
     }
   }, [idBranch, idCuenta]);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  // Hidratación: solo con sesión; si falla, la tarjeta simplemente no aparece
+  const cargarHidratacion = useCallback(async () => {
+    if (!token) { setHidra(null); return; }
+    try { setHidra((await api.get('/delivery/cliente/hidratacion')).data); }
+    catch { setHidra(null); }
+  }, [token]);
 
-  const onRefresh = () => { setRefreshing(true); cargar(); };
+  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => { cargarHidratacion(); }, [cargarHidratacion]);
+
+  const onRefresh = () => { setRefreshing(true); cargar(); cargarHidratacion(); };
+
+  const tomarVaso = async () => {
+    if (vasoOcupado) return;
+    setVasoOcupado(true);
+    try {
+      const r = await api.post('/delivery/cliente/hidratacion/vaso');
+      setHidra((d) => ({ ...d, vasosHoy: r.data.vasosHoy, mlHoy: r.data.mlHoy, racha: r.data.racha }));
+      if (r.data.bonus > 0) {
+        Alert.alert('¡Racha completada!', `Llevas ${r.data.racha} días cumpliendo tu meta. Ganaste ${r.data.bonus} puntos VIDA.`);
+      }
+    } catch {} finally { setVasoOcupado(false); }
+  };
 
   const categorias = useMemo(() => {
     const seen = new Map();
@@ -122,6 +118,12 @@ export default function HomeScreen() {
     }
     return list;
   }, [productos, sucursalActiva, categoriaActiva, search]);
+
+  // Acceso rápido al agua VIDA (el producto estrella de la marca)
+  const agua = useMemo(() => {
+    const lista = sucursalActiva ? productos.filter((p) => String(p.idPuntoVenta) === String(sucursalActiva)) : productos;
+    return lista.find((p) => /agua/i.test(p.Nombre || '')) || null;
+  }, [productos, sucursalActiva]);
 
   // Búsqueda por tienda: agrupa productos coincidentes por sucursal (3+ chars)
   const tiendaBusqueda = useMemo(() => {
@@ -193,96 +195,124 @@ export default function HomeScreen() {
   const renderProducto = ({ item: p }) => {
     const cant = getCantidad(p);
     const precio = parseFloat(p.PrecioUSD || 0);
+    const { principal, secundario } = precioMonedas(precio, tasa);
 
     return (
-      <View style={styles.prodCard}>
-        <TouchableOpacity activeOpacity={0.85} onPress={() => setProductoAbierto(p)}>
-          <View>
-            <Image
-              source={{ uri: absImg(p.ImagenProducto) || PLACEHOLDER }}
-              style={styles.prodImg}
-              defaultSource={{ uri: PLACEHOLDER }}
-            />
-            {cant === 0 ? (
-              <TouchableOpacity style={styles.addFab} onPress={() => handleAgregar(p)}>
-                <Ionicons name="add" size={22} color="#1A202C" />
+      <TouchableOpacity style={styles.prodCard} activeOpacity={0.88} onPress={() => setProductoAbierto(p)}>
+        <Image
+          source={{ uri: absImg(p.ImagenProducto) || PLACEHOLDER }}
+          style={styles.prodImg}
+          defaultSource={{ uri: PLACEHOLDER }}
+        />
+        <Text style={styles.prodNombre} numberOfLines={2}>{p.Nombre}</Text>
+        <Text style={styles.prodTienda} numberOfLines={1}>{p.NombreSucursal}</Text>
+        <View style={styles.prodPie}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.prodPrecio}>{principal}</Text>
+            {secundario ? <Text style={styles.prodPrecioSec} numberOfLines={1}>{secundario}</Text> : null}
+          </View>
+          {cant === 0 ? (
+            <TouchableOpacity style={styles.addBtn} onPress={() => handleAgregar(p)} accessibilityLabel={`Agregar ${p.Nombre}`}>
+              <Ionicons name="add" size={22} color={colores.blanco} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.qty}>
+              <TouchableOpacity style={styles.qtyBtn} onPress={() => quitarItem(p.idProducto)} accessibilityLabel="Quitar uno">
+                <Ionicons name="remove" size={16} color={colores.marino} />
               </TouchableOpacity>
-            ) : (
-              <View style={styles.qtyFab}>
-                <TouchableOpacity style={styles.qtyFabBtn} onPress={() => quitarItem(p.idProducto)}>
-                  <Ionicons name="remove" size={16} color="#fff" />
-                </TouchableOpacity>
-                <Text style={styles.qtyFabNum}>{cant}</Text>
-                <TouchableOpacity style={styles.qtyFabBtn} onPress={() => handleAgregar(p)}>
-                  <Ionicons name="add" size={16} color="#fff" />
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          <Text style={styles.prodNombre} numberOfLines={1}>{p.Nombre}</Text>
-          <View style={styles.prodMetaRow}>
-            <Text style={styles.prodPrecio}>{precioMonedas(precio, tasa).principal}</Text>
-            <Text style={styles.prodMetaSep}> · </Text>
-            <Ionicons name="storefront-outline" size={12} color="#6B7280" />
-            <Text style={styles.prodMeta} numberOfLines={1}> {p.NombreSucursal}</Text>
-          </View>
-          {precioMonedas(precio, tasa).secundario ? (
-            <Text style={{fontSize: 11, color: '#718096', marginTop: 1}}>{precioMonedas(precio, tasa).secundario}</Text>
-          ) : null}
-        </TouchableOpacity>
-      </View>
+              <Text style={styles.qtyNum}>{cant}</Text>
+              <TouchableOpacity style={styles.qtyBtn} onPress={() => handleAgregar(p)} accessibilityLabel="Agregar uno">
+                <Ionicons name="add" size={16} color={colores.marino} />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
     );
   };
+
+  const meta = Math.max(1, Number(hidra?.meta) || 8);
+  const vasos = Number(hidra?.vasosHoy) || 0;
+  const pctAgua = Math.min(1, vasos / meta);
 
   // Header del feed (scrollea junto con los productos)
   const ListHeader = (
     <View>
-      {/* Categorías con íconos grandes (fila estilo Uber Eats) */}
-      {categorias.length > 0 && (
+      {/* Hidratación (programa activo) */}
+      {hidra?.activa ? (
+        <TouchableOpacity style={styles.hidraCard} activeOpacity={0.9} onPress={() => router.push('/mi-consumo')}>
+          <View style={styles.hidraDeco} />
+          <View style={styles.hidraAnillo}>
+            <Text style={styles.hidraNum}>{vasos}/{meta}</Text>
+            <Text style={styles.hidraUnidad}>vasos</Text>
+          </View>
+          <View style={{ flex: 1, gap: 10 }}>
+            <Text style={styles.hidraTitulo}>
+              {vasos >= meta ? '¡Meta de hoy cumplida!' : `Te faltan ${meta - vasos} vaso${meta - vasos === 1 ? '' : 's'} hoy.`}
+            </Text>
+            <View style={styles.hidraBarra}><View style={[styles.hidraBarraLlena, { width: `${pctAgua * 100}%` }]} /></View>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity style={styles.hidraBtn} onPress={tomarVaso} disabled={vasoOcupado}>
+                <Text style={styles.hidraBtnText}>+ 1 vaso</Text>
+              </TouchableOpacity>
+              {Number(hidra?.racha) > 0 ? (
+                <View style={styles.hidraRacha}><Text style={styles.hidraRachaText}>Racha {hidra.racha} días</Text></View>
+              ) : null}
+            </View>
+          </View>
+        </TouchableOpacity>
+      ) : null}
+
+      {/* Acceso rápido al agua VIDA */}
+      {agua && !search ? (
+        <View style={styles.aguaCard}>
+          <Image source={{ uri: absImg(agua.ImagenProducto) || PLACEHOLDER }} style={styles.aguaImg} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.aguaNombre} numberOfLines={1}>{agua.Nombre}</Text>
+            <Text style={styles.aguaSub} numberOfLines={1}>Pídela en {agua.NombreSucursal}</Text>
+            <Precio usd={parseFloat(agua.PrecioUSD || 0)} tasa={tasa} style={styles.aguaPrecio} />
+          </View>
+          <TouchableOpacity style={styles.aguaBtn} onPress={() => handleAgregar(agua)}>
+            <Text style={styles.aguaBtnText}>Agregar</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {/* Búsqueda */}
+      <View style={styles.searchWrap}>
+        <Ionicons name="search" size={19} color={colores.textoSuave} style={{ marginRight: 8 }} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Harina PAN, café, agua…"
+          placeholderTextColor={colores.textoTenue}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search ? (
+          <TouchableOpacity onPress={() => setSearch('')} accessibilityLabel="Borrar búsqueda">
+            <Ionicons name="close-circle" size={19} color={colores.textoTenue} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {/* Categorías en píldoras */}
+      {categorias.length > 0 && !tiendaBusqueda && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
-          <TouchableOpacity style={styles.catItem} onPress={() => setCategoriaActiva(null)}>
-            <Text style={[styles.catEmoji, categoriaActiva && styles.catEmojiInactiva]}>🛍️</Text>
-            <Text style={[styles.catLabel, !categoriaActiva && styles.catLabelActive]}>Todo</Text>
+          <TouchableOpacity style={[styles.chip, !categoriaActiva && styles.chipActivo]} onPress={() => setCategoriaActiva(null)}>
+            <Text style={[styles.chipText, !categoriaActiva && styles.chipTextActivo]}>Todo</Text>
           </TouchableOpacity>
           {categorias.map((c) => {
             const activa = categoriaActiva === c.id;
             return (
-              <TouchableOpacity
-                key={c.id}
-                style={styles.catItem}
-                onPress={() => setCategoriaActiva(activa ? null : c.id)}
-              >
-                <Text style={[styles.catEmoji, categoriaActiva && !activa && styles.catEmojiInactiva]}>
-                  {emojiCategoria(c.nombre)}
-                </Text>
-                <Text style={[styles.catLabel, activa && styles.catLabelActive]} numberOfLines={1}>
-                  {c.nombre}
-                </Text>
+              <TouchableOpacity key={c.id} style={[styles.chip, activa && styles.chipActivo]} onPress={() => setCategoriaActiva(activa ? null : c.id)}>
+                <Text style={[styles.chipText, activa && styles.chipTextActivo]} numberOfLines={1}>{c.nombre}</Text>
               </TouchableOpacity>
             );
           })}
         </ScrollView>
       )}
 
-      {/* Búsqueda tipo píldora */}
-      <View style={styles.searchWrap}>
-        <Ionicons name="search" size={18} color="#6B7280" style={{ marginRight: 8 }} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar en VIDA..."
-          placeholderTextColor="#6B7280"
-          value={search}
-          onChangeText={setSearch}
-        />
-        {search ? (
-          <TouchableOpacity onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={18} color="#9CA3AF" />
-          </TouchableOpacity>
-        ) : null}
-      </View>
-
-      {/* Cuando hay búsqueda de 3+ chars: mostrar tiendas con productos */}
+      {/* Búsqueda de 3+ letras: tiendas con productos */}
       {tiendaBusqueda !== null ? (
         <View style={styles.searchResultsWrap}>
           <Text style={styles.searchResultsTitle}>
@@ -299,7 +329,7 @@ export default function HomeScreen() {
             >
               <View style={styles.tiendaResultHeader}>
                 <View style={styles.tiendaResultIconWrap}>
-                  <Ionicons name="storefront" size={18} color="#1A6A9A" />
+                  <Ionicons name="storefront" size={18} color={colores.marino} />
                 </View>
                 <Text style={styles.tiendaResultNombre} numberOfLines={1}>{tienda.NombreSucursal}</Text>
                 <View style={styles.tiendaResultBadge}>
@@ -314,10 +344,7 @@ export default function HomeScreen() {
                     onPress={() => { setProductoAbierto(p); setSearch(''); }}
                     activeOpacity={0.85}
                   >
-                    <Image
-                      source={{ uri: absImg(p.ImagenProducto) || PLACEHOLDER }}
-                      style={styles.miniProdImg}
-                    />
+                    <Image source={{ uri: absImg(p.ImagenProducto) || PLACEHOLDER }} style={styles.miniProdImg} />
                     <Text style={styles.miniProdNombre} numberOfLines={2}>{p.Nombre}</Text>
                     <Precio usd={parseFloat(p.PrecioUSD || 0)} tasa={tasa} style={styles.miniProdPrecio} />
                   </TouchableOpacity>
@@ -327,15 +354,9 @@ export default function HomeScreen() {
           ))}
         </View>
       ) : (
-        /* Título de sección con flecha */
-        <View style={styles.seccionRow}>
-          <Text style={styles.seccionTitulo}>
-            {sucursalActiva || categoriaActiva ? 'Resultados' : 'Destacados en VIDA'}
-          </Text>
-          <View style={styles.seccionArrow}>
-            <Ionicons name="arrow-forward" size={18} color="#1A202C" />
-          </View>
-        </View>
+        <Text style={styles.seccionTitulo}>
+          {sucursalActiva || categoriaActiva ? 'Resultados' : 'Lo más pedido'}
+        </Text>
       )}
     </View>
   );
@@ -344,14 +365,23 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <StatusBar style="dark" />
 
-      {/* Header blanco: selector de tienda + carrito */}
+      {/* Encabezado: símbolo VIDA, saludo, tienda y carrito */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.tiendaSelector} onPress={() => setSelectorTienda(true)}>
-          <Text style={styles.tiendaSelectorText} numberOfLines={1}>{nombreSucursalActiva}</Text>
-          <Ionicons name="chevron-down" size={20} color="#1A202C" style={{ marginLeft: 4, marginTop: 2 }} />
+        <View style={styles.simbolo}>
+          <Image source={logos.simboloClaro} style={styles.simboloImg} resizeMode="contain" accessibilityLabel="VIDA" />
+        </View>
+        <TouchableOpacity style={styles.headerTexto} onPress={() => setSelectorTienda(true)} accessibilityLabel="Cambiar de tienda">
+          <Text style={styles.saludo} numberOfLines={1}>
+            {saludo()}{cliente?.Nombre ? `, ${String(cliente.Nombre).split(' ')[0]}` : ''}
+          </Text>
+          <View style={styles.tiendaRow}>
+            <Ionicons name="storefront-outline" size={16} color={colores.marino} />
+            <Text style={styles.tiendaSelectorText} numberOfLines={1}>{nombreSucursalActiva}</Text>
+            <Ionicons name="chevron-down" size={16} color={colores.marino} />
+          </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.headerCarrito} onPress={() => router.push('/(tabs)/carrito')}>
-          <Ionicons name="cart-outline" size={24} color="#1A202C" />
+        <TouchableOpacity style={styles.headerCarrito} onPress={() => router.push('/(tabs)/carrito')} accessibilityLabel="Ver carrito">
+          <Ionicons name="cart-outline" size={24} color={colores.marino} />
           {totalItems > 0 && (
             <View style={styles.headerCarritoBadge}>
               <Text style={styles.headerCarritoBadgeText}>{totalItems}</Text>
@@ -362,7 +392,7 @@ export default function HomeScreen() {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#27AE60" />
+          <ActivityIndicator size="large" color={colores.marino} />
         </View>
       ) : error ? (
         <View style={styles.center}>
@@ -381,28 +411,28 @@ export default function HomeScreen() {
           contentContainerStyle={styles.grid}
           ListHeaderComponent={ListHeader}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colores.marino} />}
           ListEmptyComponent={
             <View style={styles.center}>
-              <Ionicons name="basket-outline" size={54} color="#CBD5E0" />
+              <Ionicons name="basket-outline" size={54} color={colores.bordeFuerte} />
               <Text style={styles.emptyText}>No encontramos productos</Text>
             </View>
           }
         />
       )}
 
-      {/* Selector de tienda (dropdown como el "Casa ▼" de Uber Eats) */}
+      {/* Selector de tienda */}
       <Modal visible={selectorTienda} transparent animationType="fade" onRequestClose={() => setSelectorTienda(false)}>
         <TouchableOpacity style={styles.modalFondo} activeOpacity={1} onPress={() => setSelectorTienda(false)}>
           <View style={styles.modalTiendas}>
-            <Text style={styles.modalTiendasTitulo}>Elige una tienda</Text>
+            <Text style={styles.modalTiendasTitulo}>¿De qué tienda pides?</Text>
             <TouchableOpacity
               style={styles.tiendaOpcion}
               onPress={() => { setSucursalActiva(null); setSelectorTienda(false); }}
             >
-              <View style={styles.tiendaOpcionIcon}><Text style={{ fontSize: 18 }}>🛍️</Text></View>
+              <View style={styles.tiendaOpcionIcon}><Ionicons name="apps" size={16} color={colores.marino} /></View>
               <Text style={styles.tiendaOpcionText}>Todas las tiendas</Text>
-              {!sucursalActiva && <Ionicons name="checkmark-circle" size={20} color="#27AE60" />}
+              {!sucursalActiva && <Ionicons name="checkmark-circle" size={20} color={colores.verde} />}
             </TouchableOpacity>
             {sucursales.map((s) => {
               const id = s.idPuntoVenta ?? s.id;
@@ -414,12 +444,12 @@ export default function HomeScreen() {
                   onPress={() => { setSucursalActiva(id); setSelectorTienda(false); }}
                 >
                   <View style={styles.tiendaOpcionIcon}>
-                    <Ionicons name="storefront" size={16} color="#1A6A9A" />
+                    <Ionicons name="storefront" size={16} color={colores.marino} />
                   </View>
                   <Text style={styles.tiendaOpcionText} numberOfLines={1}>
                     {s.NomComercial ?? s.Nombre ?? s.nombre}
                   </Text>
-                  {activa && <Ionicons name="checkmark-circle" size={20} color="#27AE60" />}
+                  {activa && <Ionicons name="checkmark-circle" size={20} color={colores.verde} />}
                 </TouchableOpacity>
               );
             })}
@@ -436,7 +466,7 @@ export default function HomeScreen() {
         />
       )}
 
-      {/* Botón flotante del carrito */}
+      {/* Barra del carrito */}
       {totalItems > 0 && (
         <TouchableOpacity
           style={styles.floatingCart}
@@ -447,7 +477,7 @@ export default function HomeScreen() {
             <Text style={styles.floatingCartBadgeText}>{totalItems}</Text>
           </View>
           <Text style={styles.floatingCartText}>Ver carrito</Text>
-          <Text style={styles.floatingCartPrice}>${totalCarrito.toFixed(2)}</Text>
+          <Precio usd={totalCarrito} tasa={tasa} align="right" style={styles.floatingCartPrice} styleSecundario={styles.floatingCartPriceSec} />
         </TouchableOpacity>
       )}
     </View>
@@ -455,165 +485,154 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: colores.fondo },
 
-  // Header blanco estilo Uber Eats
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'ios' ? 58 : 46,
-    paddingBottom: 10,
-    paddingHorizontal: 16,
-    backgroundColor: '#fff',
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingTop: Platform.OS === 'ios' ? 58 : 44,
+    paddingBottom: 12, paddingHorizontal: 16,
   },
-  tiendaSelector: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 },
-  tiendaSelectorText: { fontSize: 24, fontWeight: '900', color: '#1A202C' },
-  headerCarrito: { padding: 4 },
+  simbolo: {
+    width: 48, height: 48, borderRadius: 15, backgroundColor: colores.blanco,
+    borderWidth: 1, borderColor: colores.borde, alignItems: 'center', justifyContent: 'center',
+  },
+  simboloImg: { width: 26, height: 40 },
+  headerTexto: { flex: 1, minHeight: 48, justifyContent: 'center' },
+  saludo: { fontSize: 13, color: colores.textoSuave, fontWeight: '600' },
+  tiendaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
+  tiendaSelectorText: { fontSize: 18, fontWeight: '700', color: colores.marino, flexShrink: 1 },
+  headerCarrito: {
+    width: 48, height: 48, borderRadius: 24, backgroundColor: colores.blanco,
+    borderWidth: 1, borderColor: colores.borde, alignItems: 'center', justifyContent: 'center',
+  },
   headerCarritoBadge: {
-    position: 'absolute', top: -4, right: -6,
-    backgroundColor: '#27AE60', borderRadius: 10, minWidth: 19, height: 19,
+    position: 'absolute', top: -2, right: -2,
+    backgroundColor: colores.celeste, borderRadius: 10, minWidth: 20, height: 20,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
-    borderWidth: 1.5, borderColor: '#fff',
+    borderWidth: 2, borderColor: colores.fondo,
   },
-  headerCarritoBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  headerCarritoBadgeText: { color: colores.marino, fontSize: 10, fontWeight: '800' },
 
-  // Categorías con íconos grandes
-  catRow: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 4, flexDirection: 'row', gap: 22 },
-  catItem: { alignItems: 'center', minWidth: 56 },
-  catEmoji: { fontSize: 38 },
-  catEmojiInactiva: { opacity: 0.45 },
-  catLabel: { fontSize: 13.5, color: '#1A202C', fontWeight: '500', marginTop: 6, textAlign: 'center' },
-  catLabelActive: { fontWeight: '800' },
+  // Hidratación
+  hidraCard: {
+    marginHorizontal: 16, marginTop: 4, backgroundColor: colores.marino, borderRadius: radios.enorme,
+    padding: 18, flexDirection: 'row', alignItems: 'center', gap: 16, overflow: 'hidden',
+  },
+  hidraDeco: { position: 'absolute', right: -40, bottom: -60, width: 180, height: 180, borderRadius: 90, backgroundColor: colores.marinoClaro },
+  hidraAnillo: {
+    width: 96, height: 96, borderRadius: 48, borderWidth: 10, borderColor: colores.celeste,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  hidraNum: { color: colores.blanco, fontSize: 22, fontWeight: '800' },
+  hidraUnidad: { color: colores.sobreMarino, fontSize: 11 },
+  hidraTitulo: { color: colores.blanco, fontSize: 18, fontWeight: '700', lineHeight: 23 },
+  hidraBarra: { height: 6, borderRadius: 3, backgroundColor: colores.marinoSuave, overflow: 'hidden' },
+  hidraBarraLlena: { height: 6, borderRadius: 3, backgroundColor: colores.celeste },
+  hidraBtn: { backgroundColor: colores.celeste, borderRadius: 14, minHeight: 44, paddingHorizontal: 14, justifyContent: 'center' },
+  hidraBtnText: { color: colores.marino, fontSize: 14, fontWeight: '800' },
+  hidraRacha: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 14, minHeight: 44, paddingHorizontal: 12, justifyContent: 'center' },
+  hidraRachaText: { color: colores.blanco, fontSize: 13, fontWeight: '700' },
 
-  // Búsqueda píldora
+  // Agua VIDA
+  aguaCard: {
+    marginHorizontal: 16, marginTop: 12, backgroundColor: colores.blanco, borderRadius: radios.grande,
+    borderWidth: 1, borderColor: colores.borde, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12,
+  },
+  aguaImg: { width: 60, height: 70, borderRadius: 16, backgroundColor: colores.celesteClaro },
+  aguaNombre: { fontSize: 15, fontWeight: '800', color: colores.marino },
+  aguaSub: { fontSize: 12, color: colores.textoSuave, marginBottom: 2 },
+  aguaPrecio: { fontSize: 18, fontWeight: '700', color: colores.marino },
+  aguaBtn: { backgroundColor: colores.marino, borderRadius: 14, minHeight: 46, paddingHorizontal: 16, justifyContent: 'center' },
+  aguaBtnText: { color: colores.blanco, fontSize: 14, fontWeight: '800' },
+
+  // Búsqueda
   searchWrap: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F3F4F6', borderRadius: 26,
-    marginHorizontal: 16, marginTop: 12, marginBottom: 4,
-    paddingHorizontal: 16, paddingVertical: Platform.OS === 'ios' ? 12 : 6,
+    backgroundColor: colores.blanco, borderRadius: radios.medio, borderWidth: 1, borderColor: colores.borde,
+    marginHorizontal: 16, marginTop: 14, paddingHorizontal: 14, minHeight: 50,
   },
-  searchInput: { flex: 1, fontSize: 15, color: '#1A202C' },
+  searchInput: { flex: 1, fontSize: 15, color: colores.marino, paddingVertical: Platform.OS === 'ios' ? 12 : 8 },
 
-  // Sección
-  seccionRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, marginTop: 16, marginBottom: 12,
+  // Categorías
+  catRow: { paddingHorizontal: 16, paddingTop: 12, gap: 8 },
+  chip: {
+    minHeight: 40, paddingHorizontal: 16, borderRadius: 999, justifyContent: 'center',
+    backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.borde,
   },
-  seccionTitulo: { fontSize: 22, fontWeight: '900', color: '#1A202C' },
-  seccionArrow: {
-    width: 38, height: 38, borderRadius: 19, backgroundColor: '#F3F4F6',
-    alignItems: 'center', justifyContent: 'center',
-  },
+  chipActivo: { backgroundColor: colores.marino, borderColor: colores.marino },
+  chipText: { fontSize: 14, fontWeight: '700', color: colores.marino },
+  chipTextActivo: { color: colores.blanco },
 
-  grid: { paddingBottom: 110 },
+  seccionTitulo: { fontSize: 20, fontWeight: '700', color: colores.marino, paddingHorizontal: 16, marginTop: 18, marginBottom: 12 },
+
+  grid: { paddingBottom: 120 },
   row: { paddingHorizontal: 16, justifyContent: 'space-between' },
 
-  // Tarjeta plana estilo Uber Eats (ancho FIJO: el último impar no se estira)
-  prodCard: { width: CARD_W, marginBottom: 20 },
-  prodImg: {
-    width: '100%', height: CARD_W * 0.72, borderRadius: 14,
-    resizeMode: 'cover', backgroundColor: '#F3F4F6',
+  // Producto
+  prodCard: {
+    width: CARD_W, marginBottom: 12, backgroundColor: colores.blanco, borderRadius: radios.grande,
+    borderWidth: 1, borderColor: colores.borde, padding: 10,
   },
-  addFab: {
-    position: 'absolute', right: 8, bottom: 8,
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: '#fff',
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2, shadowRadius: 5, elevation: 4,
-  },
-  qtyFab: {
-    position: 'absolute', right: 8, bottom: 8,
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#27AE60', borderRadius: 19, height: 38,
-    paddingHorizontal: 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25, shadowRadius: 5, elevation: 4,
-  },
-  qtyFabBtn: { width: 28, height: 38, alignItems: 'center', justifyContent: 'center' },
-  qtyFabNum: { color: '#fff', fontSize: 14, fontWeight: '800', minWidth: 18, textAlign: 'center' },
-  prodNombre: { fontSize: 15.5, fontWeight: '800', color: '#1A202C', marginTop: 9 },
-  prodMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
-  prodPrecio: { fontSize: 14.5, fontWeight: '800', color: '#27AE60' },
-  prodMetaSep: { color: '#9CA3AF', fontSize: 13 },
-  prodMeta: { color: '#6B7280', fontSize: 12.5, flexShrink: 1 },
+  prodImg: { width: '100%', height: CARD_W * 0.7, borderRadius: 14, resizeMode: 'cover', backgroundColor: colores.celesteClaro },
+  prodNombre: { fontSize: 14, fontWeight: '800', color: colores.marino, marginTop: 8, lineHeight: 18, minHeight: 36 },
+  prodTienda: { fontSize: 11, color: colores.textoSuave, marginTop: 2 },
+  prodPie: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 },
+  prodPrecio: { fontSize: 16, fontWeight: '700', color: colores.marino, fontFamily: 'Poppins_700Bold' },
+  prodPrecioSec: { fontSize: 11, color: colores.textoSuave },
+  addBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colores.marino, alignItems: 'center', justifyContent: 'center' },
+  qty: { flexDirection: 'row', alignItems: 'center', backgroundColor: colores.celesteClaro, borderRadius: 22, height: 44 },
+  qtyBtn: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
+  qtyNum: { color: colores.marino, fontSize: 14, fontWeight: '800', minWidth: 16, textAlign: 'center' },
 
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
-  errorText: { color: '#E53E3E', textAlign: 'center', fontSize: 14 },
-  emptyText: { color: '#A0AEC0', fontSize: 15, marginTop: 10 },
-  retryBtn: {
-    marginTop: 12, backgroundColor: '#1A6A9A', borderRadius: 10,
-    paddingHorizontal: 20, paddingVertical: 9,
-  },
-  retryBtnText: { color: '#fff', fontWeight: '700' },
+  errorText: { color: colores.error, textAlign: 'center', fontSize: 14, paddingHorizontal: 24 },
+  emptyText: { color: colores.textoSuave, fontSize: 15, marginTop: 10 },
+  retryBtn: { marginTop: 12, backgroundColor: colores.marino, borderRadius: 14, paddingHorizontal: 22, minHeight: 44, justifyContent: 'center' },
+  retryBtnText: { color: colores.blanco, fontWeight: '800' },
 
   // Selector de tienda
-  modalFondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-start' },
+  modalFondo: { flex: 1, backgroundColor: 'rgba(0,16,52,0.45)', justifyContent: 'flex-start' },
   modalTiendas: {
-    marginTop: Platform.OS === 'ios' ? 105 : 92,
-    marginHorizontal: 16,
-    backgroundColor: '#fff', borderRadius: 20, padding: 16,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2, shadowRadius: 24, elevation: 12,
+    marginTop: Platform.OS === 'ios' ? 112 : 98, marginHorizontal: 16,
+    backgroundColor: colores.blanco, borderRadius: radios.grande, padding: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 24, elevation: 12,
   },
-  modalTiendasTitulo: { fontSize: 16, fontWeight: '900', color: '#1A202C', marginBottom: 10 },
-  tiendaOpcion: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
-  },
-  tiendaOpcionIcon: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  tiendaOpcionText: { flex: 1, fontSize: 15, fontWeight: '600', color: '#1A202C' },
+  modalTiendasTitulo: { fontSize: 18, fontWeight: '700', color: colores.marino, marginBottom: 8 },
+  tiendaOpcion: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, borderBottomWidth: 1, borderBottomColor: colores.fondo },
+  tiendaOpcionIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: colores.celesteClaro, alignItems: 'center', justifyContent: 'center' },
+  tiendaOpcionText: { flex: 1, fontSize: 15, fontWeight: '700', color: colores.marino },
 
+  // Barra del carrito
   floatingCart: {
-    position: 'absolute', bottom: 20, left: 20, right: 20,
-    backgroundColor: '#27AE60', borderRadius: 16,
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 18, paddingVertical: 15, gap: 8,
-    shadowColor: '#27AE60', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
+    position: 'absolute', bottom: 16, left: 16, right: 16, minHeight: 62,
+    backgroundColor: colores.marino, borderRadius: 20,
+    flexDirection: 'row', alignItems: 'center', paddingLeft: 12, paddingRight: 18, gap: 10,
+    shadowColor: colores.marino, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
   },
   floatingCartBadge: {
-    backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 12,
-    minWidth: 24, height: 24, justifyContent: 'center', alignItems: 'center',
-    paddingHorizontal: 5,
+    backgroundColor: colores.celeste, borderRadius: 12, minWidth: 34, height: 34,
+    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6,
   },
-  floatingCartBadgeText: { color: '#fff', fontSize: 12, fontWeight: '900' },
-  floatingCartText: { flex: 1, color: '#fff', fontWeight: '800', fontSize: 15, marginLeft: 4 },
-  floatingCartPrice: { color: '#fff', fontWeight: '900', fontSize: 16 },
+  floatingCartBadgeText: { color: colores.marino, fontSize: 14, fontWeight: '800' },
+  floatingCartText: { flex: 1, color: colores.blanco, fontWeight: '800', fontSize: 16 },
+  floatingCartPrice: { color: colores.blanco, fontSize: 17, fontWeight: '700', fontFamily: 'Poppins_700Bold' },
+  floatingCartPriceSec: { color: colores.sobreMarino, fontSize: 11 },
 
   // Resultados de búsqueda por tienda
-  searchResultsWrap: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
-  searchResultsTitle: { fontSize: 13, fontWeight: '700', color: '#718096', marginBottom: 12 },
+  searchResultsWrap: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 },
+  searchResultsTitle: { fontSize: 13, fontWeight: '700', color: colores.textoSuave, marginBottom: 12 },
   tiendaResultCard: {
-    backgroundColor: '#fff', borderRadius: 16, marginBottom: 14,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 8, elevation: 2,
-    overflow: 'hidden',
+    backgroundColor: colores.blanco, borderRadius: radios.grande, marginBottom: 12,
+    borderWidth: 1, borderColor: colores.borde, overflow: 'hidden',
   },
-  tiendaResultHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10,
-  },
-  tiendaResultIconWrap: {
-    width: 34, height: 34, borderRadius: 10,
-    backgroundColor: '#EBF8FF', alignItems: 'center', justifyContent: 'center',
-  },
-  tiendaResultNombre: { flex: 1, fontSize: 15, fontWeight: '800', color: '#1A202C' },
-  tiendaResultBadge: {
-    backgroundColor: '#EBF8FF', borderRadius: 8,
-    paddingHorizontal: 8, paddingVertical: 3,
-  },
-  tiendaResultBadgeText: { fontSize: 11, fontWeight: '700', color: '#1A6A9A' },
+  tiendaResultHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10 },
+  tiendaResultIconWrap: { width: 36, height: 36, borderRadius: 12, backgroundColor: colores.celesteClaro, alignItems: 'center', justifyContent: 'center' },
+  tiendaResultNombre: { flex: 1, fontSize: 15, fontWeight: '800', color: colores.marino },
+  tiendaResultBadge: { backgroundColor: colores.celesteClaro, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4 },
+  tiendaResultBadgeText: { fontSize: 11, fontWeight: '800', color: colores.marino },
   tiendaResultProds: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
-  miniProdCard: { width: 100 },
-  miniProdImg: {
-    width: 100, height: 72, borderRadius: 10,
-    backgroundColor: '#F3F4F6', resizeMode: 'cover',
-  },
-  miniProdNombre: { fontSize: 12, fontWeight: '600', color: '#1A202C', marginTop: 5, lineHeight: 16 },
-  miniProdPrecio: { fontSize: 12, fontWeight: '800', color: '#27AE60', marginTop: 2 },
+  miniProdCard: { width: 104 },
+  miniProdImg: { width: 104, height: 76, borderRadius: 12, backgroundColor: colores.celesteClaro, resizeMode: 'cover' },
+  miniProdNombre: { fontSize: 12, fontWeight: '700', color: colores.marino, marginTop: 6, lineHeight: 16 },
+  miniProdPrecio: { fontSize: 13, fontWeight: '800', color: colores.marino, marginTop: 2 },
 });

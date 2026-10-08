@@ -1,21 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, RefreshControl,
-  ActivityIndicator, TouchableOpacity,
-} from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { Text } from '../../components/Texto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 
 const C = {
-  primary: '#1A6A9A',
-  green: '#27AE60',
+  primary: '#001034',
+  green: '#4DAD66',
   orange: '#E67E22',
-  purple: '#7B3FBE',
-  bg: '#F5F7FA',
+  purple: '#0C2A5E',
+  bg: '#F2F9FB',
   card: '#FFFFFF',
-  texto: '#1A202C',
-  texto2: '#718096',
+  texto: '#001034',
+  texto2: '#4B5B73',
 };
 
 // ---------- Periodos ----------
@@ -193,7 +191,7 @@ export default function GananciasScreen() {
               });
               return (
                 <View key={p.idPedido} style={[styles.movRow, i > 0 && styles.movDivider]}>
-                  <View style={[styles.movIcon, { backgroundColor: esEfectivo ? '#F0FFF4' : '#EBF8FF' }]}>
+                  <View style={[styles.movIcon, { backgroundColor: esEfectivo ? '#E3F3E7' : '#DDF2F8' }]}>
                     <Ionicons
                       name={esEfectivo ? 'cash-outline' : 'card-outline'}
                       size={18}
@@ -222,7 +220,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
     paddingHorizontal: 20, paddingVertical: 14,
-    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#EDF2F7',
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E6F1F5',
   },
   headerTitle: { fontSize: 20, fontWeight: '800', color: C.texto },
   scroll: { padding: 16, paddingBottom: 40, gap: 14 },
@@ -263,7 +261,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
   },
   movRow:     { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
-  movDivider: { borderTopWidth: 1, borderTopColor: '#F5F7FA' },
+  movDivider: { borderTopWidth: 1, borderTopColor: '#F2F9FB' },
   movIcon:    { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   movTitle:   { fontSize: 14, fontWeight: '600', color: C.texto },
   movFecha:   { fontSize: 11, color: C.texto2, marginTop: 1 },

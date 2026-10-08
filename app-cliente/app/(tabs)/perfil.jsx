@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
-import {
-  View, Text, TouchableOpacity, StyleSheet,
-  SafeAreaView, ScrollView, Image, ActivityIndicator, Alert,
-} from 'react-native';
+import { View, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, Image, ActivityIndicator, Alert } from 'react-native';
+import { Text } from '../../components/Texto';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -10,20 +8,21 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
+import { colores, fuentes, radios } from '../../constants/tema';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') ?? '';
 
-function MenuItem({ icon, label, sublabel, onPress, danger, right }) {
+function MenuItem({ icon, label, sublabel, onPress, danger, right, tono }) {
   return (
     <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
-      <View style={[styles.menuIcon, danger && styles.menuIconDanger]}>
-        <Ionicons name={icon} size={20} color={danger ? '#E53E3E' : '#1A6A9A'} />
+      <View style={[styles.menuIcon, tono && { backgroundColor: tono }, danger && styles.menuIconDanger]}>
+        <Ionicons name={icon} size={20} color={danger ? colores.error : colores.marino} />
       </View>
       <View style={styles.menuLabel}>
         <Text style={[styles.menuText, danger && styles.menuTextDanger]}>{label}</Text>
         {sublabel ? <Text style={styles.menuSublabel}>{sublabel}</Text> : null}
       </View>
-      {right ?? <Ionicons name="chevron-forward" size={16} color="#CBD5E0" />}
+      {right ?? <Ionicons name="chevron-forward" size={18} color={colores.textoTenue} />}
     </TouchableOpacity>
   );
 }
@@ -63,7 +62,7 @@ export default function PerfilScreen() {
         <StatusBar style="dark" />
         <View style={styles.guestWrap}>
           <View style={styles.guestIcon}>
-            <Ionicons name="person-outline" size={44} color="#1A6A9A" />
+            <Ionicons name="person-outline" size={44} color="#001034" />
           </View>
           <Text style={styles.guestTitle}>Aún no tienes sesión</Text>
           <Text style={styles.guestSub}>
@@ -155,7 +154,7 @@ export default function PerfilScreen() {
 
         {/* Header con foto */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleSubirFoto} disabled={subiendoFoto} activeOpacity={0.85}>
+          <TouchableOpacity onPress={handleSubirFoto} disabled={subiendoFoto} activeOpacity={0.85} accessibilityLabel="Cambiar foto">
             {fotoURL ? (
               <Image source={{ uri: API_BASE + fotoURL }} style={styles.foto} />
             ) : (
@@ -165,8 +164,8 @@ export default function PerfilScreen() {
             )}
             <View style={styles.cameraBtn}>
               {subiendoFoto
-                ? <ActivityIndicator size="small" color="#fff" />
-                : <Ionicons name="camera" size={13} color="#fff" />}
+                ? <ActivityIndicator size="small" color={colores.marino} />
+                : <Ionicons name="camera" size={14} color={colores.marino} />}
             </View>
           </TouchableOpacity>
           <View style={styles.headerInfo}>
@@ -175,111 +174,70 @@ export default function PerfilScreen() {
           </View>
         </View>
 
-        {/* Puntos VIDA — billetera */}
-        <TouchableOpacity
-          style={styles.puntosCard}
-          onPress={() => router.push('/mis-puntos')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.puntosIcon}>
-            <Ionicons name="star" size={24} color="#fff" />
-          </View>
-          <View style={styles.pedidosInfo}>
-            <Text style={styles.puntosTitle}>Mis Puntos VIDA</Text>
-            <Text style={styles.puntosSub}>
-              {puntos !== null ? `${puntos.toLocaleString('es-VE')} puntos disponibles` : 'Cargando…'}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#fff" />
-        </TouchableOpacity>
+        {/* Resumen: puntos, pedidos y racha de agua */}
+        <View style={styles.resumen}>
+          <TouchableOpacity style={styles.resumenItem} onPress={() => router.push('/mis-puntos')} activeOpacity={0.85}>
+            <Text style={[styles.resumenValor, { color: colores.verdeTexto }]}>{puntos !== null ? puntos.toLocaleString('es-VE') : '…'}</Text>
+            <Text style={styles.resumenLabel}>Puntos VIDA</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.resumenItem} onPress={() => router.push('/mis-pedidos')} activeOpacity={0.85}>
+            <Text style={styles.resumenValor}>{pedidosCount !== null ? pedidosCount : '…'}</Text>
+            <Text style={styles.resumenLabel}>Pedidos</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.resumenItem} onPress={() => router.push('/mi-consumo')} activeOpacity={0.85}>
+            <Text style={styles.resumenValor}>{agua?.activa ? `${agua.racha ?? 0} d` : '—'}</Text>
+            <Text style={styles.resumenLabel}>Racha de agua</Text>
+          </TouchableOpacity>
+        </View>
 
-        {/* Club Vida — membresía */}
-        <TouchableOpacity
-          style={[styles.aguaCard, { backgroundColor: club?.color || '#0A1E3F' }]}
-          onPress={() => router.push('/mi-club')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.aguaIcon}>
-            <Ionicons name="card" size={22} color="#fff" />
+        {/* Programas de VIDA */}
+        <View style={styles.section}>
+          <SectionTitle title="Mis programas" />
+          <View style={styles.card}>
+            <MenuItem
+              icon="receipt-outline"
+              label="Mis pedidos"
+              sublabel={pedidosCount !== null ? `${pedidosCount} pedido${pedidosCount !== 1 ? 's' : ''} realizados` : 'Historial y repetir pedidos'}
+              onPress={() => router.push('/mis-pedidos')}
+            />
+            <View style={styles.divider} />
+            <MenuItem
+              icon="gift-outline"
+              label="Puntos y premios"
+              sublabel={puntos !== null ? `${puntos.toLocaleString('es-VE')} puntos disponibles` : 'Tu billetera de puntos'}
+              tono={colores.verdeClaro}
+              onPress={() => router.push('/mis-puntos')}
+            />
+            <View style={styles.divider} />
+            <MenuItem
+              icon="water-outline"
+              label="Mi hidratación"
+              sublabel={agua?.activa ? `Hoy: ${agua.vasosHoy ?? 0}/${agua.meta ?? 8} vasos` : 'Activa tu programa de hidratación'}
+              onPress={() => router.push('/mi-consumo')}
+            />
+            <View style={styles.divider} />
+            <MenuItem
+              icon="card-outline"
+              label="Club Vida"
+              sublabel={club ? `Nivel ${club.nivel} · ${club.nombreNivel}` : 'Tu membresía digital'}
+              onPress={() => router.push('/mi-club')}
+            />
+            <View style={styles.divider} />
+            <MenuItem
+              icon="phone-portrait-outline"
+              label="Recargas y servicios"
+              sublabel="Movistar, Movilnet, Digitel, CANTV…"
+              onPress={() => router.push('/servicios')}
+            />
+            <View style={styles.divider} />
+            <MenuItem
+              icon="school-outline"
+              label="Academia VIDA"
+              sublabel="Aprende y gana puntos con cada curso"
+              onPress={() => router.push('/academia')}
+            />
           </View>
-          <View style={styles.pedidosInfo}>
-            <Text style={styles.aguaTitle}>Club Vida</Text>
-            <Text style={styles.aguaSub}>
-              {club ? `Nivel ${club.nivel} · ${club.nombreNivel}` : 'Tu membresía digital'}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#fff" />
-        </TouchableOpacity>
-
-        {/* Servicios y Recargas */}
-        <TouchableOpacity
-          style={[styles.aguaCard, { backgroundColor: '#7B3FBE' }]}
-          onPress={() => router.push('/servicios')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.aguaIcon}>
-            <Ionicons name="phone-portrait" size={22} color="#fff" />
-          </View>
-          <View style={styles.pedidosInfo}>
-            <Text style={styles.aguaTitle}>Servicios y Recargas</Text>
-            <Text style={styles.aguaSub}>Movistar, Movilnet, Digitel, CANTV…</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#fff" />
-        </TouchableOpacity>
-
-        {/* Academia VIDA */}
-        <TouchableOpacity
-          style={[styles.aguaCard, { backgroundColor: '#54C4E0' }]}
-          onPress={() => router.push('/academia')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.aguaIcon}>
-            <Ionicons name="school" size={22} color="#fff" />
-          </View>
-          <View style={styles.pedidosInfo}>
-            <Text style={styles.aguaTitle}>Academia VIDA</Text>
-            <Text style={styles.aguaSub}>Aprende y gana puntos con cada curso</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#fff" />
-        </TouchableOpacity>
-
-        {/* Mi Consumo Vida — hidratación */}
-        <TouchableOpacity
-          style={styles.aguaCard}
-          onPress={() => router.push('/mi-consumo')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.aguaIcon}>
-            <Ionicons name="water" size={22} color="#fff" />
-          </View>
-          <View style={styles.pedidosInfo}>
-            <Text style={styles.aguaTitle}>Mi Consumo Vida</Text>
-            <Text style={styles.aguaSub}>
-              {agua?.activa
-                ? `Hoy: ${agua.vasosHoy ?? 0}/${agua.meta ?? 8} vasos${agua.racha > 0 ? ` · 🔥 ${agua.racha}d` : ''}`
-                : 'Activa tu programa de hidratación'}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#fff" />
-        </TouchableOpacity>
-
-        {/* Pedidos — botón prominente */}
-        <TouchableOpacity
-          style={styles.pedidosCard}
-          onPress={() => router.push('/mis-pedidos')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.pedidosIcon}>
-            <Ionicons name="receipt-outline" size={26} color="#1A6A9A" />
-          </View>
-          <View style={styles.pedidosInfo}>
-            <Text style={styles.pedidosTitle}>Mis pedidos</Text>
-            {pedidosCount !== null
-              ? <Text style={styles.pedidosSub}>{pedidosCount} pedido{pedidosCount !== 1 ? 's' : ''} realizados</Text>
-              : <Text style={styles.pedidosSub}>Ver historial de pedidos</Text>}
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#1A6A9A" />
-        </TouchableOpacity>
+        </View>
 
         {/* Mi cuenta */}
         <View style={styles.section}>
@@ -355,100 +313,55 @@ export default function PerfilScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  container: { flex: 1, backgroundColor: colores.fondo },
   scroll: { paddingBottom: 40 },
 
   header: {
-    backgroundColor: '#1A6A9A',
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28,
-    gap: 16,
+    backgroundColor: colores.marino, flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 22, paddingBottom: 54, gap: 16,
   },
-  foto: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#EDF2F7' },
+  foto: { width: 74, height: 74, borderRadius: 37, backgroundColor: colores.celesteClaro, borderWidth: 3, borderColor: colores.blanco },
   avatar: {
-    width: 72, height: 72, borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)',
-    alignItems: 'center', justifyContent: 'center',
+    width: 74, height: 74, borderRadius: 37, backgroundColor: colores.celeste,
+    borderWidth: 3, borderColor: colores.blanco, alignItems: 'center', justifyContent: 'center',
   },
-  avatarText: { fontSize: 26, fontWeight: '800', color: '#fff' },
+  avatarText: { fontSize: 26, fontWeight: '800', color: colores.marino },
   cameraBtn: {
-    position: 'absolute', bottom: 0, right: 0,
-    width: 24, height: 24, borderRadius: 12,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: '#fff',
+    position: 'absolute', bottom: -2, right: -2, width: 28, height: 28, borderRadius: 14,
+    backgroundColor: colores.blanco, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: colores.marino,
   },
   headerInfo: { flex: 1 },
-  headerName: { fontSize: 19, fontWeight: '800', color: '#fff' },
-  headerEmail: { fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 3 },
+  headerName: { fontSize: 21, fontWeight: '800', color: colores.blanco },
+  headerEmail: { fontSize: 13, color: colores.sobreMarino, marginTop: 3 },
 
-  puntosCard: {
-    marginHorizontal: 16, marginTop: 20, marginBottom: 4,
-    backgroundColor: '#F59E0B',
-    borderRadius: 16, padding: 16,
-    flexDirection: 'row', alignItems: 'center', gap: 14,
+  resumen: { flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: -34 },
+  resumenItem: {
+    flex: 1, backgroundColor: colores.blanco, borderRadius: radios.medio, paddingVertical: 14, paddingHorizontal: 10,
+    alignItems: 'center', borderWidth: 1, borderColor: colores.borde,
   },
-  puntosIcon: {
-    width: 50, height: 50, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center',
-  },
-  puntosTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
-  puntosSub: { fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 2 },
-  aguaCard: {
-    marginHorizontal: 16, marginTop: 12, marginBottom: 4,
-    backgroundColor: '#2CA6C4',
-    borderRadius: 16, padding: 16,
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-  },
-  aguaIcon: {
-    width: 50, height: 50, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center',
-  },
-  aguaTitle: { fontSize: 15, fontWeight: '800', color: '#fff' },
-  aguaSub: { fontSize: 12, color: 'rgba(255,255,255,0.9)', marginTop: 2 },
-  pedidosCard: {
-    marginHorizontal: 16, marginTop: 12, marginBottom: 4,
-    backgroundColor: '#EBF8FF',
-    borderRadius: 16, padding: 16,
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    borderWidth: 1.5, borderColor: '#BEE3F8',
-  },
-  pedidosIcon: {
-    width: 50, height: 50, borderRadius: 14,
-    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
-  },
-  pedidosInfo: { flex: 1 },
-  pedidosTitle: { fontSize: 15, fontWeight: '800', color: '#1A6A9A' },
-  pedidosSub: { fontSize: 12, color: '#4299E1', marginTop: 2 },
+  resumenValor: { fontSize: 20, fontWeight: '800', color: colores.marino },
+  resumenLabel: { fontSize: 12, fontWeight: '700', color: colores.textoSuave, marginTop: 2, textAlign: 'center' },
 
-  section: { marginHorizontal: 16, marginTop: 16 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: '#A0AEC0', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 },
-  card: {
-    backgroundColor: '#fff', borderRadius: 16,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
-    overflow: 'hidden',
-  },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 14 },
-  menuIcon: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: '#EBF8FF', alignItems: 'center', justifyContent: 'center',
-  },
-  menuIconDanger: { backgroundColor: '#FFF5F5' },
-  menuLabel: { flex: 1 },
-  menuText: { fontSize: 15, fontWeight: '600', color: '#1A202C' },
-  menuTextDanger: { color: '#E53E3E' },
-  menuSublabel: { fontSize: 12, color: '#A0AEC0', marginTop: 1 },
-  divider: { height: 1, backgroundColor: '#F5F7FA', marginLeft: 66 },
+  section: { marginHorizontal: 16, marginTop: 18 },
+  sectionTitle: { fontSize: 12, fontWeight: '800', color: colores.textoSuave, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 },
+  card: { backgroundColor: colores.blanco, borderRadius: radios.grande, borderWidth: 1, borderColor: colores.borde, overflow: 'hidden' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, minHeight: 60, gap: 12 },
+  menuIcon: { width: 40, height: 40, borderRadius: 13, backgroundColor: colores.celesteClaro, alignItems: 'center', justifyContent: 'center' },
+  menuIconDanger: { backgroundColor: colores.errorClaro },
+  menuLabel: { flex: 1, paddingVertical: 10 },
+  menuText: { fontSize: 15, fontWeight: '700', color: colores.marino },
+  menuTextDanger: { color: colores.error },
+  menuSublabel: { fontSize: 12, color: colores.textoSuave, marginTop: 1 },
+  divider: { height: 1, backgroundColor: colores.fondo, marginLeft: 66 },
 
-  deleteBtn: { marginHorizontal: 16, marginTop: 24, alignItems: 'center' },
-  deleteBtnText: { fontSize: 13, color: '#A0AEC0', textDecorationLine: 'underline' },
+  deleteBtn: { marginHorizontal: 16, marginTop: 24, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
+  deleteBtnText: { fontSize: 13, color: colores.textoSuave, textDecorationLine: 'underline' },
 
   guestWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  guestIcon: { width: 88, height: 88, borderRadius: 44, backgroundColor: '#EBF8FF', alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
-  guestTitle: { fontSize: 20, fontWeight: '800', color: '#1A202C', marginBottom: 8 },
-  guestSub: { fontSize: 14, color: '#718096', textAlign: 'center', lineHeight: 21, marginBottom: 24 },
-  guestBtn: { backgroundColor: '#27AE60', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 28, width: '100%', alignItems: 'center' },
-  guestBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  guestIcon: { width: 88, height: 88, borderRadius: 44, backgroundColor: colores.celesteClaro, alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
+  guestTitle: { fontSize: 22, fontWeight: '800', color: colores.marino, marginBottom: 8 },
+  guestSub: { fontSize: 14, color: colores.textoSuave, textAlign: 'center', lineHeight: 21, marginBottom: 24 },
+  guestBtn: { backgroundColor: colores.marino, borderRadius: radios.medio, minHeight: 54, paddingHorizontal: 28, width: '100%', alignItems: 'center', justifyContent: 'center' },
+  guestBtnText: { color: colores.blanco, fontWeight: '800', fontSize: 15 },
 });

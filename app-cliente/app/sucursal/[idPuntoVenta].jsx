@@ -1,17 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  TextInput,
-  Image,
-  Alert,
-  ActivityIndicator,
-  SafeAreaView,
-  ScrollView,
-} from 'react-native';
+import { View, FlatList, TouchableOpacity, StyleSheet, Image, Alert, ActivityIndicator, SafeAreaView, ScrollView } from 'react-native';
+import { Text, TextInput } from '../../components/Texto';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
@@ -19,9 +8,10 @@ import useAuthStore from '../../store/authStore';
 import useCarritoStore from '../../store/carritoStore';
 import { absImg } from '../../constants/config';
 import Precio from '../../components/Precio';
+import { colores, fuentes, radios } from '../../constants/tema';
 import { useTasaReferencial, precioMonedas } from '../../services/moneda';
 
-const PLACEHOLDER = 'https://via.placeholder.com/150/EBF8FF/1A6A9A?text=VIDA';
+const PLACEHOLDER = 'https://via.placeholder.com/150/DDF2F8/001034?text=VIDA';
 
 export default function CatalogoScreen() {
   const tasa = useTasaReferencial();
@@ -165,16 +155,16 @@ export default function CatalogoScreen() {
 
         {cant === 0 ? (
           <TouchableOpacity style={styles.addBtn} onPress={() => handleAgregar(item)}>
-            <Ionicons name="add" size={20} color="#fff" />
+            <Ionicons name="add" size={22} color="#fff" />
           </TouchableOpacity>
         ) : (
           <View style={styles.qtyRow}>
             <TouchableOpacity style={styles.qtyBtn} onPress={() => quitarItem(idProd)}>
-              <Ionicons name="remove" size={16} color="#1A6A9A" />
+              <Ionicons name="remove" size={16} color="#001034" />
             </TouchableOpacity>
             <Text style={styles.qtyText}>{cant}</Text>
             <TouchableOpacity style={styles.qtyBtn} onPress={() => handleAgregar(item)}>
-              <Ionicons name="add" size={16} color="#1A6A9A" />
+              <Ionicons name="add" size={16} color="#001034" />
             </TouchableOpacity>
           </View>
         )}
@@ -188,25 +178,25 @@ export default function CatalogoScreen() {
         options={{
           headerShown: true,
           headerTitle: nombreSucursal || 'Productos',
-          headerStyle: { backgroundColor: '#1A6A9A' },
+          headerStyle: { backgroundColor: '#001034' },
           headerTintColor: '#fff',
-          headerTitleStyle: { fontWeight: '700' },
+          headerTitleStyle: { fontFamily: fuentes.titulo },
         }}
       />
 
       {/* Search */}
       <View style={styles.searchWrap}>
-        <Ionicons name="search" size={18} color="#A0AEC0" style={styles.searchIcon} />
+        <Ionicons name="search" size={18} color="#8C9BB0" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Buscar productos..."
-          placeholderTextColor="#A0AEC0"
+          placeholderTextColor="#8C9BB0"
           value={search}
           onChangeText={setSearch}
         />
         {search ? (
           <TouchableOpacity onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={18} color="#A0AEC0" />
+            <Ionicons name="close-circle" size={18} color="#8C9BB0" />
           </TouchableOpacity>
         ) : null}
       </View>
@@ -242,7 +232,7 @@ export default function CatalogoScreen() {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#1A6A9A" />
+          <ActivityIndicator size="large" color="#001034" />
         </View>
       ) : error ? (
         <View style={styles.center}>
@@ -287,113 +277,42 @@ export default function CatalogoScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  container: { flex: 1, backgroundColor: colores.fondo },
   searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    margin: 12,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colores.blanco, margin: 16, marginBottom: 10,
+    borderRadius: radios.medio, borderWidth: 1, borderColor: colores.borde, paddingHorizontal: 14, minHeight: 50,
   },
   searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 14, color: '#1A202C' },
-  catList: { paddingHorizontal: 12, paddingBottom: 10, gap: 8, flexDirection: 'row' },
-  catChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: '#EDF2F7',
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    marginRight: 8,
-  },
-  catChipActive: { backgroundColor: '#EBF8FF', borderColor: '#1A6A9A' },
-  catChipText: { color: '#718096', fontSize: 13, fontWeight: '600' },
-  catChipTextActive: { color: '#1A6A9A' },
-  grid: { paddingHorizontal: 8, paddingBottom: 100 },
-  row: { justifyContent: 'space-between', paddingHorizontal: 4 },
-  prodCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    margin: 6,
-    flex: 1,
-    padding: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  prodImg: { width: '100%', height: 110, borderRadius: 10, resizeMode: 'cover', marginBottom: 8 },
-  plusBadge: { position: 'absolute', top: 6, right: 6, backgroundColor: '#F59E0B', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  plusBadgeText: { color: '#fff', fontSize: 10, fontWeight: '900' },
-  prodNombre: { fontSize: 13, fontWeight: '600', color: '#1A202C', textAlign: 'center', marginBottom: 4 },
-  prodPrecio: { fontSize: 15, fontWeight: '800', color: '#1A6A9A', marginBottom: 10 },
-  addBtn: {
-    backgroundColor: '#27AE60',
-    borderRadius: 10,
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  qtyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#1A6A9A',
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  qtyBtn: { padding: 7, backgroundColor: '#EBF8FF' },
-  qtyText: { paddingHorizontal: 12, fontSize: 14, fontWeight: '700', color: '#1A202C' },
+  searchInput: { flex: 1, fontSize: 15, color: colores.marino, paddingVertical: 10 },
+  catList: { paddingHorizontal: 16, paddingBottom: 10, gap: 8, flexDirection: 'row' },
+  catChip: { minHeight: 40, paddingHorizontal: 16, borderRadius: 999, justifyContent: 'center', backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.borde },
+  catChipActive: { backgroundColor: colores.marino, borderColor: colores.marino },
+  catChipText: { color: colores.marino, fontSize: 14, fontWeight: '700' },
+  catChipTextActive: { color: colores.blanco },
+  grid: { paddingHorizontal: 10, paddingBottom: 110 },
+  row: { justifyContent: 'space-between', paddingHorizontal: 0 },
+  prodCard: { backgroundColor: colores.blanco, borderRadius: radios.grande, margin: 6, flex: 1, padding: 10, borderWidth: 1, borderColor: colores.borde },
+  prodImg: { width: '100%', height: 110, borderRadius: 14, resizeMode: 'cover', marginBottom: 8, backgroundColor: colores.celesteClaro },
+  plusBadge: { position: 'absolute', top: 14, right: 14, backgroundColor: colores.marino, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
+  plusBadgeText: { color: colores.blanco, fontSize: 10, fontWeight: '800' },
+  prodNombre: { fontSize: 14, fontWeight: '800', color: colores.marino, marginBottom: 4, minHeight: 36 },
+  prodPrecio: { fontSize: 16, fontWeight: '700', color: colores.marino, fontFamily: fuentes.titulo },
+  addBtn: { backgroundColor: colores.marino, borderRadius: 22, width: 44, height: 44, justifyContent: 'center', alignItems: 'center', alignSelf: 'flex-end', marginTop: 6 },
+  qtyRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 6, backgroundColor: colores.celesteClaro, borderRadius: 22, height: 44 },
+  qtyBtn: { width: 34, height: 44, alignItems: 'center', justifyContent: 'center' },
+  qtyText: { paddingHorizontal: 6, fontSize: 14, fontWeight: '800', color: colores.marino },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
-  errorText: { color: '#E53E3E', textAlign: 'center', fontSize: 14 },
-  emptyText: { color: '#A0AEC0', fontSize: 15 },
-  retryBtn: {
-    marginTop: 12,
-    backgroundColor: '#1A6A9A',
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 9,
-  },
-  retryBtnText: { color: '#fff', fontWeight: '700' },
+  errorText: { color: colores.error, textAlign: 'center', fontSize: 14 },
+  emptyText: { color: colores.textoSuave, fontSize: 15 },
+  retryBtn: { marginTop: 12, backgroundColor: colores.marino, borderRadius: 14, paddingHorizontal: 22, minHeight: 44, justifyContent: 'center' },
+  retryBtnText: { color: colores.blanco, fontWeight: '800' },
   floatingCart: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    backgroundColor: '#1A6A9A',
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    shadowColor: '#1A6A9A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 6,
-    gap: 8,
+    position: 'absolute', bottom: 16, left: 16, right: 16, minHeight: 62, backgroundColor: colores.marino, borderRadius: 20,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 10,
+    shadowColor: colores.marino, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
   },
-  floatingCartBadge: {
-    backgroundColor: '#27AE60',
-    borderRadius: 12,
-    minWidth: 22,
-    height: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  floatingCartBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  floatingCartText: { flex: 1, color: '#fff', fontWeight: '700', fontSize: 15, marginLeft: 4 },
-  floatingCartPrice: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  floatingCartBadge: { backgroundColor: colores.celeste, borderRadius: 12, minWidth: 30, height: 30, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 },
+  floatingCartBadgeText: { color: colores.marino, fontSize: 13, fontWeight: '800' },
+  floatingCartText: { flex: 1, color: colores.blanco, fontWeight: '800', fontSize: 16 },
+  floatingCartPrice: { color: colores.blanco, fontSize: 17, fontFamily: fuentes.titulo },
 });
