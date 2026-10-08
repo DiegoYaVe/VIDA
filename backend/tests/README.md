@@ -40,6 +40,31 @@ transacción que siempre se revierte**: no dejan rastro, cosa necesaria porque
 las facturas son inmutables (trigger) y no se podrían borrar. Pendiente:
 cupones y vencimiento de puntos.
 
+## Punta a punta contra QA (`tests/e2e/`)
+
+`puntaAPunta.e2e.mjs` recorre con los controladores reales (sin HTTP):
+
+- **Pago Móvil en bolívares:** comprobante subido antes → pedido → aprobación
+  en el panel → repartidor acepta → entrega (stock, comisión, puntos) → factura.
+- **Efectivo en dólares con IGTF** (tienda marcada temporalmente como
+  contribuyente especial): pedido sin el IGTF rechazado → pedido → cobro en la
+  app del repartidor → entrega → liquidación → factura con IGTF.
+- **Venta offline rechazada** que pasa a revisión y al reintentar se registra;
+  el reenvío del POS se reconoce como duplicado.
+
+```bash
+RUN_E2E_QA=1 npm run test:e2e
+```
+
+**Escribe en la BD de `backend/.env`** y por eso solo corre con la bandera y si
+el nombre de la BD contiene "qa". Usa un repartidor de prueba propio, emite las
+facturas en una transacción revertida y bloquea los push a Expo dentro del
+proceso. Al terminar borra lo que creó y restaura stock, puntos y la tienda;
+quedan solo las filas de auditoría (inmutables, unas 5 por corrida). Requiere
+en QA la tienda 3 con stock del producto 1, el cliente 1 y una tasa vigente.
+QA a veces rechaza la primera conexión: si falla por "Failed to connect",
+vuelve a correrla.
+
 ### Monedas y tasa externa
 
 `moneda.test.js` y `tasaBcv.test.js`: conversión, fecha efectiva Caracas,
