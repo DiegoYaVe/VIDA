@@ -52,3 +52,16 @@ test('cobro seguro: snapshot dañado no tumba la lista, pide confirmar con la ti
  const c=cobroSeguro({metodoPago:'EFECTIVO',totalUSD:3.4,pagoMonedaJSON:'{'});
  assert.equal(c.CobrarEfectivo,true);assert.equal(c.Monto,null);assert.ok(c.Error);
 });
+
+test('IGTF: el repartidor cobra venta + IGTF y rinde ambos; la comisión es sobre la venta', () => {
+  const pago = { Moneda: 'USD', TotalOriginal: 10.3, TotalUSD: 10, IGTFUSD: 0.3, IGTFBaseUSD: 10, TotalCobradoUSD: 10.3 };
+  const cobro = cobroAlCliente({ metodoPago: 'EFECTIVO', totalUSD: 10, pagoMonedaJSON: JSON.stringify(pago) });
+  assert.equal(cobro.Monto, 10.3); assert.equal(cobro.IGTFUSD, 0.3); assert.equal(cobro.TotalUSD, 10);
+  const liq = calcularCobroEfectivoRepartidor({ totalUSD: 10, comisionUSD: 1, pagoMonedaJSON: pago });
+  assert.equal(liq.EfectivoCobradoOriginal, 10.3); assert.equal(liq.MontoARendirUSD, 9.3); assert.equal(liq.IGTFUSD, 0.3);
+});
+
+test('sin IGTF el cobro en dólares sigue siendo el total', () => {
+  const cobro = cobroAlCliente({ metodoPago: 'EFECTIVO', totalUSD: 10, pagoMonedaJSON: { Moneda: 'USD', TotalOriginal: 10 } });
+  assert.equal(cobro.Monto, 10); assert.equal(cobro.IGTFUSD, undefined);
+});

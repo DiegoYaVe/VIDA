@@ -116,8 +116,8 @@ export default function CarritoScreen() {
   useEffect(()=>{
     if(!token||!['PAGO_MOVIL','EFECTIVO'].includes(metodoPago)) return;
     setErrorTasa('');
-    api.get('/delivery/cliente/cotizacion-moneda').then(r=>setCotizacion(r.data)).catch(e=>{setCotizacion(null);setErrorTasa(e.response?.data?.error||'No se pudo consultar la tasa');});
-  },[token,metodoPago]);
+    api.get('/delivery/cliente/cotizacion-moneda',{params:{idPuntoVenta}}).then(r=>setCotizacion(r.data)).catch(e=>{setCotizacion(null);setErrorTasa(e.response?.data?.error||'No se pudo consultar la tasa');});
+  },[token,metodoPago,idPuntoVenta]);
 
   useEffect(()=>{
     if (cotizacion?.Modo === 'VES') setMonedaEfectivo('VES');
@@ -126,6 +126,10 @@ export default function CarritoScreen() {
 
   const tasaVES=Number(cotizacion?.tasa?.VESporUSD)||0;
   const totalVES=Math.round(totalFinal*tasaVES*100)/100;
+  // IGTF 3%: solo efectivo en dólares en tiendas contribuyentes especiales
+  const igtfUSD = metodoPago === 'EFECTIVO' && monedaEfectivo === 'USD' && cotizacion?.AplicaIGTF
+    ? Math.round((totalFinal * 3 / 100 + Number.EPSILON) * 100) / 100 : 0;
+  const totalCobroUSD = Math.round((totalFinal + igtfUSD + Number.EPSILON) * 100) / 100;
   // Equivalente de referencia para el resumen (la tasa real se congela al pedir)
   const tasaRef = useTasaReferencial();
   const tcRef = tasaVES || Number(tasaRef?.tasa?.VESporUSD) || 0;
@@ -239,7 +243,7 @@ export default function CarritoScreen() {
         ...(['PAGO_MOVIL','EFECTIVO'].includes(metodoPago)?{PagoMoneda:{
           idTasa:cotizacion.tasa.idTasa,
           Moneda:metodoPago==='PAGO_MOVIL'?'VES':monedaEfectivo,
-          MontoOriginal:(metodoPago==='PAGO_MOVIL'||monedaEfectivo==='VES')?totalVES:totalFinal,
+          MontoOriginal:(metodoPago==='PAGO_MOVIL'||monedaEfectivo==='VES')?totalVES:totalCobroUSD,
         }}:{}),
       };
       const res = await api.post('/delivery/pedido', payload);
@@ -422,7 +426,13 @@ export default function CarritoScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-              <PMRow label="Total a entregar" valor={monedaEfectivo === 'VES' ? `${totalVES.toFixed(2)} VES` : `$${totalFinal.toFixed(2)} USD`} destacado />
+              {igtfUSD > 0 && <PMRow label="IGTF 3% (pago en divisas)" valor={`$${igtfUSD.toFixed(2)} USD`} />}
+              <PMRow label="Total a entregar" valor={monedaEfectivo === 'VES' ? `${totalVES.toFixed(2)} VES` : `$${totalCobroUSD.toFixed(2)} USD`} destacado />
+              {cotizacion.AplicaIGTF && cotizacion.Modo === 'AMBAS' ? (
+                <Text style={styles.igtfNota}>
+                  {monedaEfectivo === 'USD' ? 'Pagando en dólares se suma el IGTF (3%). En bolívares no aplica.' : 'En bolívares no pagas IGTF.'}
+                </Text>
+              ) : null}
               {monedaEfectivo === 'VES' && <PMRow label="Tasa" valor={`1 USD = ${tasaVES} VES · ${String(cotizacion.tasa.FechaValor).slice(0,10)}`} />}
             </View>
           )}
@@ -564,10 +574,16 @@ export default function CarritoScreen() {
               <Text style={[styles.summaryValue, { color: colores.verdeTexto }]}>−${descuentoCupon.toFixed(2)}</Text>
             </View>
           )}
+          {igtfUSD > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>IGTF 3% (pago en dólares)</Text>
+              <Text style={styles.summaryValue}>+${igtfUSD.toFixed(2)}</Text>
+            </View>
+          )}
           <View style={[styles.summaryRow, styles.summaryTotal]}>
             <Text style={styles.summaryTotalLabel}>Total a pagar</Text>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.summaryTotalValue}>${totalFinal.toFixed(2)}</Text>
+              <Text style={styles.summaryTotalValue}>${totalCobroUSD.toFixed(2)}</Text>
               {totalVESRef > 0 ? <Text style={styles.summaryTotalSec}>≈ {fmtVES(totalVESRef)} · tasa BCV</Text> : null}
             </View>
           </View>
@@ -583,7 +599,7 @@ export default function CarritoScreen() {
           ) : (
             <>
               <Text style={styles.pedidoBtnText}>Hacer pedido</Text>
-              <Text style={styles.pedidoBtnPrecio}>${totalFinal.toFixed(2)}</Text>
+              <Text style={styles.pedidoBtnPrecio}>${totalCobroUSD.toFixed(2)}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -618,6 +634,7 @@ const pmStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  igtfNota: { fontSize: 12, color: colores.textoSuave, marginTop: 6, lineHeight: 17 },
   container: { flex: 1, backgroundColor: colores.fondo },
   pmCard: {
     backgroundColor: colores.fondo, borderWidth: 1, borderColor: colores.borde,

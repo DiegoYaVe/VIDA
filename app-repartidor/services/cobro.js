@@ -28,7 +28,9 @@ export function infoCobro(pedido) {
       : '';
     return { cobrar: true, titulo: 'Efectivo en bolívares', monto: fmtVES(c.Monto), detalle: `Equivale a ${fmtUSD(c.TotalUSD)}${tasa}` };
   }
-  return { cobrar: true, titulo: 'Efectivo en dólares', monto: fmtUSD(c.Monto), detalle: null };
+  // Tienda contribuyente especial: el cobro en dólares incluye el IGTF (3%)
+  const detalle = c.IGTFUSD > 0 ? `Pedido ${fmtUSD(c.TotalUSD)} + IGTF ${fmtUSD(c.IGTFUSD)}` : null;
+  return { cobrar: true, titulo: 'Efectivo en dólares', monto: fmtUSD(c.Monto), detalle };
 }
 
 // Efectivo que el repartidor cobró en un pedido entregado (historial), en su

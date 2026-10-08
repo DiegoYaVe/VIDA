@@ -33,9 +33,12 @@ export function calcularCobroEfectivoRepartidor({ totalUSD, comisionUSD, pagoMon
     };
   }
   if (moneda !== 'USD') throw Object.assign(new Error(`Moneda de efectivo no soportada: ${moneda}`), { statusCode: 422 });
-  const rendir = r2(Math.max(0, total - comision));
+  // Con IGTF el cliente paga venta + impuesto; el repartidor rinde ambos
+  const cobrado = r2(pago?.TotalCobradoUSD ?? total);
+  const rendir = r2(Math.max(0, cobrado - comision));
   return {
-    Version: 1, Moneda: 'USD', EfectivoCobradoOriginal: r2(total),
+    Version: 1, Moneda: 'USD', EfectivoCobradoOriginal: cobrado,
+    ...(pago?.IGTFUSD ? { IGTFUSD: r2(pago.IGTFUSD) } : {}),
     ComisionUSD: comision, ComisionOriginal: r2(comision),
     MontoARendirOriginal: rendir, MontoARendirUSD: rendir,
     TasaVESporUSD: pago?.TasaVESporUSD ?? null, idTasa: pago?.idTasa ?? null,
@@ -61,7 +64,9 @@ export function cobroAlCliente({ metodoPago, totalUSD, pagoMonedaJSON }) {
     }
     return { CobrarEfectivo: true, Metodo: metodo, Moneda: 'VES', Monto: r2(monto), TotalUSD: total, TasaVESporUSD: Number.isFinite(tasa) && tasa > 0 ? tasa : null };
   }
-  return { CobrarEfectivo: true, Metodo: metodo, Moneda: 'USD', Monto: total, TotalUSD: total, TasaVESporUSD: null };
+  const igtf = r2(pago?.IGTFUSD || 0);
+  return { CobrarEfectivo: true, Metodo: metodo, Moneda: 'USD', Monto: r2(total + igtf), TotalUSD: total, TasaVESporUSD: null,
+    ...(igtf ? { IGTFUSD: igtf } : {}) };
 }
 
 // Versión para listas y avisos: un snapshot dañado no debe tumbar la lista

@@ -308,12 +308,23 @@ export async function listarProductosApp(request, reply) {
 // CREAR PEDIDO DESDE APP
 // POST /delivery/pedido
 // ══════════════════════════════════════════════════════════════════════════
+// IGTF: 3% sobre lo pagado en divisas, solo en tiendas contribuyentes especiales
+async function tiendaCobraIGTF(db,idBranch,idCuenta,idPuntoVenta) {
+  const pv=Number(idPuntoVenta);
+  if(!Number.isSafeInteger(pv)||pv<=0) return false;
+  const r=await new sql.Request(db).input('b',sql.BigInt,idBranch).input('c',sql.BigInt,idCuenta).input('p',sql.BigInt,pv)
+    .query(`SELECT ContribuyenteEspecial FROM VIDA_CUENTA_PUNTOS_VENTA WHERE idBranch=@b AND idCuenta=@c AND idPuntoVenta=@p`);
+  return !!r.recordset[0]?.ContribuyenteEspecial;
+}
+
 export async function cotizacionMonedaCliente(request, reply) {
   const {idBranch,idCuenta,idCliente}=request.cliente;
   try {
     const cfg=await prepararMoneda(await getPool(),{idBranch,idCuenta,idUsuario:idCliente});
     if(!cfg.tasa||!cfg.tasa.Vigente) return reply.code(422).send({error:'No hay una tasa vigente para cobrar'});
-    return reply.send({Modo:cfg.Modo,tasa:{idTasa:cfg.tasa.idTasa,VESporUSD:cfg.tasa.VESporUSD,FechaValor:cfg.tasa.FechaValor,Fuente:cfg.tasa.Fuente}});
+    // Con la tienda del carrito se informa si cobra IGTF (contribuyente especial)
+    const AplicaIGTF=await tiendaCobraIGTF(await getPool(),idBranch,idCuenta,request.query?.idPuntoVenta);
+    return reply.send({Modo:cfg.Modo,AplicaIGTF,tasa:{idTasa:cfg.tasa.idTasa,VESporUSD:cfg.tasa.VESporUSD,FechaValor:cfg.tasa.FechaValor,Fuente:cfg.tasa.Fuente}});
   } catch(err) {
     request.log.error(err);return reply.code(err.statusCode||503).send({error:err.message||'No se pudo consultar la tasa'});
   }
@@ -463,7 +474,12 @@ export async function crearPedidoApp(request, reply) {
         const tr=await new sql.Request(transaction).input('b',sql.BigInt,idBranch).input('c',sql.BigInt,idCuenta).input('id',sql.BigInt,PagoMoneda.idTasa)
           .query(`SELECT TOP 1 * FROM VIDA_TASAS_CAMBIO WHERE idBranch=@b AND idCuenta=@c AND idTasa=@id`);
         if(!tr.recordset[0]||String(cfg.tasa?.idTasa)!==String(PagoMoneda.idTasa)) throw Object.assign(new Error('La tasa cambió. Actualiza el pago.'),{statusCode:409});
-        pagoSnapshot=calcularPagoDelivery(TotalUSD,{...PagoMoneda,Metodo:MetodoPago},tr.recordset[0],cfg.Modo);
+        // La regla del IGTF se lee al guardar: si cambió, el monto no cuadra (409)
+        const igtf=await tiendaCobraIGTF(transaction,idBranch,idCuenta,idPuntoVenta);
+        pagoSnapshot=calcularPagoDelivery(TotalUSD,{...PagoMoneda,Metodo:MetodoPago},tr.recordset[0],cfg.Modo,igtf);
+      } else if(MetodoPago==='EFECTIVO'&&await tiendaCobraIGTF(transaction,idBranch,idCuenta,idPuntoVenta)) {
+        // Sin moneda elegida no se sabe si corresponde IGTF: app desactualizada
+        throw Object.assign(new Error('Actualiza la app para pagar en efectivo en esta tienda.'),{statusCode:409});
       }
 
       idPedido = await nextIdTx(transaction, 'VIDA_PEDIDOS', 'idPedido', idBranch, idCuenta);

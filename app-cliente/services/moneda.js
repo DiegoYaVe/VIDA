@@ -56,6 +56,14 @@ export function precioEnLinea(usd, ref) {
 
 // Lo que el cliente pagó o pagará en bolívares según el snapshot del pedido
 // (la tasa de ese momento, no la de hoy). null si el pedido es en USD.
+// IGTF cobrado en el pedido (efectivo en dólares en tiendas contribuyentes
+// especiales); 0 si no aplica.
+export function igtfDelPedido(pedido) {
+  let p = pedido?.PagoMonedaJSON;
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch { return 0; } }
+  return Number(p?.IGTFUSD) > 0 ? Number(p.IGTFUSD) : 0;
+}
+
 export function montoVESDelPedido(pedido) {
   let p = pedido?.PagoMonedaJSON;
   if (typeof p === 'string') { try { p = JSON.parse(p); } catch { return null; } }

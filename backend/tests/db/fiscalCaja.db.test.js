@@ -66,6 +66,27 @@ test('IGTF en la factura solo si el POS lo cobró', opts, () => enTransaccionRev
   assert.equal(Number(b.IGTFVES), 12);
 }));
 
+test('IGTF en delivery: efectivo en dólares lo cobra y la factura lo lleva', opts, () => enTransaccionRevertida(async (tx) => {
+  const { calcularPagoDelivery } = await import('../../src/services/pagoDelivery.service.js');
+  const tasa = { idTasa: 1, VESporUSD: 40, FechaValor: '2026-10-07', Fuente: 'prueba' };
+  const v = await fixtureVenta(tx, { especial: true, tasa: 40 });
+  const pago = calcularPagoDelivery(v.total, { Moneda: 'USD', MontoOriginal: 10.3, Metodo: 'EFECTIVO' }, tasa, 'AMBAS', true);
+  await new sql.Request(tx).input('pago', sql.NVarChar(sql.MAX), JSON.stringify(pago))
+    .query(`UPDATE VIDA_PEDIDOS SET Canal='APP', PagoMonedaJSON=@pago WHERE idBranch=1 AND idCuenta=1 AND idPedido=${v.idPedido}`);
+  const f = await F.obtenerFactura(tx, actor, (await F.emitirFactura(tx, actor, { idPedido: v.idPedido, receptor })).idFactura);
+  assert.equal(Number(f.TotalVES), 400);
+  assert.equal(Number(f.IGTFBaseVES), 400);
+  assert.equal(Number(f.IGTFVES), 12);
+  assert.equal(Number(f.TotalPagarVES), 412);
+  // Pagando en bolívares la misma tienda no cobra IGTF
+  const w = await fixtureVenta(tx, { especial: true, tasa: 40 });
+  const ves = calcularPagoDelivery(w.total, { Moneda: 'VES', MontoOriginal: 400, Metodo: 'PAGO_MOVIL' }, tasa, 'AMBAS', true);
+  await new sql.Request(tx).input('pago', sql.NVarChar(sql.MAX), JSON.stringify(ves))
+    .query(`UPDATE VIDA_PEDIDOS SET Canal='APP', MetodoPago='PAGO_MOVIL', PagoMonedaJSON=@pago WHERE idBranch=1 AND idCuenta=1 AND idPedido=${w.idPedido}`);
+  const g = await F.obtenerFactura(tx, actor, (await F.emitirFactura(tx, actor, { idPedido: w.idPedido, receptor })).idFactura);
+  assert.equal(Number(g.IGTFVES), 0);
+}));
+
 test('devolución: stock, reembolso en caja por moneda y nota de crédito', opts, () => enTransaccionRevertida(async (tx) => {
   const v = await fixtureVenta(tx, { cantidad: 2, precio: 5, tasa: 40 });
   const items = [{ idDetalle: 1, Cantidad: 1 }];

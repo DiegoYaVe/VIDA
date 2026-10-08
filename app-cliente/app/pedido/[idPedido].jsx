@@ -9,7 +9,7 @@ import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import { WS_URL } from '../../constants/config';
 import MapaTracking from '../../components/MapaTracking';
-import { montoVESDelPedido, fmtUSD } from '../../services/moneda';
+import { montoVESDelPedido, igtfDelPedido, fmtUSD } from '../../services/moneda';
 import { colores, fuentes, radios } from '../../constants/tema';
 
 const PASOS = [
@@ -559,10 +559,16 @@ export default function SeguimientoScreen() {
                 </View>
               ))}
               <View style={styles.divider} />
+              {igtfDelPedido(estado) > 0 && (
+                <View style={styles.orderItem}>
+                  <Text style={styles.orderItemName}>IGTF 3% (pago en dólares)</Text>
+                  <Text style={styles.orderItemPrice}>{fmtUSD(igtfDelPedido(estado))}</Text>
+                </View>
+              )}
               <View style={styles.orderTotal}>
                 <Text style={styles.orderTotalLabel}>Total</Text>
                 <Text style={styles.orderTotalValue}>
-                  {(estado.TotalUSD ?? estado.total) != null ? fmtUSD(estado.TotalUSD ?? estado.total) : '—'}
+                  {(estado.TotalUSD ?? estado.total) != null ? fmtUSD(Number(estado.TotalUSD ?? estado.total) + igtfDelPedido(estado)) : '—'}
                   {montoVESDelPedido(estado) ? `  ·  ${montoVESDelPedido(estado)}` : ''}
                 </Text>
               </View>

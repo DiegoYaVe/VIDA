@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import api from '../services/api';
 import { colores, fuentes, radios } from '../constants/tema';
 import useAuthStore from '../store/authStore';
-import { montoVESDelPedido } from '../services/moneda';
+import { montoVESDelPedido, igtfDelPedido } from '../services/moneda';
 
 const STATUS_LABELS = {
   BUSCANDO_REPARTIDOR: 'Buscando repartidor',
@@ -83,7 +83,7 @@ export default function MisPedidosScreen() {
             const rawStatus = item.Status ?? item.EstadoPedido ?? item.estado ?? 'BUSCANDO_REPARTIDOR';
             const label = STATUS_LABELS[rawStatus] ?? rawStatus;
             const color = STATUS_COLORS[rawStatus] ?? '#4B5B73';
-            const total = item.TotalUSD ?? item.total;
+            const total = (item.TotalUSD ?? item.total) != null ? Number(item.TotalUSD ?? item.total) + igtfDelPedido(item) : null;
             const isActive = rawStatus !== 'ENTREGADO' && rawStatus !== 'CANCELADO';
             return (
               <TouchableOpacity
