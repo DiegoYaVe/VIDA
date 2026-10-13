@@ -38,6 +38,7 @@ import { auditRoutes }      from './routes/audit.routes.js';
 import { marcarInactivos }  from './controllers/heartbeat.controller.js';
 import { expirarPedidosVencidos } from './controllers/pedidos.controller.js';
 import { expirarPuntosInactivosJob } from './controllers/premios.controller.js';
+import { emitirCuponesInactividad } from './services/cuponesAutomaticos.service.js';
 import { procesarBusquedas } from './services/dispatch.service.js';
 import { vencerPagosMovilesImpagos } from './services/pagoMovil.service.js';
 import { wsRoutes } from './ws/ws.routes.js';
@@ -250,6 +251,14 @@ setInterval(async () => {
     await vencerPagosMovilesImpagos(fastify.log);
   } catch {}
 }, 60_000);
+
+// Job: cupón por inactividad (CuponInactivo* en VIDA_CONFIG_DELIVERY; nace
+// apagado). Una vez al día, y una primera corrida 10 min después de arrancar.
+const correrCuponesInactividad = async () => {
+  try { await emitirCuponesInactividad(await getPool(), fastify.log); } catch (e) { fastify.log.error(e, 'job cupones por inactividad'); }
+};
+setInterval(correrCuponesInactividad, 24 * 60 * 60 * 1000);
+setTimeout(correrCuponesInactividad, 10 * 60 * 1000);
 
 // Job: vencimiento de puntos por inactividad. Corre una vez al día (el
 // vencimiento es por meses, no necesita más). Configurable con

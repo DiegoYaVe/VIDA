@@ -510,6 +510,8 @@ const GRUPOS_CFG = {
   'Tiempos de búsqueda': ['TiempoAvisoClienteMin', 'TiempoCancelacionBusquedaMin', 'ExtensionBusquedaMin', 'TiempoEsperaRepartidorMin'],
   'Comisión': ['ComisionRepartidorPct'],
   'Datos de Pago Móvil': ['PagoMovilBanco', 'PagoMovilCedula', 'PagoMovilTelefono', 'PagoMovilTitular'],
+  'Cupón por inactividad ("te extrañamos")': ['CuponInactivoActivo', 'CuponInactivoDias', 'CuponInactivoPct', 'CuponInactivoMaxUSD',
+    'CuponInactivoMinCompraUSD', 'CuponInactivoVigenciaDias', 'CuponInactivoRepetirDias'],
 };
 
 function TabConfig({ puedeEscribir }) {
@@ -604,7 +606,10 @@ const TABS = [
 export default function Logistica() {
   const { usuario } = useAuthStore();
   const puedeEscribir = ROLES_ESCRITURA.includes(usuario?.TipoUsuario);
-  const [tab, setTab] = useState('repartidores');
+  const [tab, setTab] = useState(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    return TABS.some(x => x.id === t) ? t : 'repartidores';
+  });
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50">

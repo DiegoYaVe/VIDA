@@ -2,6 +2,7 @@
 // App del repartidor: registro, login, disponibilidad, ubicación, aceptar/actualizar/liberar pedidos, evidencia, historial y perfil.
 // (Separado de delivery.controller.js, que reexporta todo.)
 import { getPool, sql } from '../../db/sqlserver.js';
+import { instanteCorte, olvidarSesion } from '../../services/sesiones.service.js';
 import { conIdUnico } from '../../db/idUnico.js';
 import { broadcast } from '../../ws/ws.manager.js';
 import { enviarPush } from '../../services/push.service.js';
@@ -1310,10 +1311,13 @@ export async function cambiarPasswordRepartidor(request, reply) {
       if (!actual) return reply.code(400).send({ error: 'Escribe tu contraseña actual' });
       if (!(await bcrypt.compare(String(actual), rep.Contrasena))) return reply.code(401).send({ error: 'La contraseña actual no es correcta' });
     }
-    await ids().input('Contrasena', sql.NVarChar(200), await bcrypt.hash(nueva, 10))
-      .query(`UPDATE VIDA_REPARTIDORES SET Contrasena=@Contrasena
+    await ids().input('Contrasena', sql.NVarChar(200), await bcrypt.hash(nueva, 10)).input('desde', sql.DateTime2, instanteCorte())
+      .query(`UPDATE VIDA_REPARTIDORES SET Contrasena=@Contrasena, SesionesDesde=@desde
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
-    return reply.send({ ok: true });
+    // Se cierran las sesiones de otros teléfonos; este recibe un token nuevo
+    olvidarSesion('REPARTIDOR', request.repartidor);
+    const token = request.server.jwt.sign({ idBranch, idCuenta, idRepartidor, rol: 'REPARTIDOR' }, { expiresIn: '180d' });
+    return reply.send({ ok: true, token });
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'No se pudo cambiar la contraseña' });

@@ -125,6 +125,9 @@ export default function LoginScreen() {
                 <Campo etiqueta="Teléfono" placeholder="0414-0000000" keyboardType="phone-pad" value={telefono} onChangeText={setTelefono} />
                 <Campo etiqueta="Contraseña" placeholder="••••••••" secureTextEntry value={password} onChangeText={setPassword}
                   returnKeyType="done" onSubmitEditing={handleLogin} />
+                <TouchableOpacity style={styles.olvide} onPress={() => router.push({ pathname: '/recuperar', params: { telefono: telefono.trim() } })}>
+                  <Text style={styles.olvideTexto}>¿Olvidaste tu contraseña?</Text>
+                </TouchableOpacity>
               </>
             ) : (
               <>
@@ -183,6 +186,8 @@ const styles = StyleSheet.create({
   campo: { gap: 6 },
   etiqueta: { fontSize: 14, fontWeight: '800', color: colores.marino },
   input: { height: 52, borderRadius: 16, borderWidth: 1.5, borderColor: colores.bordeFuerte, backgroundColor: colores.blanco, paddingHorizontal: 16, fontSize: 16, color: colores.marino },
+  olvide: { alignSelf: 'flex-end', minHeight: 36, justifyContent: 'center', marginTop: -6 },
+  olvideTexto: { fontWeight: '800', fontSize: 14, color: colores.marino, textDecorationLine: 'underline' },
   error: { backgroundColor: colores.errorClaro, color: colores.error, borderRadius: 12, padding: 10, fontSize: 14, fontWeight: '700' },
   aviso: { backgroundColor: colores.verdeClaro, color: colores.verdeTexto, borderRadius: 12, padding: 10, fontSize: 14, fontWeight: '700' },
   entrar: { height: 56, borderRadius: 18, backgroundColor: colores.marino, alignItems: 'center', justifyContent: 'center' },

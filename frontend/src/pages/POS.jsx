@@ -11,7 +11,7 @@ import SyncStatusBar from '../components/SyncStatusBar.jsx';
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, CreditCard,
   Check, X,
-  Barcode, ChevronDown, Printer, RotateCcw, Tag, AlertTriangle,
+  Barcode, ChevronDown, Printer, RotateCcw, Tag, Lock, RefreshCw,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -133,7 +133,8 @@ export default function POS() {
   const [catalogoVersion, setCatalogoVersion] = useState(0);
   const [puntos, setPuntos]             = useState([]);
   const [idPuntoVenta, setIdPuntoVenta] = useState(usuario?.idPuntoVenta || '');
-  const [turnoAbierto, setTurnoAbierto] = useState(null); // null=cargando, true/false
+  const [turnoAbierto, setTurnoAbierto] = useState(null); // null=cargando o sin red, true/false
+  const [revisarTurno, setRevisarTurno] = useState(0);
 
   // Carrito
   const [carrito, setCarrito] = useState([]);
@@ -164,7 +165,16 @@ export default function POS() {
       .then(r => { if (vivo) setTurnoAbierto(!!r.data?.turno); })
       .catch(() => { if (vivo) setTurnoAbierto(null); });
     return () => { vivo = false; };
-  }, [idPuntoVenta, ticket]); // re-checa tras cada venta
+  }, [idPuntoVenta, ticket, revisarTurno]); // re-checa tras cada venta
+
+  // Sin turno abierto el punto de venta queda bloqueado hasta abrir la caja.
+  // Sin red (turnoAbierto=null) no se bloquea: la venta offline debe seguir.
+  const bloqueado = turnoAbierto === false;
+  useEffect(() => {
+    if (bloqueado) document.activeElement?.blur?.(); // que el lector de códigos no escriba detrás
+    else searchRef.current?.focus();
+  }, [bloqueado]);
+  const nombreTienda = puntos.find(p => String(p.idPuntoVenta) === String(idPuntoVenta))?.NomComercial || 'esta tienda';
 
   // Carga de productos con debounce. Con el buscador vacío muestra el catálogo
   // de la tienda por defecto (para poder ver los productos sin escribir); al
@@ -338,10 +348,7 @@ export default function POS() {
   async function confirmarVenta(pagoInfo) {
     if (!idPuntoVenta) { setError('Selecciona una tienda'); return; }
     if (carrito.length === 0) return;
-    if (turnoAbierto === false &&
-        !window.confirm('No hay un turno de caja abierto para esta tienda. La venta no entrará en ningún arqueo/cierre. ¿Vender de todos modos?')) {
-      return;
-    }
+    if (turnoAbierto === false) { setError('Abre la caja antes de cobrar'); return; }
     setProcesando(true); setError('');
 
     const clienteUUID = genUUID();
@@ -407,10 +414,44 @@ export default function POS() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-vida-gray">
+    <div className="relative flex h-[calc(100vh-4rem)] overflow-hidden bg-vida-gray">
+
+      {/* ── Caja cerrada: bloquea todo el punto de venta ── */}
+      {bloqueado && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center p-6 bg-slate-900/50 backdrop-blur-[3px]"
+          role="alertdialog" aria-modal="true" aria-labelledby="caja-cerrada-titulo">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-8 text-center">
+            <div className="mx-auto w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center mb-5">
+              <Lock size={38} className="text-amber-600" />
+            </div>
+            <h2 id="caja-cerrada-titulo" className="text-2xl font-black text-gray-900">La caja está cerrada</h2>
+            <p className="text-gray-500 mt-3 leading-relaxed">
+              Para vender en <b className="text-gray-700">{nombreTienda}</b> primero abre el turno de caja con el
+              efectivo inicial. Así cada venta entra al arqueo y al cierre del día.
+            </p>
+            <Link to="/caja" autoFocus
+              className="mt-7 w-full inline-flex items-center justify-center gap-2 bg-vida-blue text-white font-bold text-lg rounded-2xl py-4 hover:opacity-90 transition-opacity">
+              <Lock size={20} /> Abrir caja
+            </Link>
+            <button onClick={() => setRevisarTurno(n => n + 1)}
+              className="mt-3 w-full inline-flex items-center justify-center gap-2 text-sm font-semibold text-gray-500 hover:text-vida-blue py-2">
+              <RefreshCw size={14} /> Ya la abrí, volver a revisar
+            </button>
+            {puntos.length > 1 && (
+              <div className="mt-4 pt-4 border-t border-gray-100 text-left">
+                <label className="block text-xs font-bold text-gray-500 mb-1">¿Otra tienda?</label>
+                <select value={idPuntoVenta} onChange={e => setIdPuntoVenta(e.target.value)}
+                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-700">
+                  {puntos.map(p => <option key={p.idPuntoVenta} value={p.idPuntoVenta}>{p.NomComercial || p.Nombre}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Panel izquierdo: búsqueda y catálogo ── */}
-      <div className="flex-1 flex flex-col p-4 gap-3 overflow-hidden">
+      <div className="flex-1 flex flex-col p-4 gap-3 overflow-hidden" inert={bloqueado ? '' : undefined} aria-hidden={bloqueado || undefined}>
 
         {/* Barra superior */}
         <div className="flex gap-2 items-center">
@@ -447,14 +488,6 @@ export default function POS() {
             />
           </div>
         </div>
-
-        {turnoAbierto === false && (
-          <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2.5 rounded-xl text-sm flex items-center gap-2">
-            <AlertTriangle size={16} className="shrink-0" />
-            <span className="flex-1">No hay <b>turno de caja abierto</b> para esta tienda. Las ventas quedarán fuera del arqueo hasta que abras la caja.</span>
-            <Link to="/caja" className="font-semibold underline whitespace-nowrap">Abrir caja</Link>
-          </div>
-        )}
 
         {error && (
           <div className="bg-red-50 text-red-600 px-4 py-2.5 rounded-xl text-sm flex items-center gap-2">
@@ -503,7 +536,7 @@ export default function POS() {
       </div>
 
       {/* ── Panel derecho: carrito y cobro ── */}
-      <div className="w-96 bg-white flex flex-col shadow-xl">
+      <div className="w-96 bg-white flex flex-col shadow-xl" inert={bloqueado ? '' : undefined} aria-hidden={bloqueado || undefined}>
 
         {/* Header carrito */}
         <div className="flex items-center justify-between px-5 py-4 border-b">

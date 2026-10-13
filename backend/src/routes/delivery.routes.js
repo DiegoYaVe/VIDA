@@ -2,6 +2,7 @@
 import { authenticate, requireRole } from '../middlewares/auth.js';
 import { authenticateCliente, authenticateRepartidor } from '../middlewares/authDelivery.js';
 import { trazadoHandler } from '../services/trazadoRuta.service.js';
+import { solicitarCodigoRecuperacion, restablecerPasswordCliente } from '../controllers/delivery/recuperacion.js';
 import {
   // Cliente
   registrarCliente,
@@ -10,6 +11,7 @@ import {
   googleLoginNativo,
   actualizarFcmCliente,
   actualizarPerfilCliente,
+  obtenerPerfilCliente,
   subirFotoCliente,
   cambiarPasswordCliente,
   eliminarCuentaCliente,
@@ -78,6 +80,11 @@ export async function deliveryRoutes(fastify) {
   // ── Registro / login de cliente ───────────────────────────────────────
   fastify.post('/delivery/cliente/registro',        registrarCliente);
   fastify.post('/delivery/cliente/login',           loginCliente);
+  // Recuperar contraseña con código por correo (límite por IP contra abuso)
+  fastify.post('/delivery/cliente/password/codigo',
+    { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } }, solicitarCodigoRecuperacion);
+  fastify.post('/delivery/cliente/password/restablecer',
+    { config: { rateLimit: { max: 10, timeWindow: '10 minutes' } } }, restablecerPasswordCliente);
   fastify.get('/delivery/cliente/confirmar-email',  confirmarEmailCliente);
   fastify.post('/delivery/cliente/google/native',   googleLoginNativo);
 
@@ -154,6 +161,9 @@ export async function deliveryRoutes(fastify) {
     { preHandler: [authenticateCliente] },
     calificarRepartidor);
 
+  fastify.get('/delivery/cliente/perfil',
+    { preHandler: [authenticateCliente] },
+    obtenerPerfilCliente);
   fastify.put('/delivery/cliente/perfil',
     { preHandler: [authenticateCliente] },
     actualizarPerfilCliente);

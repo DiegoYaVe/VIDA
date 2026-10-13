@@ -14,7 +14,7 @@ const ES_EXPO_GO = Constants.executionEnvironment === 'storeClient';
 let Notifications = null;
 let handlerConfigurado = false;
 
-async function getNotifications() {
+export async function getNotifications() {
   if (ES_EXPO_GO) return null;
   if (!Notifications) {
     Notifications = await import('expo-notifications');

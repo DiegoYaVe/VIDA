@@ -491,7 +491,7 @@ export async function crearPedidoApp(request, reply) {
           .query(`SELECT TOP 1 * FROM VIDA_CUPONES WITH (UPDLOCK,HOLDLOCK)
                   WHERE idBranch=@b AND idCuenta=@c AND Codigo=@codigo`);
         cupon=cr.recordset[0];
-        const ev=evaluarCupon(cupon,{subtotal:TotalUSD,canal:'DELIVERY',items:itemsNorm.map(i=>({idProducto:i.idProducto,idCategoria:prodPorId.get(String(i.idProducto)).idCategoria,subtotal:i.Subtotal}))});
+        const ev=evaluarCupon(cupon,{subtotal:TotalUSD,canal:'DELIVERY',idCliente,items:itemsNorm.map(i=>({idProducto:i.idProducto,idCategoria:prodPorId.get(String(i.idProducto)).idCategoria,subtotal:i.Subtotal}))});
         if(!ev.ok) throw Object.assign(new Error(ev.motivo),{statusCode:422});
         const usos=await new sql.Request(transaction).input('b',sql.BigInt,idBranch).input('c',sql.BigInt,idCuenta)
           .input('cupon',sql.BigInt,cupon.idCupon).input('cliente',sql.BigInt,idCliente)

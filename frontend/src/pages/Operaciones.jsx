@@ -1,10 +1,10 @@
 // src/pages/Operaciones.jsx
 // Panel admin unificado (ops): completar recargas de servicios, entregar/cancelar
-// canjes de premios y expirar puntos por inactividad.
+// canjes de premios, eventos del Club y expirar puntos por inactividad.
 import { useState, useEffect, useCallback } from 'react';
 import {
   ClipboardList, Phone, Gift, Star, RefreshCw, Check, X, Clock, Hourglass,
-  GraduationCap, Plus, Pencil, Trash2, Save,
+  GraduationCap, Plus, Pencil, Trash2, Save, CalendarDays,
 } from 'lucide-react';
 import api from '../services/api.js';
 import { useToast } from '../components/Toast.jsx';
@@ -17,12 +17,13 @@ const TABS = [
   { id: 'premios',  label: 'Canjes de premios', icon: Gift },
   { id: 'puntos',   label: 'Vencimiento de puntos', icon: Hourglass },
   { id: 'cat-premios',    label: 'Catálogo premios',   icon: Gift },
+  { id: 'eventos',        label: 'Eventos del Club',   icon: CalendarDays },
   { id: 'cat-cursos',     label: 'Cursos (Academia)',  icon: GraduationCap },
   { id: 'cat-operadoras', label: 'Operadoras',         icon: Phone },
 ];
 
 // ── CRUD genérico de catálogo ────────────────────────────────────────────
-function CrudCatalogo({ baseUrl, idKey, fields, columns, titulo }) {
+function CrudCatalogo({ baseUrl, idKey, fields, columns, titulo, acciones = [] }) {
   const toast = useToast();
   const [items, setItems] = useState([]);
   const [cargando, setCarg] = useState(true);
@@ -74,6 +75,9 @@ function CrudCatalogo({ baseUrl, idKey, fields, columns, titulo }) {
               <tr key={it[idKey]} className={it.Status === 'INACTIVO' || it.Activo === false ? 'opacity-50' : ''}>
                 {columns.map(c => <td key={c.key} className="px-4 py-3 text-gray-700">{c.render ? c.render(it) : String(it[c.key] ?? '—')}</td>)}
                 <td className="px-4 py-3 text-right whitespace-nowrap">
+                  {acciones.map(a => (
+                    <button key={a.label} onClick={() => a.onClick(it)} className="text-xs font-semibold text-vida-blue hover:underline px-2">{a.label}</button>
+                  ))}
                   <button onClick={() => abrir(it)} className="text-gray-400 hover:text-vida-blue p-1"><Pencil size={15} /></button>
                   <button onClick={() => eliminar(it)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={15} /></button>
                 </td>
@@ -135,15 +139,86 @@ const CAT_PREMIOS = {
     { key: 'Stock', label: 'Stock (-1 = ilimitado)', type: 'number', hint: 'Usa -1 para stock ilimitado' },
     { key: 'ImagenUrl', label: 'URL de imagen' },
     { key: 'Orden', label: 'Orden', type: 'number' },
+    { key: 'NivelMinimo', label: 'Exclusivo desde el nivel del Club', type: 'number', hint: 'Vacío o 1 = para todos. 2 o más = solo miembros de ese nivel en adelante' },
     { key: 'Status', label: 'Estado', type: 'select', options: ESTADO_SELECT, def: 'ACTIVO' },
   ],
   columns: [
     { key: 'Nombre', label: 'Nombre' },
     { key: 'CostoPuntos', label: 'Puntos' },
     { key: 'Stock', label: 'Stock', render: it => it.Stock === -1 ? '∞' : it.Stock },
+    { key: 'NivelMinimo', label: 'Nivel', render: it => (it.NivelMinimo > 1 ? `Desde ${it.NivelMinimo}` : 'Todos') },
     { key: 'Status', label: 'Estado' },
   ],
 };
+const fmtEvento = (local) => (local ? local.replace('T', ' ') : '—');
+const CAT_EVENTOS = {
+  baseUrl: '/delivery/admin/club/eventos', idKey: 'idEvento', titulo: 'Evento del Club',
+  fields: [
+    { key: 'Titulo', label: 'Título', required: true },
+    { key: 'Descripcion', label: 'Descripción', type: 'textarea' },
+    { key: 'Lugar', label: 'Lugar', hint: 'Dirección o tienda' },
+    { key: 'FechaInicioLocal', label: 'Fecha y hora (Caracas)', type: 'datetime-local', required: true },
+    { key: 'Cupo', label: 'Cupo', type: 'number', hint: 'Vacío = sin límite' },
+    { key: 'NivelMinimo', label: 'Nivel mínimo del Club', type: 'number', def: 1, hint: '1 = todos los miembros' },
+    { key: 'ImagenUrl', label: 'URL de imagen' },
+    { key: 'Status', label: 'Estado', type: 'select', options: ESTADO_SELECT, def: 'ACTIVO' },
+  ],
+  columns: [
+    { key: 'Titulo', label: 'Evento' },
+    { key: 'FechaInicioLocal', label: 'Fecha', render: it => fmtEvento(it.FechaInicioLocal) },
+    { key: 'Inscritos', label: 'Asisten', render: it => `${it.Inscritos}${it.Cupo != null ? ` / ${it.Cupo}` : ''}` },
+    { key: 'NivelMinimo', label: 'Nivel', render: it => (it.NivelMinimo > 1 ? `Desde ${it.NivelMinimo}` : 'Todos') },
+    { key: 'Status', label: 'Estado' },
+  ],
+};
+
+// Lista de quienes confirmaron un evento
+function ModalAsistentes({ evento, onClose }) {
+  const [lista, setLista] = useState(null);
+  useEffect(() => {
+    api.get(`/delivery/admin/club/eventos/${evento.idEvento}/asistentes`).then(r => setLista(r.data || [])).catch(() => setLista([]));
+  }, [evento.idEvento]);
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b">
+          <div>
+            <h3 className="font-bold text-gray-800">{evento.Titulo}</h3>
+            <p className="text-xs text-gray-400">{fmtEvento(evento.FechaInicioLocal)} · {lista ? lista.length : '…'} confirmado(s)</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+        <div className="overflow-y-auto p-5">
+          {lista === null ? <p className="text-sm text-gray-400">Cargando…</p> : lista.length === 0 ? <p className="text-sm text-gray-400">Nadie ha confirmado todavía.</p> : (
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-gray-50">
+                {lista.map((a, i) => (
+                  <tr key={a.idCliente}>
+                    <td className="py-2 pr-2 text-gray-400">{i + 1}</td>
+                    <td className="py-2 font-semibold text-gray-800">{a.Cliente}</td>
+                    <td className="py-2 text-gray-500">{a.Telefono || a.Email || ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TabEventos() {
+  const [ver, setVer] = useState(null);
+  return (
+    <>
+      <p className="text-sm text-gray-500 mb-3">Los miembros los ven en la app (Puntos → Eventos del Club) y confirman su asistencia. Un evento con nivel mínimo solo lo confirman quienes llegaron a ese nivel.</p>
+      <CrudCatalogo {...CAT_EVENTOS} acciones={[{ label: 'Asistentes', onClick: setVer }]} />
+      {ver && <ModalAsistentes evento={ver} onClose={() => setVer(null)} />}
+    </>
+  );
+}
+
 const CAT_CURSOS = {
   baseUrl: '/academia/admin/cursos', idKey: 'idCurso', titulo: 'Curso',
   fields: [
@@ -320,7 +395,7 @@ export default function Operaciones() {
     <div className="flex-1 overflow-y-auto bg-gray-50">
       <div className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10">
         <h1 className="text-xl font-black text-gray-900 flex items-center gap-2"><ClipboardList size={22} className="text-vida-blue" /> Operaciones</h1>
-        <p className="text-xs text-gray-400 mt-0.5">Recargas, canjes de premios y vencimiento de puntos</p>
+        <p className="text-xs text-gray-400 mt-0.5">Recargas, canjes de premios, eventos del Club y vencimiento de puntos</p>
       </div>
       <div className="bg-white border-b border-gray-100 px-6">
         <div className="flex gap-1">
@@ -341,6 +416,7 @@ export default function Operaciones() {
         {tab === 'premios'  && <TabPremios />}
         {tab === 'puntos'   && <TabPuntos />}
         {tab === 'cat-premios'    && <CrudCatalogo {...CAT_PREMIOS} />}
+        {tab === 'eventos'        && <TabEventos />}
         {tab === 'cat-cursos'     && <CrudCatalogo {...CAT_CURSOS} />}
         {tab === 'cat-operadoras' && <CrudCatalogo {...CAT_OPERADORAS} />}
       </div>

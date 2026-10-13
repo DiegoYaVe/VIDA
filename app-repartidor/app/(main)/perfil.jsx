@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import useAuthStore from '../../store/authStore';
 import api from '../../services/api';
 import { API_URL } from '../../constants/config';
@@ -105,7 +106,12 @@ export default function Perfil() {
     if (clave.nueva.length < 6) return Alert.alert('Contraseña muy corta', 'La nueva contraseña debe tener al menos 6 caracteres.');
     setGuardando(true);
     try {
-      await api.put('/delivery/repartidor/password', clave);
+      const r = await api.put('/delivery/repartidor/password', clave);
+      // Las sesiones de otros teléfonos se cerraron; esta sigue con el token nuevo
+      if (r.data?.token) {
+        await AsyncStorage.setItem('vida_repartidor_token', r.data.token);
+        useAuthStore.setState({ token: r.data.token });
+      }
       setClave({ actual: '', nueva: '' });
       setCambiandoClave(false);
       Alert.alert('Listo', 'Tu contraseña fue actualizada.');

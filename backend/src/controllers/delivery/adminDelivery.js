@@ -2,6 +2,7 @@
 // Administración del delivery: repartidores, liquidación, configuración, rutas, mapa en vivo y clientes.
 // (Separado de delivery.controller.js, que reexporta todo.)
 import { getPool, sql } from '../../db/sqlserver.js';
+import { instanteCorte, olvidarSesion } from '../../services/sesiones.service.js';
 import { conIdUnico } from '../../db/idUnico.js';
 import { registrarAuditoria } from '../../services/audit.service.js';
 import { recalcularRuta } from '../../services/rutas.service.js';
@@ -141,11 +142,14 @@ export async function resetContrasenaRepartidor(request, reply) {
       .input('idCuenta',     sql.BigInt,        idCuenta)
       .input('idRepartidor', sql.BigInt,        id)
       .input('Contrasena',   sql.NVarChar(200), hash)
-      .query(`UPDATE VIDA_REPARTIDORES SET Contrasena=@Contrasena
+      .input('desde',        sql.DateTime2,     instanteCorte())
+      .query(`UPDATE VIDA_REPARTIDORES SET Contrasena=@Contrasena, SesionesDesde=@desde
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
 
     if (r.rowsAffected[0] === 0)
       return reply.code(404).send({ error: 'Repartidor no encontrado' });
+    // El repartidor vuelve a entrar con la contraseña nueva en todos sus teléfonos
+    olvidarSesion('REPARTIDOR', { idBranch, idCuenta, idRepartidor: id });
 
     return reply.send({ message: 'Contraseña actualizada' });
   } catch (err) {

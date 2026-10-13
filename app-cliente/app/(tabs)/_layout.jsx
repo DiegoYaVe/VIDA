@@ -8,13 +8,17 @@ export default function TabsLayout() {
   const token = useAuthStore((s) => s.token);
   const router = useRouter();
 
-  // Push: registrar token con sesión activa; al tocar una notificación de
-  // status, abrir el seguimiento del pedido
+  // Push: registrar token con sesión activa; al tocar una notificación se abre
+  // el seguimiento del pedido, el carrito (cupón) o Mi hidratación (recordatorio)
   useEffect(() => {
     if (token) registrarPushToken();
     return escucharTapsNotificacion((data) => {
       if (data?.tipo === 'status_pedido' && data?.idPedido) {
         router.push(`/pedido/${data.idPedido}`);
+      } else if (data?.tipo === 'CUPON') {
+        router.push('/(tabs)/carrito');       // ahí aparece en "Tus cupones"
+      } else if (data?.url === '/mi-consumo') {
+        router.push('/mi-consumo');           // recordatorio de agua
       }
     });
   }, [token]);

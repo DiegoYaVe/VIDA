@@ -6,8 +6,24 @@ import {
   X, Check, AlertCircle, Loader2, Eye, EyeOff
 } from 'lucide-react';
 import api from '../services/api.js';
+import { useAuthStore } from '../store/authStore.js';
 
 // ── Badges de rol ──────────────────────────────────────────────────────────
+// Opciones de rol: el panel solo muestra las que el backend dice que el
+// usuario conectado puede asignar (rangos estrictamente inferiores al suyo)
+const OPCIONES_ROL = {
+  SUPER_ADMIN:  'Super Admin — toda la cuenta',
+  ADMIN_PAIS:   'Admin País — todos los estados',
+  ADMIN_ESTADO: 'Admin Estado — todas las sucursales',
+  ADMIN:        'Admin Sucursal — su sucursal',
+  SUPERVISOR:   'Supervisor',
+  CAJERO:       'Cajero',
+};
+const ROLES_ADMIN = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN'];
+// Nadie se gestiona a sí mismo aquí (sus datos van en Mi perfil)
+const puedeGestionar = (asignables, u, yo) => String(u.idUsuario) !== String(yo?.idUsuario)
+  && asignables.includes(u.TipoUsuario === 'CASHIER' ? 'CAJERO' : u.TipoUsuario);
+
 const ROL_CONFIG = {
   SUPER_ADMIN:  { label: 'Super Admin',    bg: 'bg-purple-100',  text: 'text-purple-700'  },
   ADMIN_PAIS:   { label: 'Admin País',     bg: 'bg-blue-100',    text: 'text-blue-700'    },
@@ -48,8 +64,14 @@ function Avatar({ nombre, apellidos, imagen }) {
 }
 
 // ── Modal Crear/Editar ─────────────────────────────────────────────────────
-function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
+function ModalUsuario({ usuario, pantallas, sucursales, asignables, yo, onClose, onSaved }) {
   const esEdicion = !!usuario;
+  // Ámbito fijo de quien crea: el ADMIN de tienda solo en su tienda; el Admin
+  // País solo en su país (el backend lo valida igual)
+  const tiendaFija = yo?.TipoUsuario === 'ADMIN' ? String(yo.idPuntoVenta ?? '') : '';
+  const paisFijo = yo?.TipoUsuario === 'ADMIN_PAIS' && yo.idPais ? String(yo.idPais) : '';
+  const rolInicial = usuario?.TipoUsuario === 'CASHIER' ? 'CAJERO'
+    : usuario?.TipoUsuario || (asignables.includes('CAJERO') ? 'CAJERO' : asignables[asignables.length - 1] || '');
   const [form, setForm] = useState({
     Nombre:          usuario?.Nombre          || '',
     Apellidos:       usuario?.Apellidos       || '',
@@ -57,11 +79,11 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
     Correo:          usuario?.Correo          || '',
     Telefono:        usuario?.Telefono        || '',
     Cve:             usuario?.Cve             || '',
-    TipoUsuario:     usuario?.TipoUsuario     || 'CAJERO',
+    TipoUsuario:     rolInicial,
     Puesto:          usuario?.Puesto          || '',
     FechaNacimiento: usuario?.FechaNacimiento?.split('T')[0] || '',
-    idPuntoVenta:    usuario?.idPuntoVenta    || '',
-    idPais:          usuario?.idPais          || '',
+    idPuntoVenta:    usuario?.idPuntoVenta    || tiendaFija,
+    idPais:          usuario?.idPais          || paisFijo,
     idEstado:        usuario?.idEstado        || '',
     pantallas:       [],
   });
@@ -73,8 +95,11 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
 
   useEffect(() => {
     api.get('/paises')
-      .then(r => setPaises(r.data))
+      .then(r => setPaises(paisFijo ? (r.data || []).filter(p => String(p.idPais) === paisFijo) : r.data))
       .catch(err => console.error('[Usuarios] Error cargando países:', err?.response?.status, err?.response?.data));
+    // Con país ya elegido (edición o Admin País), cargar sus estados
+    const pais = usuario?.idPais || paisFijo;
+    if (pais) api.get(`/estados?idPais=${pais}`).then(r => setEstados(r.data)).catch(() => {});
   }, []);
 
   const handlePaisChange = (idPais) => {
@@ -255,17 +280,18 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
                 <select value={form.TipoUsuario}
                   onChange={e => setForm(f=>({...f,TipoUsuario:e.target.value}))}
                   className="input-field text-sm" required>
-                  <optgroup label="Administradores">
-                    <option value="SUPER_ADMIN">Super Admin — todos los países</option>
-                    <option value="ADMIN_PAIS">Admin País — todos los estados</option>
-                    <option value="ADMIN_ESTADO">Admin Estado — todas las sucursales</option>
-                    <option value="ADMIN">Admin Sucursal — su sucursal</option>
-                  </optgroup>
+                  {asignables.some(r => ROLES_ADMIN.includes(r)) && (
+                    <optgroup label="Administradores">
+                      {asignables.filter(r => ROLES_ADMIN.includes(r)).map(r => <option key={r} value={r}>{OPCIONES_ROL[r]}</option>)}
+                    </optgroup>
+                  )}
                   <optgroup label="Operativos">
-                    <option value="SUPERVISOR">Supervisor</option>
-                    <option value="CAJERO">Cajero</option>
+                    {asignables.filter(r => !ROLES_ADMIN.includes(r)).map(r => <option key={r} value={r}>{OPCIONES_ROL[r]}</option>)}
                   </optgroup>
                 </select>
+                <p className="text-xs text-gray-400 mt-1">
+                  {yo?.TipoUsuario === 'SUPER_ADMIN' ? 'Puedes asignar cualquier rol.' : 'Solo puedes asignar roles inferiores al tuyo.'}
+                </p>
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Puesto</label>
@@ -296,7 +322,7 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">País</label>
                     <select value={form.idPais} onChange={e => handlePaisChange(e.target.value)}
-                      className="input-field text-sm">
+                      className="input-field text-sm" disabled={!!paisFijo} required>
                       <option value="">— Seleccionar país —</option>
                       {paises.map(p => (
                         <option key={p.idPais} value={p.idPais}>{p.NombrePais}</option>
@@ -311,7 +337,7 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
                     <label className="block text-xs font-bold text-gray-600 mb-1">Estado</label>
                     <select value={form.idEstado}
                       onChange={e => setForm(f=>({...f, idEstado:e.target.value, idPuntoVenta:''}))}
-                      className="input-field text-sm" disabled={!form.idPais}>
+                      className="input-field text-sm" disabled={!form.idPais} required>
                       <option value="">— Seleccionar estado —</option>
                       {estados.map(e => (
                         <option key={e.idEstado} value={e.idEstado}>{e.NombreEstado}</option>
@@ -328,8 +354,8 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
                       <Building size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <select value={form.idPuntoVenta}
                         onChange={e => setForm(f=>({...f,idPuntoVenta:e.target.value}))}
-                        className="input-field text-sm pl-9">
-                        <option value="">— Sin tienda asignada —</option>
+                        className="input-field text-sm pl-9" disabled={!!tiendaFija} required>
+                        <option value="">— Elige la tienda —</option>
                         {sucursales.map(s => (
                           <option key={s.idPuntoVenta} value={s.idPuntoVenta}>
                             {s.NomComercial || s.Nombre}
@@ -349,6 +375,7 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
               <Shield size={13} />
               Accesos a Módulos
             </p>
+            <p className="text-xs text-gray-400 -mt-2 mb-3">Solo puedes dar acceso a los módulos que tú tienes.</p>
             {loadingAccesos ? (
               <div className="flex items-center gap-2 text-gray-400 text-sm">
                 <Loader2 size={14} className="animate-spin" /> Cargando accesos...
@@ -408,6 +435,8 @@ function ModalUsuario({ usuario, pantallas, sucursales, onClose, onSaved }) {
 
 // ── Página principal ────────────────────────────────────────────────────────
 export default function Usuarios() {
+  const { usuario: yo } = useAuthStore();
+  const [asignables, setAsignables] = useState([]); // roles que puedo dar
   const [usuarios,   setUsuarios]   = useState([]);
   const [pantallas,  setPantallas]  = useState([]);
   const [sucursales, setSucursales] = useState([]);
@@ -452,7 +481,10 @@ export default function Usuarios() {
     } catch {}
   };
 
-  useEffect(() => { cargarPantallas(); cargarSucursales(); }, []);
+  useEffect(() => {
+    cargarPantallas(); cargarSucursales();
+    api.get('/usuarios/roles-asignables').then(r => setAsignables(r.data?.roles || [])).catch(() => setAsignables([]));
+  }, []);
   useEffect(() => { cargarUsuarios(); }, [page, rolFiltro]);
 
   const handleSearch = (e) => {
@@ -474,8 +506,8 @@ export default function Usuarios() {
       await api.patch(`/usuarios/${u.idUsuario}/status`, { status: nuevoStatus });
       cargarUsuarios();
       showToast(`Usuario ${nuevoStatus === 'ACTIVO' ? 'activado' : 'desactivado'}`, 'success');
-    } catch {
-      showToast('Error al cambiar status', 'error');
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Error al cambiar status', 'error');
     } finally {
       setToggling(null);
     }
@@ -512,10 +544,12 @@ export default function Usuarios() {
             {total} usuario{total !== 1 ? 's' : ''} registrado{total !== 1 ? 's' : ''}
           </p>
         </div>
-        <button onClick={() => setModal('crear')} className="btn-primary">
-          <Plus size={16} />
-          Nuevo Usuario
-        </button>
+        {asignables.length > 0 && (
+          <button onClick={() => setModal('crear')} className="btn-primary">
+            <Plus size={16} />
+            Nuevo Usuario
+          </button>
+        )}
       </div>
 
       {/* Filtros */}
@@ -569,10 +603,12 @@ export default function Usuarios() {
                   <td colSpan={7} className="text-center py-12">
                     <Users size={32} className="text-gray-200 mx-auto mb-2" />
                     <p className="text-gray-400 text-sm font-semibold">No hay usuarios registrados</p>
-                    <button onClick={() => setModal('crear')}
-                      className="mt-3 text-vida-green text-sm font-bold hover:underline">
-                      Crear el primero
-                    </button>
+                    {asignables.length > 0 && (
+                      <button onClick={() => setModal('crear')}
+                        className="mt-3 text-vida-green text-sm font-bold hover:underline">
+                        Crear el primero
+                      </button>
+                    )}
                   </td>
                 </tr>
               ) : usuarios.map(u => (
@@ -620,6 +656,12 @@ export default function Usuarios() {
                     {u.NombreSucursal && u.NombreEstado && (
                       <p className="text-xs text-gray-400">{u.NombreEstado}{u.NombrePais ? `, ${u.NombrePais}` : ''}</p>
                     )}
+                    {u.AmbitoIncompleto && (
+                      <span className="inline-block mt-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-1.5 py-0.5"
+                        title={u.TipoUsuario === 'ADMIN_PAIS' ? 'Asígnale un país para limitarlo a su zona' : 'Edítalo para asignarle su ámbito; mientras tanto no ve datos de ninguna tienda'}>
+                        {u.AmbitoIncompleto}
+                      </span>
+                    )}
                   </td>
 
                   {/* Módulos */}
@@ -637,6 +679,10 @@ export default function Usuarios() {
 
                   {/* Acciones */}
                   <td className="py-3 px-4">
+                    {!puedeGestionar(asignables, u, yo) ? (
+                      <span className="text-xs text-gray-300"
+                        title={String(u.idUsuario) === String(yo?.idUsuario) ? 'Tus datos se editan en Mi perfil' : 'Solo puedes gestionar usuarios de un rango inferior al tuyo'}>—</span>
+                    ) : (
                     <div className="flex items-center gap-1">
                       <button onClick={() => setModal(u)}
                         className="p-1.5 hover:bg-blue-50 text-blue-500 rounded-lg transition-colors"
@@ -659,6 +705,7 @@ export default function Usuarios() {
                         }
                       </button>
                     </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -694,6 +741,8 @@ export default function Usuarios() {
           usuario={modal === 'crear' ? null : modal}
           pantallas={pantallas}
           sucursales={sucursales}
+          asignables={asignables}
+          yo={yo}
           onClose={() => setModal(null)}
           onSaved={handleSaved}
         />

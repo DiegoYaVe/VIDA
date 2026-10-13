@@ -5,6 +5,29 @@ import { getPool, sql } from '../db/sqlserver.js';
 import QRCode from 'qrcode';
 
 const codigoMembresia = (idCliente) => `VIDA-${String(idCliente).padStart(6, '0')}`;
+const NIVEL_BASE = { Nivel: 1, Nombre: 'Club Vida Digital', MinPuntos: 0, Beneficios: 'Tarjeta digital y acumulación de puntos.', Color: '#54C4E0' };
+
+// Nivel actual = el mayor cuyo MinPuntos ya alcanzó con los puntos ganados de por vida
+export function nivelPorPuntos(niveles, puntosGanados) {
+  const lista = niveles?.length ? niveles : [NIVEL_BASE];
+  let actual = lista[0];
+  for (const n of lista) if (puntosGanados >= n.MinPuntos) actual = n;
+  return actual;
+}
+
+// Nivel del Club de un cliente: { nivel, nombre, puntosGanados, niveles }
+export async function nivelDelCliente(pool, idBranch, idCuenta, idCliente) {
+  const r = await pool.request()
+    .input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('cli', sql.BigInt, idCliente)
+    .query(`SELECT ISNULL(SUM(Puntos),0) AS Ganados FROM VIDA_CLIENTE_PUNTOS
+            WHERE idBranch=@b AND idCuenta=@c AND idCliente=@cli AND Tipo='GANADO';
+            SELECT Nivel, Nombre, MinPuntos, Beneficios, Color FROM VIDA_CLUB_NIVELES
+            WHERE idBranch=@b AND idCuenta=@c AND Status='ACTIVO' ORDER BY Nivel;`);
+  const puntosGanados = Number(r.recordsets[0][0]?.Ganados || 0);
+  const niveles = r.recordsets[1].length ? r.recordsets[1] : [NIVEL_BASE];
+  const actual = nivelPorPuntos(niveles, puntosGanados);
+  return { nivel: actual.Nivel, nombre: actual.Nombre, actual, puntosGanados, niveles };
+}
 
 // GET /delivery/cliente/membresia
 export async function obtenerMembresia(request, reply) {
@@ -12,15 +35,8 @@ export async function obtenerMembresia(request, reply) {
   try {
     const pool = await getPool();
 
-    // Puntos GANADOS de por vida (excluye canjes/reembolsos)
-    const gR = await pool.request()
-      .input('idBranch', sql.BigInt, idBranch)
-      .input('idCuenta', sql.BigInt, idCuenta)
-      .input('idCliente', sql.BigInt, idCliente)
-      .query(`SELECT ISNULL(SUM(Puntos),0) AS Ganados
-              FROM VIDA_CLIENTE_PUNTOS
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente AND Tipo='GANADO'`);
-    const puntosGanados = Number(gR.recordset[0]?.Ganados || 0);
+    // Puntos GANADOS de por vida (excluye canjes/reembolsos) y nivel
+    const { puntosGanados, niveles, actual } = await nivelDelCliente(pool, idBranch, idCuenta, idCliente);
 
     // Datos del cliente para la tarjeta
     const cR = await pool.request()
@@ -31,21 +47,6 @@ export async function obtenerMembresia(request, reply) {
               FROM VIDA_APP_CLIENTES WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
     const cli = cR.recordset[0] || {};
 
-    // Catálogo de niveles
-    const nR = await pool.request()
-      .input('idBranch', sql.BigInt, idBranch)
-      .input('idCuenta', sql.BigInt, idCuenta)
-      .query(`SELECT Nivel, Nombre, MinPuntos, Beneficios, Color
-              FROM VIDA_CLUB_NIVELES
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'
-              ORDER BY Nivel`);
-    let niveles = nR.recordset;
-    // Fallback si no hay seed cargado
-    if (!niveles.length) niveles = [{ Nivel: 1, Nombre: 'Club Vida Digital', MinPuntos: 0, Beneficios: 'Tarjeta digital y acumulación de puntos.', Color: '#54C4E0' }];
-
-    // Nivel actual = el mayor cuyo MinPuntos ya alcanzó
-    let actual = niveles[0];
-    for (const n of niveles) if (puntosGanados >= n.MinPuntos) actual = n;
     const siguiente = niveles.find(n => n.Nivel === actual.Nivel + 1) || null;
 
     const codigo = codigoMembresia(idCliente);

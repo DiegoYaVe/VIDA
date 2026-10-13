@@ -8,6 +8,8 @@ import { Text } from '../../components/Texto';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import Svg, { Path, Circle } from 'react-native-svg';
+import { reprogramarRecordatorios } from '../../services/recordatorios';
+import { obtenerUbicacion, ordenarPorCercania } from '../../services/cercania';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import useCarritoStore from '../../store/carritoStore';
@@ -85,12 +87,14 @@ export default function HomeScreen() {
   const cargar = useCallback(async () => {
     try {
       setError('');
-      const [prodRes, sucRes] = await Promise.all([
+      const [prodRes, sucRes, pos] = await Promise.all([
         api.get('/delivery/productos', { params: { idBranch, idCuenta } }),
         api.get('/delivery/sucursales', { params: { idBranch, idCuenta } }),
+        obtenerUbicacion({ pedirUnaVez: true }),
       ]);
       setProductos(prodRes.data?.productos ?? prodRes.data ?? []);
-      setSucursales(sucRes.data?.sucursales ?? sucRes.data ?? []);
+      // Con ubicación, la primera es la más cercana (tienda por defecto)
+      setSucursales(ordenarPorCercania(sucRes.data?.sucursales ?? sucRes.data ?? [], pos));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -102,7 +106,11 @@ export default function HomeScreen() {
   // Con sesión: hidratación del día y último pedido (para "Repetir")
   const cargarCliente = useCallback(async () => {
     if (!token) { setHidra(null); setUltimo(null); return; }
-    api.get('/delivery/cliente/hidratacion').then((r) => setHidra(r.data)).catch(() => setHidra(null));
+    api.get('/delivery/cliente/hidratacion').then((r) => {
+      setHidra(r.data);
+      // Recordatorios de agua: si ya cumplió la meta hoy, no suenan más hoy
+      reprogramarRecordatorios({ activa: !!r.data?.activa, metaCumplidaHoy: Number(r.data?.vasosHoy) >= Number(r.data?.meta || 8) });
+    }).catch(() => setHidra(null));
     api.get('/delivery/cliente/pedidos').then((r) => {
       const lista = Array.isArray(r.data) ? r.data : [];
       setUltimo(lista.find((p) => p.items?.length) || null);
@@ -120,11 +128,12 @@ export default function HomeScreen() {
     try {
       const r = await api.post('/delivery/cliente/hidratacion/vaso');
       setHidra((d) => ({ ...d, vasosHoy: r.data.vasosHoy, mlHoy: r.data.mlHoy, racha: r.data.racha }));
+      if (Number(r.data.vasosHoy) >= Number(hidra?.meta || 8)) reprogramarRecordatorios({ activa: true, metaCumplidaHoy: true });
       if (r.data.bonus > 0) Alert.alert('¡Racha completada!', `Llevas ${r.data.racha} días cumpliendo tu meta. Ganaste ${r.data.bonus} puntos VIDA.`);
     } catch {} finally { setVasoOcupado(false); }
   };
 
-  // Tienda que se muestra: la del carrito, la del último pedido o la primera
+  // Tienda que se muestra: la del carrito, la del último pedido o la más cercana (o la primera)
   const idTienda = idPVCarrito || ultimo?.idPuntoVenta || sucursales[0]?.idPuntoVenta || null;
   const deTienda = useMemo(
     () => (idTienda ? productos.filter((p) => String(p.idPuntoVenta) === String(idTienda)) : productos),

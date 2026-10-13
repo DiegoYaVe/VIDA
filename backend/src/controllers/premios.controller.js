@@ -2,6 +2,7 @@
 // Fidelización fase 3: catálogo de premios + canje, y vencimiento de puntos por
 // inactividad. Reutiliza el ledger VIDA_CLIENTE_PUNTOS (decoupled de delivery).
 import { getPool, sql } from '../db/sqlserver.js';
+import { nivelDelCliente } from './club.controller.js';
 
 async function nextIdTx(tx, tabla, campo, idBranch, idCuenta) {
   const r = await new sql.Request(tx)
@@ -45,10 +46,16 @@ export async function listarPremios(request, reply) {
       .query(`SELECT ISNULL(PuntosSaldo,0) AS Saldo FROM VIDA_APP_CLIENTES WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
     const pR = await pool.request()
       .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
-      .query(`SELECT idPremio, Nombre, Descripcion, CostoPuntos, Stock, ImagenUrl FROM VIDA_PREMIOS
+      .query(`SELECT idPremio, Nombre, Descripcion, CostoPuntos, Stock, ImagenUrl, NivelMinimo FROM VIDA_PREMIOS
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO' ORDER BY Orden, idPremio`);
     const mesesVence = parseInt(await getConfigVal(pool, idBranch, idCuenta, 'MesesInactividadVence', '12')) || 0;
-    return reply.send({ saldo: sR.recordset[0]?.Saldo ?? 0, mesesVence, premios: pR.recordset });
+    // Premios exclusivos del Club: se muestran a todos, pero solo los canjea quien llegó al nivel
+    const club = await nivelDelCliente(pool, idBranch, idCuenta, idCliente);
+    const nombreNivel = (n) => club.niveles.find((x) => x.Nivel === n)?.Nombre || `nivel ${n}`;
+    const premios = pR.recordset.map((p) => ({ ...p,
+      Exclusivo: p.NivelMinimo > 1, NombreNivel: p.NivelMinimo > 1 ? nombreNivel(p.NivelMinimo) : null,
+      Bloqueado: (p.NivelMinimo || 1) > club.nivel }));
+    return reply.send({ saldo: sR.recordset[0]?.Saldo ?? 0, mesesVence, nivel: club.nivel, nombreNivel: club.nombre, premios });
   } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al obtener premios' }); }
 }
 
@@ -62,10 +69,17 @@ export async function canjearPremio(request, reply) {
   try {
     const pR = await pool.request()
       .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idPremio', sql.BigInt, idPremio)
-      .query(`SELECT Nombre, CostoPuntos, Stock FROM VIDA_PREMIOS
+      .query(`SELECT Nombre, CostoPuntos, Stock, NivelMinimo FROM VIDA_PREMIOS
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPremio=@idPremio AND Status='ACTIVO'`);
     if (!pR.recordset.length) return reply.code(404).send({ error: 'Premio no disponible' });
     const premio = pR.recordset[0];
+    if ((premio.NivelMinimo || 1) > 1) {
+      const club = await nivelDelCliente(pool, idBranch, idCuenta, idCliente);
+      if (club.nivel < premio.NivelMinimo) {
+        const nombre = club.niveles.find((x) => x.Nivel === premio.NivelMinimo)?.Nombre || `nivel ${premio.NivelMinimo}`;
+        return reply.code(409).send({ error: `Premio exclusivo para miembros ${nombre} del Club VIDA` });
+      }
+    }
 
     await tx.begin(); enTx = true;
 
@@ -180,7 +194,7 @@ export async function listarPremiosCatalogo(request, reply) {
   try {
     const pool = await getPool();
     const r = await pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
-      .query(`SELECT idPremio, Nombre, Descripcion, CostoPuntos, Stock, ImagenUrl, Orden, Status
+      .query(`SELECT idPremio, Nombre, Descripcion, CostoPuntos, Stock, ImagenUrl, Orden, Status, NivelMinimo
               FROM VIDA_PREMIOS WHERE idBranch=@idBranch AND idCuenta=@idCuenta ORDER BY Orden, idPremio`);
     return reply.send(r.recordset);
   } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al listar premios' }); }
@@ -197,9 +211,10 @@ export async function crearPremio(request, reply) {
       .input('Nombre', sql.VarChar(150), b.Nombre.trim()).input('Descripcion', sql.VarChar(500), b.Descripcion || null)
       .input('CostoPuntos', sql.Int, parseInt(b.CostoPuntos) || 0).input('Stock', sql.Int, b.Stock === '' || b.Stock == null ? -1 : parseInt(b.Stock))
       .input('ImagenUrl', sql.VarChar(400), b.ImagenUrl || null).input('Orden', sql.Int, parseInt(b.Orden) || 0)
-      .query(`INSERT INTO VIDA_PREMIOS (idBranch,idCuenta,idPremio,Nombre,Descripcion,CostoPuntos,Stock,ImagenUrl,Orden,Status)
+      .input('Nivel', sql.Int, parseInt(b.NivelMinimo) > 1 ? parseInt(b.NivelMinimo) : null)
+      .query(`INSERT INTO VIDA_PREMIOS (idBranch,idCuenta,idPremio,Nombre,Descripcion,CostoPuntos,Stock,ImagenUrl,Orden,Status,NivelMinimo)
               OUTPUT inserted.idPremio
-              SELECT @idBranch,@idCuenta,ISNULL(MAX(idPremio),0)+1,@Nombre,@Descripcion,@CostoPuntos,@Stock,@ImagenUrl,@Orden,'ACTIVO'
+              SELECT @idBranch,@idCuenta,ISNULL(MAX(idPremio),0)+1,@Nombre,@Descripcion,@CostoPuntos,@Stock,@ImagenUrl,@Orden,'ACTIVO',@Nivel
               FROM VIDA_PREMIOS WITH (UPDLOCK, HOLDLOCK) WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
     return reply.code(201).send({ idPremio: r.recordset[0].idPremio });
   } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al crear premio' }); }
@@ -217,8 +232,9 @@ export async function editarPremio(request, reply) {
       .input('CostoPuntos', sql.Int, parseInt(b.CostoPuntos) || 0).input('Stock', sql.Int, b.Stock === '' || b.Stock == null ? -1 : parseInt(b.Stock))
       .input('ImagenUrl', sql.VarChar(400), b.ImagenUrl || null).input('Orden', sql.Int, parseInt(b.Orden) || 0)
       .input('Status', sql.VarChar(20), b.Status || 'ACTIVO')
+      .input('Nivel', sql.Int, parseInt(b.NivelMinimo) > 1 ? parseInt(b.NivelMinimo) : null)
       .query(`UPDATE VIDA_PREMIOS SET Nombre=@Nombre, Descripcion=@Descripcion, CostoPuntos=@CostoPuntos,
-                Stock=@Stock, ImagenUrl=@ImagenUrl, Orden=@Orden, Status=@Status
+                Stock=@Stock, ImagenUrl=@ImagenUrl, Orden=@Orden, Status=@Status, NivelMinimo=@Nivel
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPremio=@idPremio`);
     return reply.send({ ok: true });
   } catch (err) { request.log.error(err); return reply.code(500).send({ error: 'Error al editar premio' }); }

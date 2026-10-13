@@ -88,6 +88,12 @@ export default function CarritoScreen() {
     finally { setValidandoCupon(false); }
   };
   const quitarCupon = () => { setCuponCodigo(null); setDescuentoCupon(0); setCuponMsg(''); setCuponInput(''); };
+  // Cupones personales (p. ej. "te extrañamos"): se aplican con un toque
+  const [misCupones, setMisCupones] = useState([]);
+  useEffect(() => {
+    if (!token) { setMisCupones([]); return; }
+    api.get('/delivery/cliente/cupones').then((r) => setMisCupones(r.data || [])).catch(() => setMisCupones([]));
+  }, [token]);
   // Si cambia el total y hay un cupón, se recalcula su descuento
   useEffect(() => { if (cuponCodigo) validarCupon(cuponCodigo, totalPagar); }, [totalPagar]);
 
@@ -201,6 +207,7 @@ export default function CarritoScreen() {
       });
       const idPedido = res.data?.idPedido ?? res.data?.pedido?.idPedido;
       limpiarCarrito();
+      if (cuponCodigo) setMisCupones((l) => l.filter((k) => k.Codigo !== cuponCodigo));
       quitarCupon();
       setParteUSDTexto(''); setPagaConUSDTexto(''); setPagaConVESTexto('');
       router.push(`/pedido/${idPedido}`);
@@ -290,6 +297,22 @@ export default function CarritoScreen() {
           </TouchableOpacity>
         </View>
         {cuponMsg ? <Text style={[styles.cuponMsg, cuponCodigo && { color: colores.verdeTexto }]}>{validandoCupon ? 'Validando…' : cuponMsg}</Text> : null}
+        {!cuponCodigo && misCupones.length > 0 && (
+          <View style={{ gap: 8 }}>
+            <Text style={styles.miniEtiqueta}>Tus cupones</Text>
+            {misCupones.map((k) => (
+              <TouchableOpacity key={k.Codigo} style={styles.miCupon} onPress={() => validarCupon(k.Codigo, totalPagar)} disabled={validandoCupon}
+                accessibilityLabel={`Aplicar cupón ${k.Codigo}`}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.miCuponTitulo}>{k.Tipo === 'DESCUENTO_PCT' ? `${Number(k.Valor)}% de descuento` : `${fmtUSD(k.Valor)} de descuento`}
+                    {k.MaxDescuento ? ` · hasta ${fmtUSD(k.MaxDescuento)}` : ''}</Text>
+                  <Text style={styles.miCuponSub}>{k.Codigo}{k.MinCompra ? ` · compra mínima ${fmtUSD(k.MinCompra)}` : ''}{k.FechaFin ? ` · vence ${k.FechaFin.split('-').reverse().slice(0, 2).join('/')}` : ''}</Text>
+                </View>
+                <Text style={styles.miCuponUsar}>Usar</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* Entrega y pago */}
         <View style={[styles.tarjeta, { padding: 14, gap: 12 }]}>
@@ -463,6 +486,10 @@ const styles = StyleSheet.create({
   miniEtiqueta: { fontSize: 12, color: colores.textoSuave, fontWeight: '700' },
   cuponInput: { fontWeight: '800', fontSize: 15, letterSpacing: 1, minHeight: 26, color: colores.marino, padding: 0 },
   cuponAplicado: { fontWeight: '800', fontSize: 15, color: colores.verdeTexto, minHeight: 26 },
+  miCupon: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colores.verdeClaro, borderRadius: 16, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colores.verde, paddingVertical: 10, paddingHorizontal: 14 },
+  miCuponTitulo: { fontWeight: '800', fontSize: 14, color: colores.marino },
+  miCuponSub: { fontSize: 12, color: colores.verdeTexto, fontWeight: '700' },
+  miCuponUsar: { fontWeight: '800', fontSize: 14, color: colores.marino, textDecorationLine: 'underline' },
   cuponMsg: { fontSize: 12, color: colores.error, marginTop: -4, marginLeft: 4 },
   puntos: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   puntosValor: { fontWeight: '800', fontSize: 15, color: colores.marino },

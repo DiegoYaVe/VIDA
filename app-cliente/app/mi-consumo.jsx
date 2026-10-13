@@ -14,6 +14,7 @@ import useAuthStore from '../store/authStore';
 import { agregarConTienda } from '../services/carrito';
 import { fmtUSD } from '../services/moneda';
 import { colores, fuentes } from '../constants/tema';
+import { leerPreferencia, activarRecordatorios, reprogramarRecordatorios } from '../services/recordatorios';
 
 const DIAS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
@@ -32,6 +33,8 @@ export default function MiHidratacion() {
   const [ocupado, setOcupado] = useState(false);
   const [ajustes, setAjustes] = useState(false);
   const [agua, setAgua] = useState(null);
+  const [recordar, setRecordar] = useState(false);
+  useEffect(() => { leerPreferencia().then((p) => setRecordar(p.activo)); }, []);
 
   const cargar = useCallback(async () => {
     try { setData((await api.get('/delivery/cliente/hidratacion')).data); } catch { setData({ activa: false, meta: 8, mlVaso: 250, vasosHoy: 0, historial: [] }); }
@@ -66,6 +69,13 @@ export default function MiHidratacion() {
 
   const meta = Math.max(1, Number(data?.meta) || 8);
   const vasos = Number(data?.vasosHoy) || 0;
+  useEffect(() => {
+    if (data) reprogramarRecordatorios({ activa: !!data.activa, metaCumplidaHoy: vasos >= meta });
+  }, [data?.activa, vasos >= meta]);
+  const cambiarRecordar = async () => {
+    const r = await activarRecordatorios(!recordar, { activa: !!data?.activa, metaCumplidaHoy: vasos >= meta });
+    if (r.ok) setRecordar(!recordar); else Alert.alert('Recordatorios', r.motivo);
+  };
   const ml = Number(data?.mlHoy ?? vasos * (data?.mlVaso || 250));
 
   // Semana de lunes a domingo con lo registrado
@@ -149,6 +159,13 @@ export default function MiHidratacion() {
               <TouchableOpacity style={[styles.metaPaso, { backgroundColor: colores.marino }]} onPress={() => guardar({ meta: Math.min(20, meta + 1) })} accessibilityLabel="Subir meta"><Text style={[styles.metaPasoTexto, { color: colores.blanco }]}>+</Text></TouchableOpacity>
             </View>
             <Text style={styles.nota}>Cada vaso son {data.mlVaso || 250} ml. Cumple la meta 7 días seguidos y ganas {data.bonoRacha ?? 50} puntos.</Text>
+            <TouchableOpacity style={styles.recordar} onPress={cambiarRecordar} accessibilityRole="switch" accessibilityState={{ checked: recordar }}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.recordarTitulo}>Recordarme tomar agua</Text>
+                <Text style={styles.nota}>Cada 2 horas, de 8:00 a. m. a 8:00 p. m. Si ya cumpliste tu meta, no te avisamos más ese día.</Text>
+              </View>
+              <View style={[styles.interruptor, recordar && styles.interruptorOn]}><View style={styles.interruptorBola} /></View>
+            </TouchableOpacity>
             {data.activa && (
               <TouchableOpacity onPress={() => { guardar({ activa: false }); setAjustes(false); }} style={styles.desactivar}>
                 <Text style={styles.desactivarTexto}>Pausar mi programa</Text>
@@ -204,6 +221,11 @@ const styles = StyleSheet.create({
   metaPasoTexto: { fontWeight: '800', fontSize: 20, color: colores.marino },
   metaValor: { minWidth: 90, textAlign: 'center', fontFamily: fuentes.titulo, fontSize: 18, color: colores.marino },
   nota: { fontSize: 13, color: colores.textoSuave, lineHeight: 18 },
+  recordar: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colores.fondo, borderRadius: 18, padding: 14 },
+  recordarTitulo: { fontWeight: '800', fontSize: 15, color: colores.marino, marginBottom: 2 },
+  interruptor: { width: 48, height: 28, borderRadius: 14, backgroundColor: colores.bordeFuerte, padding: 3, justifyContent: 'center' },
+  interruptorOn: { backgroundColor: colores.verde, alignItems: 'flex-end' },
+  interruptorBola: { width: 22, height: 22, borderRadius: 11, backgroundColor: colores.blanco },
   desactivar: { minHeight: 40, justifyContent: 'center' },
   desactivarTexto: { fontWeight: '800', fontSize: 14, color: '#8A2B2B' },
   listo: { height: 54, borderRadius: 18, backgroundColor: colores.marino, alignItems: 'center', justifyContent: 'center' },

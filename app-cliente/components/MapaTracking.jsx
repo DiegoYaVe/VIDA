@@ -11,8 +11,10 @@ import { puntosSeguimiento, depurarSeguimiento, SCRIPT_SEGUIMIENTO } from './seg
 import { useTrazado } from '../services/trazado';
 
 const ES_EXPO_GO = Constants.executionEnvironment === 'storeClient';
+// Google solo si el build trae la llave de Android (app.config.js); si no, Leaflet
+const MAPAS_GOOGLE = !ES_EXPO_GO && !!Constants.expoConfig?.extra?.mapasGoogle;
 let Maps = null;
-if (!ES_EXPO_GO) {
+if (MAPAS_GOOGLE) {
   try { Maps = require('react-native-maps'); } catch (_) { Maps = null; }
 }
 function MapaGoogle({ tienda, repartidor, destino, seq: pts, trazo }) {

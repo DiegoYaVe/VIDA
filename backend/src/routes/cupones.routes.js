@@ -3,7 +3,7 @@ import { authenticate, requireRole } from '../middlewares/auth.js';
 import { authenticateCliente } from '../middlewares/authDelivery.js';
 import {
   listarCupones, crearCupon, editarCupon, eliminarCupon, usosCupon,
-  validarCuponPOS, validarCuponCliente, aplicarCuponPedido,
+  validarCuponPOS, validarCuponCliente, aplicarCuponPedido, misCuponesCliente, emitirCuponesAhora,
 } from '../controllers/cupones.controller.js';
 
 const LECTURA   = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN', 'SUPERVISOR'];
@@ -20,6 +20,8 @@ export async function cuponesRoutes(fastify) {
     { preHandler: [authenticate, requireRole(...ESCRITURA)] }, editarCupon);
   fastify.delete('/cupones/:idCupon',
     { preHandler: [authenticate, requireRole(...ESCRITURA)] }, eliminarCupon);
+  fastify.post('/cupones/automaticos/emitir',
+    { preHandler: [authenticate, requireRole(...ESCRITURA)] }, emitirCuponesAhora);
   fastify.get('/cupones/:idCupon/usos',
     { preHandler: [authenticate, requireRole(...LECTURA)] }, usosCupon);
 
@@ -30,6 +32,8 @@ export async function cuponesRoutes(fastify) {
   // ── App del cliente ──
   fastify.post('/delivery/cliente/cupones/validar',
     { preHandler: [authenticateCliente] }, validarCuponCliente);
+  fastify.get('/delivery/cliente/cupones',
+    { preHandler: [authenticateCliente] }, misCuponesCliente);
   fastify.post('/delivery/cliente/cupones/aplicar',
     { preHandler: [authenticateCliente] }, aplicarCuponPedido);
 }

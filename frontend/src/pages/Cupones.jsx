@@ -1,9 +1,12 @@
 // src/pages/Cupones.jsx
 // Cupones — códigos de descuento canjeables en checkout (sql/32 + cupones.controller).
 // CRUD para el empresario/corporativo: crear, editar, activar/desactivar y ver usos.
+// Pestaña "Automáticos": los cupones personales que el sistema envía a quien
+// dejó de comprar (configuración en Logística → Configuración).
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  Ticket, Plus, RefreshCw, Pencil, Power, X, Percent, DollarSign,
+  Ticket, Plus, RefreshCw, Pencil, Power, X, Percent, DollarSign, Send, Settings,
 } from 'lucide-react';
 import api from '../services/api.js';
 
@@ -19,7 +22,107 @@ const FORM0 = {
 const money = (n) => `$${Number(n || 0).toFixed(2)}`;
 const fmtFecha = (d) => (d ? String(d).slice(0, 10) : '—');
 
+const hoyCaracas = () => new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10);
+
+function CuponesAutomaticos() {
+  const [lista, setLista] = useState([]);
+  const [cfg, setCfg] = useState(null);
+  const [cargando, setCargando] = useState(true);
+  const [enviando, setEnviando] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    try { setLista((await api.get('/cupones', { params: { origen: 'INACTIVIDAD' } })).data || []); } catch { setLista([]); }
+    try {
+      const c = {};
+      ((await api.get('/delivery/admin/config')).data || []).forEach(x => { c[x.Clave] = x.Valor; });
+      setCfg(c);
+    } catch { setCfg(null); }
+    setCargando(false);
+  }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  async function enviarAhora() {
+    setEnviando(true); setMsg('');
+    try {
+      const r = await api.post('/cupones/automaticos/emitir');
+      setMsg(r.data.emitidos ? `Se enviaron ${r.data.emitidos} cupón(es).` : 'No hay clientes que cumplan las condiciones hoy.');
+      cargar();
+    } catch (e) { setMsg(e.response?.data?.error || 'No se pudo enviar'); }
+    finally { setEnviando(false); }
+  }
+
+  const activo = cfg && String(cfg.CuponInactivoActivo).trim() === '1';
+  const hoy = hoyCaracas();
+  const estado = (k) => k.UsosActuales > 0 ? ['Usado', 'bg-green-100 text-green-700']
+    : k.FechaFin && String(k.FechaFin).slice(0, 10) < hoy ? ['Vencido', 'bg-gray-100 text-gray-500'] : ['Vigente', 'bg-blue-50 text-vida-blue'];
+  const usados = lista.filter(k => k.UsosActuales > 0).length;
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-wrap items-center gap-4 justify-between">
+        <div className="text-sm text-gray-600 max-w-2xl">
+          {cfg ? (activo ? (
+            <p>Activo: a quien lleva <b>{cfg.CuponInactivoDias} días</b> sin recibir un pedido se le envía un cupón de <b>{cfg.CuponInactivoPct}%</b>
+              {Number(cfg.CuponInactivoMaxUSD) > 0 ? <> (hasta <b>${Number(cfg.CuponInactivoMaxUSD).toFixed(2)}</b>)</> : null}, válido <b>{cfg.CuponInactivoVigenciaDias} días</b>,
+              por push y correo. Se repite como máximo cada {cfg.CuponInactivoRepetirDias} días. Corre solo una vez al día.</p>
+          ) : <p><b>Apagado.</b> Actívalo y ajusta los días, el descuento y la vigencia en la configuración del delivery.</p>)
+            : <p>No se pudo leer la configuración.</p>}
+          <p className="text-xs text-gray-400 mt-1">Enviados: {lista.length} · usados: {usados}{lista.length ? ` (${Math.round(usados * 100 / lista.length)}%)` : ''}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link to="/logistica?tab=config" className="flex items-center gap-2 text-sm text-gray-600 border border-gray-200 px-3 py-2 rounded-xl hover:text-vida-blue">
+            <Settings size={14} /> Configurar
+          </Link>
+          <button onClick={enviarAhora} disabled={enviando || !activo}
+            className="flex items-center gap-2 text-sm font-semibold bg-vida-blue text-white px-4 py-2 rounded-xl hover:opacity-90 disabled:opacity-40">
+            <Send size={14} /> {enviando ? 'Enviando…' : 'Enviar ahora'}
+          </button>
+        </div>
+        {msg && <p className="w-full text-sm font-semibold text-vida-blue">{msg}</p>}
+      </div>
+
+      {cargando ? <p className="text-center text-gray-400 py-10 text-sm">Cargando…</p> : lista.length === 0 ? (
+        <p className="text-center text-gray-400 py-12 text-sm">Todavía no se ha enviado ningún cupón automático.</p>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-400 text-xs border-b border-gray-100">
+                <th className="px-4 py-3 font-semibold">Cliente</th>
+                <th className="px-4 py-3 font-semibold">Código</th>
+                <th className="px-4 py-3 font-semibold">Descuento</th>
+                <th className="px-4 py-3 font-semibold">Enviado</th>
+                <th className="px-4 py-3 font-semibold">Vence</th>
+                <th className="px-4 py-3 font-semibold">Estado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {lista.map(k => {
+                const [txt, cls] = estado(k);
+                return (
+                  <tr key={k.idCupon}>
+                    <td className="px-4 py-3"><p className="font-semibold text-gray-800">{k.Cliente || `Cliente #${k.idClienteExclusivo}`}</p>
+                      {k.Telefono && <p className="text-xs text-gray-400">{k.Telefono}</p>}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-gray-700">{k.Codigo}</td>
+                    <td className="px-4 py-3">{Number(k.Valor)}%{k.MaxDescuento ? ` · tope ${money(k.MaxDescuento)}` : ''}</td>
+                    <td className="px-4 py-3 text-gray-500">{fmtFecha(k.FechaAlta)}</td>
+                    <td className="px-4 py-3 text-gray-500">{fmtFecha(k.FechaFin)}</td>
+                    <td className="px-4 py-3"><span className={`text-xs font-bold px-2 py-0.5 rounded-full ${cls}`}>{txt}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Cupones() {
+  const [vista, setVista] = useState('manuales');
   const [cupones, setCupones]   = useState([]);
   const [cargando, setCargando] = useState(true);
   const [modal, setModal]       = useState(false);
@@ -113,8 +216,15 @@ export default function Cupones() {
         </div>
       </div>
 
+      <div className="bg-white border-b border-gray-100 px-6 flex gap-1">
+        {[['manuales', 'Cupones'], ['automaticos', 'Automáticos (te extrañamos)']].map(([k, l]) => (
+          <button key={k} onClick={() => setVista(k)}
+            className={`px-4 py-3 text-sm font-semibold border-b-2 ${vista === k ? 'border-vida-blue text-vida-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{l}</button>
+        ))}
+      </div>
+
       <div className="p-6">
-        {cargando ? (
+        {vista === 'automaticos' ? <CuponesAutomaticos /> : cargando ? (
           <p className="text-center text-gray-400 py-10 text-sm">Cargando cupones…</p>
         ) : cupones.length === 0 ? (
           <div className="text-center text-gray-400 py-16">

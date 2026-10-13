@@ -37,6 +37,7 @@ export default function RootLayout() {
     <AuthGuard>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(auth)/login" />
+        <Stack.Screen name="(auth)/recuperar" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="sucursal/[idPuntoVenta]" />
         <Stack.Screen name="pedido/[idPedido]" />

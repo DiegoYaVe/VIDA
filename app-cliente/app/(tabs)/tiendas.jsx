@@ -1,4 +1,5 @@
-// Tiendas VIDA: lista de tiendas activas; cada una abre su catálogo.
+// Tiendas VIDA: lista de tiendas activas, las más cercanas primero si el
+// cliente comparte su ubicación; cada una abre su catálogo.
 import { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +11,7 @@ import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import useCarritoStore from '../../store/carritoStore';
 import { colores, fuentes } from '../../constants/tema';
+import { obtenerUbicacion, ordenarPorCercania, textoDistancia } from '../../services/cercania';
 
 function Flecha() {
   return (
@@ -26,11 +28,16 @@ export default function TiendasScreen() {
   const [tiendas, setTiendas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [refrescando, setRefrescando] = useState(false);
+  const [conUbicacion, setConUbicacion] = useState(false);
 
   const cargar = useCallback(async () => {
     try {
-      const r = await api.get('/delivery/sucursales', { params: { idBranch, idCuenta } });
-      setTiendas(r.data?.sucursales ?? r.data ?? []);
+      const [r, pos] = await Promise.all([
+        api.get('/delivery/sucursales', { params: { idBranch, idCuenta } }),
+        obtenerUbicacion({ pedir: true }),
+      ]);
+      setConUbicacion(!!pos);
+      setTiendas(ordenarPorCercania(r.data?.sucursales ?? r.data ?? [], pos));
     } catch { /* se queda con lo que había */ }
     finally { setCargando(false); setRefrescando(false); }
   }, [idBranch, idCuenta]);
@@ -42,7 +49,7 @@ export default function TiendasScreen() {
       <ScrollView contentContainerStyle={styles.contenido} showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => { setRefrescando(true); cargar(); }} tintColor={colores.marino} />}>
         <Text style={styles.titulo}>Tiendas</Text>
-        <Text style={styles.sub}>Elige la tienda VIDA que te queda cerca. Tu pedido es de una sola tienda.</Text>
+        <Text style={styles.sub}>{conUbicacion ? 'Las más cercanas a ti primero.' : 'Elige la tienda VIDA que te queda cerca.'} Tu pedido es de una sola tienda.</Text>
         {cargando ? <ActivityIndicator color={colores.marino} style={{ marginTop: 24 }} /> : (
           <View style={styles.lista}>
             {tiendas.map((t, i) => {
@@ -55,9 +62,12 @@ export default function TiendasScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.nombre} numberOfLines={1}>{t.NomComercial}</Text>
-                    <Text style={styles.direccion} numberOfLines={1}>{t.Direccion?.trim() || 'Pide a domicilio'}</Text>
+                    <Text style={styles.direccion} numberOfLines={1}>
+                      {[textoDistancia(t.DistanciaKm), t.Direccion?.trim() || 'Pide a domicilio'].filter(Boolean).join(' · ')}
+                    </Text>
                   </View>
-                  {actual ? <View style={styles.sello}><Text style={styles.selloTexto}>Tu carrito</Text></View> : null}
+                  {actual ? <View style={styles.sello}><Text style={styles.selloTexto}>Tu carrito</Text></View>
+                    : i === 0 && t.DistanciaKm != null ? <View style={[styles.sello, styles.selloCerca]}><Text style={styles.selloTexto}>Más cerca</Text></View> : null}
                   <Flecha />
                 </TouchableOpacity>
               );
@@ -83,6 +93,7 @@ const styles = StyleSheet.create({
   nombre: { fontWeight: '800', fontSize: 15, color: colores.marino },
   direccion: { fontSize: 13, color: colores.textoSuave },
   sello: { backgroundColor: colores.celesteClaro, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5 },
+  selloCerca: { backgroundColor: colores.verdeClaro },
   selloTexto: { fontSize: 11, fontWeight: '800', color: colores.marino },
   vacio: { padding: 16, color: colores.textoSuave },
 });

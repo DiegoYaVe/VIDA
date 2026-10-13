@@ -1,6 +1,10 @@
 // src/controllers/usuarios.controller.js
 import bcrypt from 'bcrypt';
 import { getPool, sql } from '../db/sqlserver.js';
+import {
+  esRolValido, puedeGestionarRol, rolesAsignables, resolverUbicacion, ubicacionEnAlcance,
+  ambitoParaRol, modulosAsignables, modulosFinales,
+} from '../services/jerarquiaUsuarios.service.js';
 
 async function getConfig(pool, idBranch, clave) {
   const r = await pool.request()
@@ -122,31 +126,48 @@ async function enviarEmailInvitacion(pool, usuario, passwordTemporal, idBranch) 
   });
 }
 
+// NivelAcceso que se guarda en el usuario (columna histórica). La jerarquía
+// para gestionar usuarios vive en services/jerarquiaUsuarios.service.js.
 const NIVELES_ROL = { SUPER_ADMIN: 0, ADMIN_PAIS: 1, ADMIN_ESTADO: 1, ADMIN: 2, SUPERVISOR: 3, CAJERO: 4, CASHIER: 4 };
 
 function nivelPorRol(rol) {
   return NIVELES_ROL[rol] ?? 4;
 }
 
-function esRolValido(rol) {
-  return Object.prototype.hasOwnProperty.call(NIVELES_ROL, rol);
-}
-
-// Un usuario solo puede asignar/gestionar roles ESTRICTAMENTE inferiores al suyo
-// (nivel numérico mayor = menos privilegios; SUPER_ADMIN=0 puede todo).
-// No puede gestionar usuarios de su mismo nivel ni superiores.
-function puedeGestionarRol(rolCaller, rolTarget) {
-  return nivelPorRol(rolTarget) > nivelPorRol(rolCaller);
-}
-
-async function obtenerRolUsuario(pool, idBranch, idCuenta, idUsuario) {
+// Usuario a gestionar: rol, ubicación y módulos actuales
+async function obtenerUsuarioGestion(pool, idBranch, idCuenta, idUsuario) {
   const r = await pool.request()
     .input('idBranch',  sql.BigInt, idBranch)
     .input('idCuenta',  sql.BigInt, idCuenta)
     .input('idUsuario', sql.BigInt, idUsuario)
-    .query(`SELECT TipoUsuario FROM VIDA_CUENTA_USUARIOS
-            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
-  return r.recordset[0]?.TipoUsuario ?? null;
+    .query(`SELECT TipoUsuario, idPuntoVenta, idEstado, idPais FROM VIDA_CUENTA_USUARIOS
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario;
+            SELECT idPantalla FROM VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario AND StatusAcceso='ACTIVO';`);
+  const u = r.recordsets[0][0];
+  return u ? { ...u, pantallas: r.recordsets[1].map((x) => x.idPantalla) } : null;
+}
+
+// Rol y ámbito: ¿quien gestiona puede tocar a este usuario?
+async function motivoNoGestiona(pool, caller, objetivo) {
+  if (!puedeGestionarRol(caller.TipoUsuario, objetivo.TipoUsuario)) return 'No puedes gestionar a un usuario de tu mismo rango o superior';
+  if (caller.TipoUsuario === 'SUPER_ADMIN') return null; // toda la cuenta
+  const u = await resolverUbicacion(pool, caller.idBranch, caller.idCuenta, objetivo);
+  if (u.error || !ubicacionEnAlcance(caller, u)) return 'Ese usuario está fuera de tu ámbito';
+  return null;
+}
+
+// Solo un ADMIN activo por tienda
+async function tiendaYaTieneAdmin(pool, idBranch, idCuenta, idPuntoVenta, excepto = null) {
+  const r = await pool.request()
+    .input('idBranch',     sql.BigInt, idBranch)
+    .input('idCuenta',     sql.BigInt, idCuenta)
+    .input('idPuntoVenta', sql.BigInt, idPuntoVenta)
+    .input('excepto',      sql.BigInt, excepto)
+    .query(`SELECT TOP 1 idUsuario FROM VIDA_CUENTA_USUARIOS
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta
+              AND TipoUsuario='ADMIN' AND Status='ACTIVO' AND (@excepto IS NULL OR idUsuario<>@excepto)`);
+  return r.recordset.length > 0;
 }
 
 // ── GET /api/usuarios ──────────────────────────────────────────────────────
@@ -192,6 +213,10 @@ export async function listarUsuarios(request, reply) {
         u.Correo, u.Telefono, u.Cve, u.TipoUsuario, u.NivelAcceso, u.Puesto,
         u.idPuntoVenta, u.idEstado, u.idPais, u.Status, u.FechaAlta,
         u.ImagenUsuario, u.FechaNacimiento, u.CambiarPass,
+        -- Ámbito que le falta según su rol (usuarios viejos): el panel lo avisa
+        CASE WHEN u.TipoUsuario IN ('ADMIN','SUPERVISOR','CAJERO','CASHIER') AND u.idPuntoVenta IS NULL THEN 'Falta la tienda'
+             WHEN u.TipoUsuario = 'ADMIN_ESTADO' AND u.idEstado IS NULL THEN 'Falta el estado'
+             WHEN u.TipoUsuario = 'ADMIN_PAIS' AND u.idPais IS NULL THEN 'Sin país: ve toda la cuenta' END AS AmbitoIncompleto,
         pv.NomComercial AS NombreSucursal,
         e.NombreEstado, p.NombrePais,
         (SELECT COUNT(*) FROM VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO a
@@ -242,7 +267,7 @@ export async function listarUsuarios(request, reply) {
 // ── POST /api/usuarios ────────────────────────────────────────────────────
 export async function crearUsuario(request, reply) {
   const { idBranch, idCuenta, idUsuario: idCreador } = request.user;
-  const { Nombre, Apellidos, NomComercial, Correo, Cve, TipoUsuario, Puesto, Telefono, FechaNacimiento, idPuntoVenta, idEstado, idPais, pantallas = [] } = request.body;
+  const { Nombre, Apellidos, NomComercial, Correo, Cve, TipoUsuario, Puesto, Telefono, FechaNacimiento, pantallas = [] } = request.body;
 
   if (!Nombre || !Correo || !Cve || !TipoUsuario) {
     return reply.code(400).send({ error: 'Nombre, Correo, Usuario y Rol son requeridos' });
@@ -251,11 +276,17 @@ export async function crearUsuario(request, reply) {
     return reply.code(400).send({ error: 'Rol inválido' });
   }
   if (!puedeGestionarRol(request.user.TipoUsuario, TipoUsuario)) {
-    return reply.code(403).send({ error: 'No puedes crear usuarios con un rol superior al tuyo' });
+    return reply.code(403).send({ error: 'Solo puedes crear usuarios de un rango inferior al tuyo' });
   }
 
   try {
     const pool = await getPool();
+
+    // Ámbito (tienda / estado / país) dentro del de quien crea, y módulos que él tiene
+    const amb = await ambitoParaRol(pool, request.user, TipoUsuario, request.body);
+    if (amb.error) return reply.code(amb.status).send({ error: amb.error });
+    const mods = modulosFinales(pantallas, await modulosAsignables(pool, request.user));
+    if (mods.error) return reply.code(403).send({ error: mods.error });
 
     const existe = await pool.request()
       .input('Cve', sql.VarChar(50), Cve)
@@ -268,17 +299,8 @@ export async function crearUsuario(request, reply) {
     }
 
     // Solo puede existir un administrador (ADMIN) por tienda
-    if (TipoUsuario === 'ADMIN' && idPuntoVenta) {
-      const yaHayAdmin = await pool.request()
-        .input('idBranch',     sql.BigInt, idBranch)
-        .input('idCuenta',     sql.BigInt, idCuenta)
-        .input('idPuntoVenta', sql.BigInt, idPuntoVenta)
-        .query(`SELECT TOP 1 idUsuario FROM VIDA_CUENTA_USUARIOS
-                WHERE idBranch=@idBranch AND idCuenta=@idCuenta
-                  AND idPuntoVenta=@idPuntoVenta AND TipoUsuario='ADMIN' AND Status='ACTIVO'`);
-      if (yaHayAdmin.recordset.length) {
-        return reply.code(409).send({ error: 'Esta tienda ya tiene un administrador. Solo puede haber uno por tienda.' });
-      }
+    if (TipoUsuario === 'ADMIN' && await tiendaYaTieneAdmin(pool, idBranch, idCuenta, amb.idPuntoVenta)) {
+      return reply.code(409).send({ error: 'Esta tienda ya tiene un administrador. Solo puede haber uno por tienda.' });
     }
 
     // Generar password temporal
@@ -298,9 +320,9 @@ export async function crearUsuario(request, reply) {
       .input('TipoUsuario',    sql.VarChar(50),  TipoUsuario)
       .input('Puesto',         sql.VarChar(200), Puesto || null)
       .input('FechaNacimiento',sql.Date,         FechaNacimiento || null)
-      .input('idPuntoVenta',   sql.BigInt,       idPuntoVenta || null)
-      .input('idEstado',       sql.BigInt,       idEstado || null)
-      .input('idPais',         sql.BigInt,       idPais || null)
+      .input('idPuntoVenta',   sql.BigInt,       amb.idPuntoVenta)
+      .input('idEstado',       sql.BigInt,       amb.idEstado)
+      .input('idPais',         sql.BigInt,       amb.idPais)
       .input('NivelAcceso',    sql.Int,           nivelPorRol(TipoUsuario))
       .input('Pass',           sql.VarChar(255), hash)
       .input('UsuAlta',        sql.VarChar(10),  String(idCreador))
@@ -315,7 +337,7 @@ export async function crearUsuario(request, reply) {
               FROM VIDA_CUENTA_USUARIOS WITH (UPDLOCK, HOLDLOCK) WHERE idBranch=@idBranch AND idCuenta=@idCuenta`);
     const nuevoId = ins.recordset[0].idUsuario;
 
-    for (const idPantalla of pantallas) {
+    for (const idPantalla of mods.modulos) {
       await pool.request()
         .input('idBranch',   sql.BigInt, idBranch)
         .input('idCuenta',   sql.BigInt, idCuenta)
@@ -356,22 +378,39 @@ export async function crearUsuario(request, reply) {
 export async function editarUsuario(request, reply) {
   const { idBranch, idCuenta, idUsuario: idEditor } = request.user;
   const { idUsuario } = request.params;
-  const { Nombre, Apellidos, NomComercial, Correo, Telefono, TipoUsuario, Puesto, FechaNacimiento, idPuntoVenta, idEstado, idPais, pantallas } = request.body;
+  const { Nombre, Apellidos, NomComercial, Correo, Telefono, TipoUsuario, Puesto, FechaNacimiento, pantallas } = request.body;
 
   if (!esRolValido(TipoUsuario)) {
     return reply.code(400).send({ error: 'Rol inválido' });
   }
   if (!puedeGestionarRol(request.user.TipoUsuario, TipoUsuario)) {
-    return reply.code(403).send({ error: 'No puedes asignar un rol superior al tuyo' });
+    return reply.code(403).send({ error: 'Solo puedes asignar un rol inferior al tuyo' });
+  }
+
+  // Los datos propios se cambian en Mi perfil: aquí no se puede cambiar el
+  // propio rol, ámbito ni módulos
+  if (String(idUsuario) === String(idEditor)) {
+    return reply.code(403).send({ error: 'No puedes editar tu propio usuario aquí. Usa Mi perfil.' });
   }
 
   try {
     const pool = await getPool();
 
-    const rolActual = await obtenerRolUsuario(pool, idBranch, idCuenta, idUsuario);
-    if (!rolActual) return reply.code(404).send({ error: 'Usuario no encontrado' });
-    if (!puedeGestionarRol(request.user.TipoUsuario, rolActual)) {
-      return reply.code(403).send({ error: 'No puedes editar a un usuario con rol superior al tuyo' });
+    const objetivo = await obtenerUsuarioGestion(pool, idBranch, idCuenta, idUsuario);
+    if (!objetivo) return reply.code(404).send({ error: 'Usuario no encontrado' });
+    const motivo = await motivoNoGestiona(pool, request.user, objetivo);
+    if (motivo) return reply.code(403).send({ error: motivo });
+
+    // Nuevo ámbito dentro del de quien edita
+    const amb = await ambitoParaRol(pool, request.user, TipoUsuario, request.body);
+    if (amb.error) return reply.code(amb.status).send({ error: amb.error });
+    if (TipoUsuario === 'ADMIN' && await tiendaYaTieneAdmin(pool, idBranch, idCuenta, amb.idPuntoVenta, idUsuario)) {
+      return reply.code(409).send({ error: 'Esa tienda ya tiene un administrador. Solo puede haber uno por tienda.' });
+    }
+    let mods = null;
+    if (pantallas !== undefined) {
+      mods = modulosFinales(pantallas, await modulosAsignables(pool, request.user), objetivo.pantallas);
+      if (mods.error) return reply.code(403).send({ error: mods.error });
     }
 
     await pool.request()
@@ -386,9 +425,9 @@ export async function editarUsuario(request, reply) {
       .input('TipoUsuario',    sql.VarChar(50),  TipoUsuario)
       .input('Puesto',         sql.VarChar(200), Puesto || null)
       .input('FechaNacimiento',sql.Date,         FechaNacimiento || null)
-      .input('idPuntoVenta',   sql.BigInt,       idPuntoVenta || null)
-      .input('idEstado',       sql.BigInt,       idEstado || null)
-      .input('idPais',         sql.BigInt,       idPais || null)
+      .input('idPuntoVenta',   sql.BigInt,       amb.idPuntoVenta)
+      .input('idEstado',       sql.BigInt,       amb.idEstado)
+      .input('idPais',         sql.BigInt,       amb.idPais)
       .input('NivelAcceso',    sql.Int,           nivelPorRol(TipoUsuario))
       .input('UsuMod',         sql.VarChar(10),  String(idEditor))
       .query(`UPDATE VIDA_CUENTA_USUARIOS SET
@@ -400,14 +439,14 @@ export async function editarUsuario(request, reply) {
                 FechaMod=GETUTCDATE(), UsuMod=@UsuMod
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
 
-    if (pantallas !== undefined) {
+    if (mods) {
       await pool.request()
         .input('idBranch',  sql.BigInt, idBranch)
         .input('idCuenta',  sql.BigInt, idCuenta)
         .input('idUsuario', sql.BigInt, idUsuario)
         .query(`DELETE FROM VIDA_CUENTA_PANTALLAS_ACCESOS_USUARIO WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
 
-      for (const idPantalla of pantallas) {
+      for (const idPantalla of mods.modulos) {
         await pool.request()
           .input('idBranch',   sql.BigInt, idBranch)
           .input('idCuenta',   sql.BigInt, idCuenta)
@@ -443,11 +482,10 @@ export async function toggleStatus(request, reply) {
   try {
     const pool = await getPool();
 
-    const rolActual = await obtenerRolUsuario(pool, idBranch, idCuenta, idUsuario);
-    if (!rolActual) return reply.code(404).send({ error: 'Usuario no encontrado' });
-    if (!puedeGestionarRol(request.user.TipoUsuario, rolActual)) {
-      return reply.code(403).send({ error: 'No puedes cambiar el status de un usuario con rol superior al tuyo' });
-    }
+    const objetivo = await obtenerUsuarioGestion(pool, idBranch, idCuenta, idUsuario);
+    if (!objetivo) return reply.code(404).send({ error: 'Usuario no encontrado' });
+    const motivo = await motivoNoGestiona(pool, request.user, objetivo);
+    if (motivo) return reply.code(403).send({ error: motivo });
 
     await pool.request()
       .input('idBranch',  sql.BigInt,      idBranch)
@@ -508,6 +546,8 @@ export async function cambiarPassword(request, reply) {
 }
 
 // ── GET /api/usuarios/pantallas ───────────────────────────────────────────
+// Módulos que quien consulta puede asignar (el SUPER_ADMIN, todos; los demás,
+// los que ellos mismos tienen)
 export async function getPantallas(request, reply) {
   const { idBranch, idCuenta } = request.user;
   try {
@@ -519,8 +559,15 @@ export async function getPantallas(request, reply) {
               FROM VIDA_CUENTA_PANTALLAS
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'
               ORDER BY OrdenPantalla`);
-    return reply.send(result.recordset);
+    const permitidos = await modulosAsignables(pool, request.user);
+    return reply.send(permitidos ? result.recordset.filter((p) => permitidos.has(String(p.idPantalla))) : result.recordset);
   } catch (err) {
     return reply.code(500).send({ error: 'Error al obtener pantallas' });
   }
+}
+
+// ── GET /api/usuarios/roles-asignables ────────────────────────────────────
+// Roles que quien consulta puede dar (estrictamente inferiores al suyo)
+export async function getRolesAsignables(request, reply) {
+  return reply.send({ roles: rolesAsignables(request.user.TipoUsuario) });
 }

@@ -4,7 +4,9 @@ import { Text, TextInput } from '../components/Texto';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
+import useAuthStore from '../store/authStore';
 
 function PasswordField({ label, value, onChangeText, placeholder }) {
   const [show, setShow] = useState(false);
@@ -48,7 +50,12 @@ export default function PerfilPasswordScreen() {
     }
     setGuardando(true);
     try {
-      await api.put('/delivery/cliente/password', { actual, nueva });
+      const r = await api.put('/delivery/cliente/password', { actual, nueva });
+      // Las sesiones de otros teléfonos se cerraron; esta sigue con el token nuevo
+      if (r.data?.token) {
+        await AsyncStorage.setItem('vida_cliente_token', r.data.token);
+        useAuthStore.setState({ token: r.data.token });
+      }
       Alert.alert('¡Listo!', 'Tu contraseña fue actualizada correctamente.', [
         { text: 'OK', onPress: () => router.back() },
       ]);

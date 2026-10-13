@@ -9,6 +9,7 @@ import path from 'path';
 import fs from 'fs';
 import { createTransport } from 'nodemailer';
 import { nextId, resolverBaseUrl } from './comun.js';
+import { instanteCorte, olvidarSesion } from '../../services/sesiones.service.js';
 
 // ══════════════════════════════════════════════════════════════════════════
 // CLIENTE — REGISTRO
@@ -381,12 +382,32 @@ export async function cambiarPasswordCliente(request, reply) {
       .input('idCuenta',   sql.BigInt,      idCuenta)
       .input('idCliente',  sql.BigInt,      idCliente)
       .input('Contrasena', sql.VarChar(200), hash)
-      .query(`UPDATE VIDA_APP_CLIENTES SET Contrasena=@Contrasena
+      .input('desde',      sql.DateTime2,   instanteCorte())
+      .query(`UPDATE VIDA_APP_CLIENTES SET Contrasena=@Contrasena, SesionesDesde=@desde
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
-    return reply.send({ ok: true });
+    // Se cierran las sesiones de otros teléfonos; este recibe un token nuevo
+    olvidarSesion('CLIENTE', request.cliente);
+    const token = request.server.jwt.sign({ idBranch, idCuenta, idCliente, rol: 'CLIENTE' }, { expiresIn: '180d' });
+    return reply.send({ ok: true, token });
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al cambiar contraseña' });
+  }
+}
+
+// GET /delivery/cliente/perfil — datos de la cuenta para el perfil de la app
+export async function obtenerPerfilCliente(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  try {
+    const r = await (await getPool()).request()
+      .input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('id', sql.BigInt, idCliente)
+      .query(`SELECT idCliente, Nombre, Apellidos, Telefono, Email, EmailConfirmado, FotoURL, FechaAlta
+              FROM VIDA_APP_CLIENTES WHERE idBranch=@b AND idCuenta=@c AND idCliente=@id`);
+    if (!r.recordset[0]) return reply.code(404).send({ error: 'Cliente no encontrado' });
+    return reply.send({ ...r.recordset[0], EmailConfirmado: !!r.recordset[0].EmailConfirmado });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener el perfil' });
   }
 }
 
@@ -404,6 +425,7 @@ export async function eliminarCuentaCliente(request, reply) {
       .input('idCliente', sql.BigInt, idCliente)
       .query(`UPDATE VIDA_APP_CLIENTES SET Status='ELIMINADO'
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idCliente=@idCliente`);
+    olvidarSesion('CLIENTE', request.cliente); // sus sesiones dejan de valer al instante
     return reply.send({ ok: true });
   } catch (err) {
     request.log.error(err);

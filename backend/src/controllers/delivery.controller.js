@@ -3,6 +3,7 @@
 // src/controllers/delivery/, partido por dominio; este archivo reexporta su API
 // para que las rutas y los servicios que lo importan no cambien.
 export * from './delivery/clienteCuenta.js';
+export * from './delivery/recuperacion.js';
 export * from './delivery/pedidosCliente.js';
 export * from './delivery/puntos.js';
 export * from './delivery/hidratacion.js';

@@ -5,6 +5,7 @@
 import { getPool, sql } from '../db/sqlserver.js';
 import { conIdUnico } from '../db/idUnico.js';
 import { fechaCaracas, fechaISO } from '../services/fechas.service.js';
+import { emitirParaCuenta } from '../services/cuponesAutomaticos.service.js';
 
 const TIPOS    = ['DESCUENTO_PCT', 'DESCUENTO_USD'];
 const ALCANCES = ['TODO', 'CATEGORIA', 'PRODUCTO'];
@@ -35,9 +36,12 @@ const normCodigo = (c) => String(c || '').trim().toUpperCase().slice(0, 40);
 // `items` (opcional) permite recomputar el subtotal elegible cuando el cupón es
 // por producto/categoría: [{ idProducto, idCategoria, subtotal }]
 // Devuelve { ok, descuento, motivo }.
-export function evaluarCupon(cupon, { subtotal, canal, items } = {}) {
+export function evaluarCupon(cupon, { subtotal, canal, items, idCliente } = {}) {
   if (!cupon) return { ok: false, descuento: 0, motivo: 'Cupón no encontrado' };
   if (cupon.Status !== 'ACTIVO') return { ok: false, descuento: 0, motivo: 'Cupón inactivo' };
+  // Cupón personal (p. ej. por inactividad): solo en la cuenta a la que se emitió
+  if (cupon.idClienteExclusivo != null && String(cupon.idClienteExclusivo) !== String(idCliente ?? ''))
+    return { ok: false, descuento: 0, motivo: 'Este cupón es personal y no corresponde a tu cuenta' };
 
   // Vigencia por día de negocio de Caracas: FechaInicio/FechaFin son días
   // completos y no dependen de la zona horaria del servidor.
@@ -108,16 +112,25 @@ async function usosDelCliente(pool, idBranch, idCuenta, idCupon, idCliente) {
 // ══════════════════════════════════════════════════════════════════════════
 // ADMIN / PANEL — CRUD
 // ══════════════════════════════════════════════════════════════════════════
+// ?origen=INACTIVIDAD lista los cupones personales automáticos (con el
+// cliente); sin parámetro, los creados en el panel.
 export async function listarCupones(request, reply) {
   const { idBranch, idCuenta } = request.user;
+  const automaticos = String(request.query?.origen || '').toUpperCase() === 'INACTIVIDAD';
   try {
     const pool = await getPool();
     const r = await pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
-      .query(`SELECT * FROM VIDA_CUPONES
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta
-              ORDER BY Status ASC, FechaAlta DESC`);
+      .query(automaticos
+        ? `SELECT TOP 300 k.*, LTRIM(RTRIM(CONCAT(c.Nombre,' ',ISNULL(c.Apellidos,'')))) AS Cliente, c.Telefono
+           FROM VIDA_CUPONES k
+           LEFT JOIN VIDA_APP_CLIENTES c ON c.idBranch=k.idBranch AND c.idCuenta=k.idCuenta AND c.idCliente=k.idClienteExclusivo
+           WHERE k.idBranch=@idBranch AND k.idCuenta=@idCuenta AND k.Origen='INACTIVIDAD'
+           ORDER BY k.FechaAlta DESC`
+        : `SELECT * FROM VIDA_CUPONES
+           WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND ISNULL(Origen,'MANUAL')='MANUAL'
+           ORDER BY Status ASC, FechaAlta DESC`);
     return reply.send(r.recordset);
   } catch (err) {
     request.log.error(err);
@@ -307,7 +320,7 @@ export async function validarCuponCliente(request, reply) {
   try {
     const pool = await getPool();
     const cupon = await buscarCuponPorCodigo(pool, idBranch, idCuenta, codigo);
-    let res = evaluarCupon(cupon, { subtotal, canal: 'DELIVERY', items });
+    let res = evaluarCupon(cupon, { subtotal, canal: 'DELIVERY', items, idCliente });
 
     // Límite por cliente
     if (res.ok && cupon.UsosPorCliente != null) {
@@ -322,6 +335,28 @@ export async function validarCuponCliente(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al validar cupón' });
+  }
+}
+
+// GET /delivery/cliente/cupones — cupones personales vigentes y sin usar
+export async function misCuponesCliente(request, reply) {
+  const { idBranch, idCuenta, idCliente } = request.cliente;
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('b', sql.BigInt, idBranch).input('c', sql.BigInt, idCuenta).input('cli', sql.BigInt, idCliente)
+      .query(`SELECT k.Codigo, k.Nombre, k.Tipo, k.Valor, k.MinCompra, k.MaxDescuento, k.FechaFin
+              FROM VIDA_CUPONES k
+              WHERE k.idBranch=@b AND k.idCuenta=@c AND k.idClienteExclusivo=@cli AND k.Status='ACTIVO'
+                AND (k.FechaFin IS NULL OR k.FechaFin >= CAST(DATEADD(HOUR,-4,GETUTCDATE()) AS DATE))
+                AND (k.UsosMax IS NULL OR k.UsosActuales < k.UsosMax)
+                AND NOT EXISTS (SELECT 1 FROM VIDA_CUPONES_USOS u WHERE u.idBranch=k.idBranch AND u.idCuenta=k.idCuenta
+                                AND u.idCupon=k.idCupon AND u.idCliente=@cli)
+              ORDER BY k.FechaFin`);
+    return reply.send(r.recordset.map((k) => ({ ...k, FechaFin: fechaISO(k.FechaFin) })));
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener tus cupones' });
   }
 }
 
@@ -371,7 +406,7 @@ export async function aplicarCuponPedido(request, reply) {
     // El subtotal a evaluar es el total vigente (ya trae, si acaso, el descuento
     // de puntos aplicado en la creación del pedido).
     const subtotal = parseFloat(pedido.TotalUSD);
-    const evalRes = evaluarCupon(cupon, { subtotal, canal: 'DELIVERY' });
+    const evalRes = evaluarCupon(cupon, { subtotal, canal: 'DELIVERY', idCliente });
     if (!evalRes.ok) return reply.code(422).send({ error: evalRes.motivo });
 
     // Límite por cliente
@@ -443,5 +478,18 @@ export async function aplicarCuponPedido(request, reply) {
       return reply.code(409).send({ error: 'El cupón ya fue aplicado a este pedido' });
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al aplicar cupón' });
+  }
+}
+
+// POST /cupones/automaticos/emitir — corre ya el cupón por inactividad de la cuenta
+export async function emitirCuponesAhora(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  try {
+    const r = await emitirParaCuenta(await getPool(), idBranch, idCuenta, request.log);
+    if (!r.activo) return reply.code(409).send({ error: 'El cupón por inactividad está apagado. Actívalo en Logística → Configuración.' });
+    return reply.send(r);
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'No se pudieron emitir los cupones' });
   }
 }

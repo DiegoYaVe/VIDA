@@ -8,6 +8,7 @@ import {
   toggleStatus,
   cambiarPassword,
   getPantallas,
+  getRolesAsignables,
 } from '../controllers/usuarios.controller.js';
 
 // Solo administradores pueden gestionar usuarios
@@ -22,6 +23,7 @@ export async function usuariosRoutes(fastify) {
   fastify.get('/usuarios',           { preHandler: [requireRole(...LECTURA)] }, listarUsuarios);
   fastify.post('/usuarios',          { preHandler: [requireRole(...ADMIN)] }, crearUsuario);
   fastify.get('/usuarios/pantallas', { preHandler: [requireRole(...LECTURA)] }, getPantallas);
+  fastify.get('/usuarios/roles-asignables', { preHandler: [requireRole(...LECTURA)] }, getRolesAsignables);
   // Cambio de contraseña propia: disponible para cualquier usuario autenticado
   fastify.post('/usuarios/cambiar-pass', { preHandler: [authenticate] }, cambiarPassword);
 
