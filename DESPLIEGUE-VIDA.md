@@ -1,7 +1,9 @@
 # VIDA / VenezPOS — Checklist de despliegue a producción (paso a paso)
 
 Guía operativa para publicar una versión nueva a producción. Marca cada casilla al completarla.
-Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** remoto, panel React servido por el mismo sitio bajo `/api`, apps **Expo/EAS**.
+Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** remoto, apps **Expo/EAS**.
+
+> **Esquema vigente (2026-10-15):** panel en `https://app.comercializadoravida.com` (sitio "Viva Front") y backend en su propio sitio `https://api.comercializadoravida.com` ("Vida Back", DNS en IONOS: registro A `api` → 208.98.35.168, SSL Let's Encrypt en SmarterASP). El panel se compila con `VITE_API_URL=https://api.comercializadoravida.com/api` y `VITE_WS_URL=wss://api.comercializadoravida.com/api/ws` (`frontend/.env.production`); el `.env` del backend lleva `FRONTEND_URL=https://app.comercializadoravida.com` (CORS) y `BASE_URL=https://api.comercializadoravida.com`. iisnode arranca `backend/iisnode.cjs` (entrada CommonJS: `src/app.js` es un módulo ES con await de nivel superior y escucha en la named pipe que da IIS). Verificación: `https://api.comercializadoravida.com/api/health`. El panel es PWA: si un navegador sigue mostrando la versión vieja, DevTools → Application → Clear site data.
 
 > Para arquitectura y convenciones, ver [HANDOFF-VIDA.md](HANDOFF-VIDA.md). Para arranque local, [INSTALACION.md](INSTALACION.md).
 > ⚠️ Es **SQL Server**, NO MySQL. Y `NODE_ENV=production` es obligatorio: sin un `JWT_SECRET` propio de 32+ caracteres el backend **no arranca a propósito**.

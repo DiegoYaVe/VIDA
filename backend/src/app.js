@@ -286,12 +286,14 @@ if (PUNTOS_EXP_MS > 0) {
   }
 }
 
-// Arrancar
+// Arrancar. En IIS (iisnode) PORT no es un número sino una named pipe
+// (\\.\pipe\...) por la que IIS le pasa las peticiones: se escucha en esa pipe.
 const PORT = process.env.PORT || 3001;
+const escucha = /^\d+$/.test(String(PORT)) ? { port: Number(PORT), host: '0.0.0.0' } : { path: String(PORT) };
 try {
   await getPool(); // Verificar conexión BD al arrancar
-  await fastify.listen({ port: PORT, host: '0.0.0.0' });
-  console.log(`🚀 POS Venezuela Backend corriendo en http://localhost:${PORT}`);
+  await fastify.listen(escucha);
+  console.log(`🚀 POS Venezuela Backend corriendo en ${escucha.path ? `la pipe de IIS ${escucha.path}` : `http://localhost:${PORT}`}`);
 } catch (err) {
   fastify.log.error(err);
   process.exit(1);
