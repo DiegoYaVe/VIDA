@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { instalarCargando } from './cargando.js';
 
 // URL del API: configurable por entorno (frontend/.env → VITE_API_URL).
 // Sin override, en produccion se usa /api del MISMO origen que sirve el panel:
@@ -69,5 +70,9 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Spinner en el botón que disparó cada petición y barra de carga superior.
+// Va después del interceptor de 401 para contar bien los reintentos.
+instalarCargando(api);
 
 export default api;

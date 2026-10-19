@@ -1,0 +1,1142 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Así funciona VIDA</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Nunito+Sans:wght@400;600;700;800&display=swap">
+<style>
+/* Layout: banda de marca con el mapa de la red como tesis; debajo, una etapa por bloque
+   con su recorrido paso a paso. Cada actor conserva su color en todo el documento. */
+:root {
+  --bg: #F2F7FA;
+  --surface: #FFFFFF;
+  --surface-2: #E8F1F6;
+  --ink: #0A1E3F;
+  --ink-2: #3A4D6A;
+  --muted: #64768E;
+  --line: #D5E2EB;
+  --navy: #0A1E3F;
+  --on-navy: #FFFFFF;
+  --on-navy-2: #B9CCE0;
+  --aqua: #2FA9C8;
+  --green: #3E9150;
+
+  /* un color por actor (texto/borde) y su fondo suave */
+  --prov: #5B6B82;   --prov-soft: #EDF1F6;
+  --matriz: #4338CA; --matriz-soft: #E8E9FD;
+  --tienda: #0E86A6; --tienda-soft: #DDF3F9;
+  --cliente: #2F8A43; --cliente-soft: #E2F5E6;
+  --repa: #8B3FC4;   --repa-soft: #F3E8FC;
+  --corp: #0A1E3F;   --corp-soft: #E3E9F2;
+  --club: #B07A00;   --club-soft: #FDF3D6;
+  --acad: #C2410C;   --acad-soft: #FFEDE2;
+  --sis: #64768E;    --sis-soft: #EEF2F6;
+
+  --ok-bg: #DCFCE7; --ok-fg: #166534;
+  --prop-bg: #FEF3C7; --prop-fg: #92400E; --prop-line: #E5A823;
+  --money: #3E9150;
+
+  --display: "Poppins", "Segoe UI", system-ui, sans-serif;
+  --body: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
+  --radius: 16px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0B1626; --surface: #112035; --surface-2: #172A41; --ink: #E8F0F8; --ink-2: #BFCDDC; --muted: #8EA1B7; --line: #24384F;
+    --navy: #0D2546; --on-navy: #FFFFFF; --on-navy-2: #A9BED6; --aqua: #5CC9E3; --green: #79C98A;
+    --prov: #A9B6C8; --prov-soft: #1C2A3C; --matriz: #A5A8FF; --matriz-soft: #1F2350;
+    --tienda: #5CC9E3; --tienda-soft: #0F3341; --cliente: #79C98A; --cliente-soft: #143323;
+    --repa: #C99AF0; --repa-soft: #2C1C43; --corp: #C9D6E8; --corp-soft: #1D2C42;
+    --club: #F2C04B; --club-soft: #3A2E0E; --acad: #FB9B6B; --acad-soft: #3D2216;
+    --sis: #A3B3C6; --sis-soft: #1A2738;
+    --ok-bg: #133A22; --ok-fg: #86EFAC; --prop-bg: #3A2C0B; --prop-fg: #FCD679; --prop-line: #B98A1E; --money: #79C98A;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0B1626; --surface: #112035; --surface-2: #172A41; --ink: #E8F0F8; --ink-2: #BFCDDC; --muted: #8EA1B7; --line: #24384F;
+  --navy: #0D2546; --on-navy: #FFFFFF; --on-navy-2: #A9BED6; --aqua: #5CC9E3; --green: #79C98A;
+  --prov: #A9B6C8; --prov-soft: #1C2A3C; --matriz: #A5A8FF; --matriz-soft: #1F2350;
+  --tienda: #5CC9E3; --tienda-soft: #0F3341; --cliente: #79C98A; --cliente-soft: #143323;
+  --repa: #C99AF0; --repa-soft: #2C1C43; --corp: #C9D6E8; --corp-soft: #1D2C42;
+  --club: #F2C04B; --club-soft: #3A2E0E; --acad: #FB9B6B; --acad-soft: #3D2216;
+  --sis: #A3B3C6; --sis-soft: #1A2738;
+  --ok-bg: #133A22; --ok-fg: #86EFAC; --prop-bg: #3A2C0B; --prop-fg: #FCD679; --prop-line: #B98A1E; --money: #79C98A;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.55; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; line-height: 1.2; }
+p { margin: 0; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* ---------- Banda de marca ---------- */
+.hero { background: var(--navy); color: var(--on-navy); }
+.hero .wrap { padding-block: 40px 28px; display: grid; gap: 18px; }
+.eyebrow { font-size: 12.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--on-navy-2); display: flex; align-items: center; gap: 10px; }
+.drop { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(140deg, #54C4E0, #4E9F5C); display: grid; place-items: center; font-family: var(--display); font-weight: 700; color: #fff; font-size: 14px; letter-spacing: 0; }
+.hero h1 { font-size: clamp(30px, 5vw, 46px); }
+.hero .lead { max-width: 64ch; color: var(--on-navy-2); font-size: 17px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 14px; color: var(--on-navy-2); }
+.legend .sep { width: 1px; height: 18px; background: rgba(255,255,255,.2); }
+
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 800; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.chip.ok { background: var(--ok-bg); color: var(--ok-fg); }
+.chip.prop { background: var(--prop-bg); color: var(--prop-fg); border: 1.5px dashed var(--prop-line); }
+.chip.where { background: var(--surface-2); color: var(--ink-2); font-weight: 700; }
+
+.jump { display: flex; flex-wrap: wrap; gap: 8px; }
+.jump a { color: var(--on-navy); text-decoration: none; font-size: 14px; font-weight: 700; padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); }
+.jump a:hover, .jump a:focus-visible { background: rgba(255,255,255,.18); outline: none; }
+.jump a span { color: #7FD6EA; margin-right: 4px; }
+
+/* ---------- Mapa ---------- */
+.map-sec { padding-block: 28px 8px; }
+.map-card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 20px; display: grid; gap: 14px; }
+.map-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 20px; align-items: end; }
+.map-head h2 { font-size: 22px; }
+.map-head p { color: var(--muted); font-size: 14.5px; max-width: 60ch; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13.5px; color: var(--ink-2); }
+.keys span { display: inline-flex; align-items: center; gap: 8px; }
+.keys svg { width: 34px; height: 10px; }
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.scroll svg.map { display: block; width: 100%; min-width: 780px; height: auto; }
+.hint { display: none; font-size: 13px; color: var(--muted); }
+@media (max-width: 820px) { .hint { display: block; } }
+
+.map .node rect { fill: var(--surface); stroke-width: 2; }
+.map .t { font-family: var(--display); font-weight: 700; font-size: 16px; fill: var(--ink); }
+.map .s { font-family: var(--body); font-weight: 600; font-size: 12.5px; fill: var(--muted); }
+.map .lbl rect { fill: var(--surface); stroke: var(--line); }
+.map .lbl text { font-family: var(--body); font-weight: 800; font-size: 12.5px; fill: var(--ink-2); text-anchor: middle; dominant-baseline: central; }
+.map .lbl.money text { fill: var(--money); }
+.map .flow { stroke: var(--aqua); stroke-width: 2.5; fill: none; }
+.map .pay { stroke: var(--money); stroke-width: 2.5; fill: none; stroke-dasharray: 7 6; }
+.map .ic { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- Etapas ---------- */
+.stages { padding-block: 24px 8px; display: grid; gap: 22px; }
+.sec-title { display: grid; gap: 6px; padding-top: 18px; }
+.sec-title h2 { font-size: clamp(22px, 3vw, 28px); }
+.sec-title p { color: var(--muted); max-width: 70ch; }
+
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 22px 26px 24px; display: grid; gap: 18px; scroll-margin-top: 16px; }
+.stage-head { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; }
+.num { font-family: var(--display); font-weight: 700; font-size: 15px; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--navy); color: var(--on-navy); flex: none; }
+.stage-head .txt { flex: 1 1 320px; min-width: 0; display: grid; gap: 2px; }
+.stage-head h3 { font-size: 20px; }
+.stage-head .txt p { color: var(--muted); font-size: 14.5px; }
+.who-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; padding: 4px 10px 4px 6px; border-radius: 999px; color: var(--c); background: var(--cs); }
+.tag svg.i { width: 16px; height: 16px; }
+
+.flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); gap: 16px 34px; counter-reset: paso; }
+.step { position: relative; counter-increment: paso; background: var(--cs); border: 1.5px solid color-mix(in srgb, var(--c) 35%, transparent); border-radius: var(--radius); padding: 12px 14px 14px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.step .who { display: flex; align-items: center; gap: 8px; color: var(--c); font-weight: 800; font-size: 13px; letter-spacing: .02em; }
+.step .who b { width: 30px; height: 30px; border-radius: 10px; background: var(--surface); display: grid; place-items: center; flex: none; }
+.step .who::after { content: counter(paso); margin-left: auto; font-family: var(--display); font-size: 12px; color: var(--muted); }
+.step p { font-size: 14.5px; color: var(--ink); font-weight: 600; }
+.step p small { display: block; font-weight: 400; color: var(--ink-2); font-size: 13.5px; margin-top: 3px; }
+.step .chip.where { justify-self: start; font-size: 11.5px; padding: 2px 8px; }
+.step:not(:last-child)::before { content: ""; position: absolute; right: -24px; top: 50%; width: 12px; height: 12px; border-top: 3px solid var(--aqua); border-right: 3px solid var(--aqua); transform: translateY(-50%) rotate(45deg); }
+.step.auto { --c: var(--sis); --cs: var(--sis-soft); border-style: dashed; }
+
+.states { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.states .st { font-weight: 800; padding: 2px 9px; border-radius: 999px; font-size: 12.5px; }
+.st.b { background: #DBEAFE; color: #1D4ED8; } .st.a { background: #FEF3C7; color: #B45309; }
+.st.p { background: #F3E8FF; color: #7E22CE; } .st.g { background: #DCFCE7; color: #15803D; }
+.st.y { background: #F1F5F9; color: #475569; } .st.r { background: #FEE2E2; color: #B91C1C; }
+.states .ar { color: var(--muted); }
+
+.prop-box { border: 2px dashed var(--prop-line); background: color-mix(in srgb, var(--prop-bg) 55%, var(--surface)); border-radius: var(--radius); padding: 12px 16px 14px; display: grid; gap: 8px; }
+.prop-box ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14.5px; color: var(--ink); }
+.prop-box li::marker { color: var(--prop-line); }
+
+@media (max-width: 640px) {
+  .stage { padding: 18px 16px 20px; }
+  .flow { grid-template-columns: 1fr; gap: 26px; }
+  .step:not(:last-child)::before { right: auto; left: 50%; top: auto; bottom: -21px; transform: translateX(-50%) rotate(135deg); }
+}
+
+/* ---------- Dinero ---------- */
+.money { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 22px 26px 24px; display: grid; gap: 16px; }
+.chain { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 46px; }
+.link { position: relative; background: var(--cs); border-radius: var(--radius); padding: 14px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.link h4 { margin: 0; font-family: var(--display); font-size: 16px; color: var(--c); display: flex; align-items: center; gap: 8px; }
+.link p { font-size: 14px; color: var(--ink-2); }
+.link:not(:last-child)::after { content: "$"; position: absolute; right: -38px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 14px; color: var(--surface); background: var(--money); }
+.side-note { display: flex; gap: 12px; align-items: flex-start; background: var(--repa-soft); border-radius: var(--radius); padding: 12px 16px; font-size: 14.5px; }
+.side-note svg.i { color: var(--repa); margin-top: 3px; }
+@media (max-width: 860px) {
+  .chain { grid-template-columns: 1fr; gap: 40px; }
+  .link:not(:last-child)::after { right: auto; left: 50%; top: auto; bottom: -36px; transform: translateX(-50%); }
+}
+
+/* ---------- Canales ---------- */
+.channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.channel { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 18px 20px; display: grid; gap: 10px; align-content: start; }
+.channel h3 { font-size: 18px; display: flex; align-items: center; gap: 10px; }
+.channel h3 b { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; background: var(--surface-2); color: var(--ink); }
+.channel .addr { font-size: 13px; color: var(--muted); font-weight: 700; }
+.channel ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.channel li { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; font-size: 14px; color: var(--ink-2); }
+.channel li .tag { margin-top: 1px; }
+
+/* ---------- Pendientes ---------- */
+.todo { background: var(--surface); border: 2px dashed var(--prop-line); border-radius: 22px; padding: 20px 24px; display: grid; gap: 12px; }
+.todo-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px 26px; margin: 0; padding: 0; list-style: none; }
+.todo-list li { display: grid; grid-template-columns: 34px 1fr; gap: 10px; font-size: 14.5px; align-items: start; }
+.todo-list li span { font-family: var(--display); font-weight: 700; font-size: 12px; color: var(--prop-fg); background: var(--prop-bg); border-radius: 8px; text-align: center; padding: 3px 0; }
+
+/* ---------- Mapa completo: 3 herramientas + servidor ---------- */
+.full { padding-block: 26px 8px; display: grid; gap: 16px; }
+.sys-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) 132px minmax(0, .95fr) 132px minmax(0, 1.1fr); align-items: stretch; }
+.sys { background: var(--surface); border: 2px solid var(--line); border-radius: 22px; padding: 18px; display: grid; gap: 14px; align-content: start; min-width: 0; }
+.sys-head { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: center; }
+.sys-head b { grid-row: span 2; width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; background: var(--surface-2); color: var(--ink); }
+.sys-head b svg.i { width: 22px; height: 22px; }
+.sys-head h3 { font-size: 19px; }
+.sys-head span { font-size: 13px; color: var(--muted); font-weight: 700; }
+.grp { display: grid; gap: 7px; }
+.grp h4 { margin: 0; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 800; display: flex; align-items: center; gap: 8px; }
+.grp h4 i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+.mods { display: flex; flex-wrap: wrap; gap: 6px; }
+a.mod { text-decoration: none; font-size: 13.5px; font-weight: 700; color: var(--ink); background: var(--cs); border: 1.5px solid color-mix(in srgb, var(--c) 30%, transparent); padding: 4px 10px; border-radius: 10px; line-height: 1.3; }
+a.mod:hover, a.mod:focus-visible { border-color: var(--c); outline: none; }
+a.mod.soon { background: transparent; border: 1.5px dashed var(--prop-line); color: var(--prop-fg); }
+.hub { background: var(--navy); color: var(--on-navy); border-color: var(--navy); }
+.hub .sys-head b { background: rgba(255,255,255,.12); color: #7FD6EA; }
+.hub .sys-head span { color: var(--on-navy-2); }
+.hub .grp h4 { color: var(--on-navy-2); }
+.hub ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.hub li { font-size: 13.5px; line-height: 1.4; display: grid; grid-template-columns: 16px 1fr; gap: 8px; color: var(--on-navy); }
+.hub li::before { content: ""; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: #7FD6EA; }
+.hub li.t::before { background: #F2C04B; }
+.hub a { color: #7FD6EA; }
+.apps-col { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.wire { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 12px 8px; }
+.wire::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 3px solid var(--aqua); opacity: .35; }
+.wire span { position: relative; background: var(--surface); border: 1.5px solid var(--aqua); color: var(--ink-2); border-radius: 12px; font-size: 12px; font-weight: 800; line-height: 1.3; padding: 6px 8px; text-align: center; }
+.wire span em { display: block; font-style: normal; color: var(--aqua); font-size: 13px; }
+@media (max-width: 1080px) {
+  .sys-grid { grid-template-columns: 1fr; }
+  .wire { flex-direction: row; flex-wrap: wrap; justify-content: center; padding: 14px 0; }
+  .wire::before { left: 50%; right: auto; top: 0; bottom: 0; border-top: 0; border-left: 3px solid var(--aqua); }
+  .wire span { flex: 0 1 200px; }
+}
+
+/* ---------- Un pedido en vivo (carriles) ---------- */
+.lane-card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 20px; display: grid; gap: 12px; }
+.lane-card svg.lanes { display: block; width: 100%; min-width: 860px; height: auto; }
+.lanes .lh rect { stroke-width: 2; }
+.lanes .lh text { font-family: var(--display); font-weight: 700; font-size: 15px; fill: var(--ink); text-anchor: middle; }
+.lanes .lh text.s { font-family: var(--body); font-weight: 700; font-size: 12px; fill: var(--muted); }
+.lanes .ln { stroke: var(--line); stroke-width: 2; stroke-dasharray: 4 6; }
+.lanes .msg { stroke: var(--aqua); stroke-width: 2.2; fill: none; }
+.lanes .msg.pay { stroke: var(--money); stroke-dasharray: 7 5; }
+.lanes .msg.push { stroke: var(--club); }
+.lanes .ml rect { fill: var(--surface); }
+.lanes .ml text { font-family: var(--body); font-weight: 700; font-size: 12.5px; fill: var(--ink-2); text-anchor: middle; dominant-baseline: central; }
+.lanes .self rect { fill: var(--sis-soft); stroke: var(--sis); stroke-dasharray: 5 4; }
+.lanes .self text { font-family: var(--body); font-weight: 700; font-size: 12.5px; fill: var(--ink); text-anchor: middle; dominant-baseline: central; }
+.lanes .n circle { fill: var(--navy); }
+.lanes .n text { font-family: var(--display); font-weight: 700; font-size: 11px; fill: var(--on-navy); text-anchor: middle; dominant-baseline: central; }
+
+/* ---------- Catálogo de pantallas ---------- */
+.catalog { padding-block: 22px 8px; display: grid; gap: 26px; }
+.cat-group { display: grid; gap: 14px; }
+.cat-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.cat-title b { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--navy); color: var(--on-navy); }
+.cat-title h3 { font-size: 22px; }
+.cat-title span { color: var(--muted); font-size: 14px; font-weight: 700; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 14px; }
+.mc { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px 18px; display: grid; gap: 10px; align-content: start; scroll-margin-top: 16px; min-width: 0; }
+.mc:target { border-color: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 35%, transparent); }
+.mc header { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; align-items: center; }
+.mc header b { grid-row: span 2; width: 36px; height: 36px; border-radius: 11px; background: var(--cs); color: var(--c); display: grid; place-items: center; }
+.mc h4 { margin: 0; font-family: var(--display); font-size: 16.5px; line-height: 1.25; }
+.mc .loc { font-size: 12.5px; color: var(--muted); font-weight: 700; }
+.mc ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 14.2px; color: var(--ink-2); }
+.mc ul b { color: var(--ink); }
+.mc .note { font-size: 13.5px; background: color-mix(in srgb, var(--prop-bg) 60%, var(--surface)); border: 1.5px dashed var(--prop-line); border-radius: 12px; padding: 8px 12px; color: var(--ink); }
+
+.r-corp { --c: var(--corp); --cs: var(--corp-soft); }
+.r-matriz { --c: var(--matriz); --cs: var(--matriz-soft); }
+.r-tienda { --c: var(--tienda); --cs: var(--tienda-soft); }
+.r-cliente { --c: var(--cliente); --cs: var(--cliente-soft); }
+.r-repa { --c: var(--repa); --cs: var(--repa-soft); }
+.r-club { --c: var(--club); --cs: var(--club-soft); }
+.r-acad { --c: var(--acad); --cs: var(--acad-soft); }
+.r-sis { --c: var(--sis); --cs: var(--sis-soft); }
+.r-prov { --c: var(--prov); --cs: var(--prov-soft); }
+footer { padding-block: 28px 40px; color: var(--muted); font-size: 13.5px; }
+a:focus-visible { outline: 3px solid var(--aqua); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+</head>
+<body>
+
+
+<!-- Íconos -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-truck" viewBox="0 0 24 24"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></symbol>
+    <symbol id="i-warehouse" viewBox="0 0 24 24"><path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M6 14h12"/><rect width="12" height="12" x="6" y="10"/></symbol>
+    <symbol id="i-store" viewBox="0 0 24 24"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2 2.7 2.7 0 0 1-2-1 2.7 2.7 0 0 1-2 1 2.7 2.7 0 0 1-2-1 2.7 2.7 0 0 1-2 1 2.7 2.7 0 0 1-2-1 2.7 2.7 0 0 1-2 1 2.7 2.7 0 0 1-2-1 2.7 2.7 0 0 1-2 1 2 2 0 0 1-2-2V7"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+    <symbol id="i-bike" viewBox="0 0 24 24"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></symbol>
+    <symbol id="i-building" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></symbol>
+    <symbol id="i-cap" viewBox="0 0 24 24"><path d="M21.42 10.92a1 1 0 0 0-.02-1.84L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.83l8.57 3.91a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></symbol>
+    <symbol id="i-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M2 12h3M19 12h3M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></symbol>
+    <symbol id="i-cash" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.59 2.59A2 2 0 0 0 11.17 2H4a2 2 0 0 0-2 2v7.17a2 2 0 0 0 .59 1.42l8.7 8.7a2.43 2.43 0 0 0 3.42 0l6.58-6.58a2.43 2.43 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/></symbol>
+    <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></symbol>
+    <symbol id="i-cart" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+    <symbol id="i-gift" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/></symbol>
+    <symbol id="i-qr" viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3M21 21v.01M12 7v3a2 2 0 0 1-2 2H7M3 12h.01M12 3h.01M12 16v.01M16 12h1M21 12v.01M12 21v-1"/></symbol>
+  </defs>
+</svg>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow"><span class="drop">V</span>Comercializadora VIDA · Flujograma del sistema</div>
+    <h1>Así funciona VIDA</h1>
+    <p class="lead">Todo el sistema en una página: el panel web, la app de clientes, la app de repartidores y el servidor que los conecta. Quién usa cada pantalla, qué hace y cómo se habla con las demás. Cada actor tiene siempre el mismo color.</p>
+    <div class="legend">
+      <span class="chip ok">Ya funciona</span> lo que hoy hace el sistema
+      <span class="sep"></span>
+      <span class="chip prop">Propuesta</span> lo que se planteó en el audio y aún no existe
+    </div>
+    <nav class="jump" aria-label="Secciones">
+      <a href="#mapa-t">Mapa de la red</a>
+      <a href="#completo">Mapa completo del sistema</a>
+      <a href="#en-vivo">Un pedido en vivo</a>
+      <a href="#pantallas">Todas las pantallas</a>
+      <a href="#etapas-t">Etapas del negocio</a>
+      <a href="#dinero">El dinero</a>
+      <a href="#pend-t">Propuestas</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="wrap map-sec" aria-labelledby="mapa-t">
+    <div class="map-card">
+      <div class="map-head">
+        <div>
+          <h2 id="mapa-t">El mapa de la red</h2>
+          <p>Los ocho participantes y lo que se mueve entre ellos.</p>
+        </div>
+        <div class="keys">
+          <span><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="var(--aqua)" stroke-width="2.5"/></svg>Productos, pedidos e información</span>
+          <span><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="var(--money)" stroke-width="2.5" stroke-dasharray="7 6"/></svg>Dinero</span>
+        </div>
+      </div>
+      <p class="hint">Desliza el mapa hacia los lados para verlo completo.</p>
+      <div class="scroll">
+        <svg class="map" viewBox="0 0 1200 560" role="img" aria-label="Mapa: Proveedores surten a la Matriz; la Matriz reabastece a las Tiendas VIDA; las tiendas venden al cliente en mostrador o por app; el repartidor entrega a domicilio; el Club VIDA da puntos y premios al cliente; Corporativo da de alta tiendas; Academia capacita al equipo; el dinero fluye del cliente a la tienda, de la tienda a la Matriz y de la Matriz al proveedor.">
+          <defs>
+            <marker id="m-flow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="var(--aqua)"/></marker>
+            <marker id="m-pay" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="var(--money)"/></marker>
+          </defs>
+
+          <!-- Flechas -->
+          <path class="flow" d="M202 258 H326" marker-end="url(#m-flow)"/>
+          <path class="pay"  d="M328 296 H204" marker-end="url(#m-pay)"/>
+          <path class="flow" d="M532 258 H656" marker-end="url(#m-flow)"/>
+          <path class="pay"  d="M658 296 H534" marker-end="url(#m-pay)"/>
+          <path class="flow" d="M862 258 H986" marker-end="url(#m-flow)"/>
+          <path class="flow" d="M988 296 H864" marker-end="url(#m-flow)"/>
+          <path class="flow" d="M760 114 V226" marker-end="url(#m-flow)"/>
+          <path class="flow" d="M760 438 V326" marker-end="url(#m-flow)"/>
+          <path class="flow" d="M848 324 C 880 420, 930 470, 986 482" marker-end="url(#m-flow)"/>
+          <path class="flow" d="M1090 438 V326" marker-end="url(#m-flow)"/>
+          <path class="flow" d="M1090 116 V226" marker-start="url(#m-flow)" marker-end="url(#m-flow)"/>
+
+          <!-- Etiquetas de flechas -->
+          <g class="lbl"><rect x="223" y="232" width="84" height="22" rx="11"/><text x="265" y="243">Mercancía</text></g>
+          <g class="lbl money"><rect x="238" y="300" width="54" height="22" rx="11"/><text x="265" y="311">Pago</text></g>
+          <g class="lbl"><rect x="556" y="232" width="78" height="22" rx="11"/><text x="595" y="243">Reabasto</text></g>
+          <g class="lbl money"><rect x="543" y="300" width="104" height="22" rx="11"/><text x="595" y="311">Pago a crédito</text></g>
+          <g class="lbl"><rect x="870" y="232" width="110" height="22" rx="11"/><text x="925" y="243">Venta en tienda</text></g>
+          <g class="lbl"><rect x="870" y="300" width="110" height="22" rx="11"/><text x="925" y="311">Pedido por app</text></g>
+          <g class="lbl"><rect x="678" y="159" width="164" height="22" rx="11"/><text x="760" y="170">Alta de tienda y dueño</text></g>
+          <g class="lbl"><rect x="686" y="371" width="148" height="22" rx="11"/><text x="760" y="382">Cursos para el equipo</text></g>
+          <g class="lbl"><rect x="868" y="418" width="96" height="22" rx="11"/><text x="916" y="429">Pedido listo</text></g>
+          <g class="lbl"><rect x="1050" y="371" width="80" height="22" rx="11"/><text x="1090" y="382">Entrega</text></g>
+          <g class="lbl"><rect x="1030" y="160" width="120" height="22" rx="11"/><text x="1090" y="171">Puntos y premios</text></g>
+
+          <!-- Nodos -->
+          <g class="node"><rect x="0" y="230" width="200" height="94" rx="18" style="stroke:var(--prov)"/>
+            <circle cx="36" cy="277" r="23" style="fill:var(--prov-soft)"/><use href="#i-truck" x="24" y="265" width="24" height="24" class="ic" style="stroke:var(--prov)"/>
+            <text class="t" x="68" y="271">Proveedores</text><text class="s" x="68" y="291">Marcas y fabricantes</text></g>
+          <g class="node"><rect x="330" y="230" width="200" height="94" rx="18" style="stroke:var(--matriz)"/>
+            <circle cx="366" cy="277" r="23" style="fill:var(--matriz-soft)"/><use href="#i-warehouse" x="354" y="265" width="24" height="24" class="ic" style="stroke:var(--matriz)"/>
+            <text class="t" x="398" y="271">Matriz</text><text class="s" x="398" y="291">Centro de distribución</text></g>
+          <g class="node"><rect x="660" y="226" width="200" height="102" rx="18" style="stroke:var(--tienda);stroke-width:3.5"/>
+            <circle cx="696" cy="277" r="23" style="fill:var(--tienda-soft)"/><use href="#i-store" x="684" y="265" width="24" height="24" class="ic" style="stroke:var(--tienda)"/>
+            <text class="t" x="728" y="271">Tienda VIDA</text><text class="s" x="728" y="291">Empresario y cajeros</text></g>
+          <g class="node"><rect x="990" y="230" width="200" height="94" rx="18" style="stroke:var(--cliente)"/>
+            <circle cx="1026" cy="277" r="23" style="fill:var(--cliente-soft)"/><use href="#i-user" x="1014" y="265" width="24" height="24" class="ic" style="stroke:var(--cliente)"/>
+            <text class="t" x="1058" y="271">Cliente</text><text class="s" x="1058" y="291">En tienda o por app</text></g>
+          <g class="node"><rect x="990" y="440" width="200" height="94" rx="18" style="stroke:var(--repa)"/>
+            <circle cx="1026" cy="487" r="23" style="fill:var(--repa-soft)"/><use href="#i-bike" x="1014" y="475" width="24" height="24" class="ic" style="stroke:var(--repa)"/>
+            <text class="t" x="1058" y="481">Repartidor</text><text class="s" x="1058" y="501">App Repartidor</text></g>
+          <g class="node"><rect x="990" y="20" width="200" height="94" rx="18" style="stroke:var(--club)"/>
+            <circle cx="1026" cy="67" r="23" style="fill:var(--club-soft)"/><use href="#i-star" x="1014" y="55" width="24" height="24" class="ic" style="stroke:var(--club)"/>
+            <text class="t" x="1058" y="61">Club VIDA</text><text class="s" x="1058" y="81">Puntos y niveles</text></g>
+          <g class="node"><rect x="660" y="20" width="200" height="94" rx="18" style="stroke:var(--corp)"/>
+            <circle cx="696" cy="67" r="23" style="fill:var(--corp-soft)"/><use href="#i-building" x="684" y="55" width="24" height="24" class="ic" style="stroke:var(--corp)"/>
+            <text class="t" x="728" y="61">Corporativo</text><text class="s" x="728" y="81">Hace crecer la red</text></g>
+          <g class="node"><rect x="660" y="440" width="200" height="94" rx="18" style="stroke:var(--acad)"/>
+            <circle cx="696" cy="487" r="23" style="fill:var(--acad-soft)"/><use href="#i-cap" x="684" y="475" width="24" height="24" class="ic" style="stroke:var(--acad)"/>
+            <text class="t" x="728" y="481">Academia</text><text class="s" x="728" y="501">Cursos y constancias</text></g>
+
+          <!-- Nota del sistema -->
+          <g>
+            <rect x="0" y="440" width="530" height="94" rx="18" style="fill:var(--sis-soft);stroke:var(--line);stroke-dasharray:6 5"/>
+            <circle cx="36" cy="487" r="23" style="fill:var(--surface)"/><use href="#i-cog" x="24" y="475" width="24" height="24" class="ic" style="stroke:var(--sis)"/>
+            <text class="t" x="68" y="476">El sistema, solo</text>
+            <text class="s" x="68" y="496">Avisa stock bajo, crea las cuentas por cobrar y pagar,</text>
+            <text class="s" x="68" y="514">busca repartidor y manda cupones a clientes inactivos.</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== MAPA COMPLETO ===================== -->
+  <section class="wrap full" id="completo" aria-labelledby="completo-t" style="scroll-margin-top:16px">
+    <div class="sec-title">
+      <h2 id="completo-t">Mapa completo del sistema</h2>
+      <p>VIDA son tres herramientas conectadas a un mismo servidor. Cada etiqueta es una pantalla: tócala para ver cómo funciona. El color dice quién la usa.</p>
+    </div>
+    <div class="keys" style="padding-bottom:2px">
+      <span class="tag r-corp">Corporativo y administración</span>
+      <span class="tag r-matriz">Matriz</span>
+      <span class="tag r-tienda">Empresario y cajero</span>
+      <span class="tag r-acad">Todos los usuarios del panel</span>
+      <span class="tag r-cliente">Cliente</span>
+      <span class="tag r-club">Club VIDA</span>
+      <span class="tag r-repa">Repartidor</span>
+    </div>
+
+    <div class="sys-grid">
+      <!-- Panel -->
+      <div class="sys">
+        <div class="sys-head"><b><svg class="i"><use href="#i-monitor"/></svg></b><h3>Panel web</h3><span>app.comercializadoravida.com · computadora o tablet</span></div>
+        <div class="grp r-acad"><h4><i></i>Para todos</h4><div class="mods">
+          <a class="mod" href="#m-entrar">Entrar y contraseña</a><a class="mod" href="#m-dashboard">Dashboard</a><a class="mod" href="#m-perfil">Menú y Mi perfil</a><a class="mod" href="#m-academia">Academia VIDA</a>
+        </div></div>
+        <div class="grp r-tienda"><h4><i></i>Vender · cajero</h4><div class="mods">
+          <a class="mod" href="#m-pos">Tienda (punto de venta)</a><a class="mod" href="#m-caja">Cierre de Caja</a><a class="mod" href="#m-ventas">Historial de Ventas</a><a class="mod" href="#m-pedidos">Pedidos</a><a class="mod" href="#m-consumidores">Consumidores Finales</a>
+        </div></div>
+        <div class="grp r-tienda"><h4><i></i>Manejar la tienda · empresario</h4><div class="mods">
+          <a class="mod" href="#m-inventarios">Inventarios</a><a class="mod" href="#m-catalogos">Catálogos</a><a class="mod" href="#m-precios">Precios, promos y flyer</a><a class="mod" href="#m-cupones">Cupones</a><a class="mod" href="#m-reportes">Reportes y metas</a><a class="mod" href="#m-tiendas">Tiendas</a>
+        </div></div>
+        <div class="grp r-matriz"><h4><i></i>Abastecer · Matriz</h4><div class="mods">
+          <a class="mod" href="#m-proveedores">Proveedores y compras</a><a class="mod" href="#m-matriz">Matriz y Reabasto</a><a class="mod" href="#m-cuentas">Cuentas por pagar y cobrar</a>
+        </div></div>
+        <div class="grp r-corp"><h4><i></i>Delivery, Club y red · administración</h4><div class="mods">
+          <a class="mod" href="#m-logistica">Repartidores y Logística</a><a class="mod" href="#m-operaciones">Operaciones del Club</a><a class="mod" href="#m-corporativo">Portal Corporativo</a><a class="mod" href="#m-seguridad">Seguridad y Admin</a>
+        </div></div>
+        <div class="grp r-cliente"><h4><i></i>Público, sin entrar</h4><div class="mods">
+          <a class="mod" href="#m-publica">Página de la tienda (QR del flyer)</a>
+        </div></div>
+      </div>
+
+      <div class="wire" aria-hidden="true">
+        <span><em>⇄</em>Ventas y cierres de caja</span>
+        <span><em>⇄</em>Pedidos y estados al instante</span>
+        <span><em>⇄</em>Ventas sin internet, al volver</span>
+        <span><em>⇄</em>Reabasto, cuentas y reportes</span>
+      </div>
+
+      <!-- Servidor -->
+      <div class="sys hub">
+        <div class="sys-head"><b><svg class="i"><use href="#i-cog"/></svg></b><h3>Servidor VIDA</h3><span>api.comercializadoravida.com · el cerebro</span></div>
+        <div class="grp"><h4>Guarda y conecta</h4><ul>
+          <li>Una sola base de datos para toda la red. Cada usuario ve solo su tienda, su estado o su país.</li>
+          <li>Tiempo real: pedidos, estados y la ubicación del repartidor llegan sin recargar.</li>
+          <li>Avisos push a los teléfonos y correos (invitaciones, códigos, cupones).</li>
+        </ul></div>
+        <div class="grp"><h4>Trabaja solo, cada minuto</h4><ul>
+          <li class="t">Busca repartidor y amplía el radio si nadie acepta.</li>
+          <li class="t">Cancela el Pago Móvil sin comprobante a tiempo y devuelve los puntos.</li>
+          <li class="t">Cancela pedidos que vencieron sin repartidor.</li>
+          <li class="t">Detecta tiendas cuyo punto de venta perdió conexión.</li>
+        </ul></div>
+        <div class="grp"><h4>Una vez al día</h4><ul>
+          <li class="t">Envía el cupón «te extrañamos» a clientes inactivos.</li>
+          <li class="t">Vence los puntos sin movimiento por varios meses.</li>
+        </ul></div>
+        <div class="grp"><h4>Calcula y protege</h4><ul>
+          <li>Tasa BCV del día, IVA, IGTF, promociones, comisiones y cuentas entre tiendas.</li>
+          <li>Registro de auditoría que nadie puede borrar. <a href="#servidor">Ver detalle</a></li>
+        </ul></div>
+      </div>
+
+      <div class="wire" aria-hidden="true">
+        <span><em>⇄</em>Catálogo, precios y promos</span>
+        <span><em>⇄</em>Pedidos, pagos y comprobantes</span>
+        <span><em>⇄</em>Ubicación GPS del repartidor</span>
+        <span><em>⇄</em>Avisos push al teléfono</span>
+      </div>
+
+      <!-- Apps -->
+      <div class="apps-col">
+        <div class="sys">
+          <div class="sys-head"><b><svg class="i"><use href="#i-phone"/></svg></b><h3>App VIDA Compras</h3><span>Android · consumidor final</span></div>
+          <div class="grp r-cliente"><h4><i></i>Cuenta</h4><div class="mods">
+            <a class="mod" href="#c-cuenta">Entrar o crear cuenta</a><a class="mod" href="#c-recuperar">Recuperar contraseña</a><a class="mod" href="#c-perfil">Perfil</a>
+          </div></div>
+          <div class="grp r-cliente"><h4><i></i>Comprar</h4><div class="mods">
+            <a class="mod" href="#c-inicio">Inicio</a><a class="mod" href="#c-tiendas">Tiendas</a><a class="mod" href="#c-tienda">Catálogo de la tienda</a><a class="mod" href="#c-carrito">Carrito y pago</a><a class="mod" href="#c-pagomovil">Pago Móvil</a><a class="mod" href="#c-seguimiento">Seguimiento en mapa</a><a class="mod" href="#c-pedidos">Mis pedidos</a>
+          </div></div>
+          <div class="grp r-club"><h4><i></i>Beneficios</h4><div class="mods">
+            <a class="mod" href="#c-puntos">Puntos y premios</a><a class="mod" href="#c-club">Club VIDA</a><a class="mod" href="#c-hidratacion">Mi hidratación</a><a class="mod" href="#c-recargas">Recargas y servicios</a><a class="mod" href="#c-academia">Academia</a><a class="mod" href="#c-avisos">Notificaciones</a><a class="mod soon" href="#c-perfil">Mis tarjetas · próximamente</a>
+          </div></div>
+        </div>
+        <div class="sys">
+          <div class="sys-head"><b><svg class="i"><use href="#i-bike"/></svg></b><h3>App Repartidor</h3><span>Android · repartidores aprobados</span></div>
+          <div class="grp r-repa"><h4><i></i>Trabajar</h4><div class="mods">
+            <a class="mod" href="#r-registro">Registro y aprobación</a><a class="mod" href="#r-linea">En línea</a><a class="mod" href="#r-oferta">Oferta de pedido</a><a class="mod" href="#r-multi">Varios pedidos y ruta</a><a class="mod" href="#r-entrega">Recoger y entregar</a>
+          </div></div>
+          <div class="grp r-repa"><h4><i></i>Mi dinero y mi cuenta</h4><div class="mods">
+            <a class="mod" href="#r-ganancias">Ganancias</a><a class="mod" href="#r-historial">Historial</a><a class="mod" href="#r-perfil">Perfil</a>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== UN PEDIDO EN VIVO ===================== -->
+  <section class="wrap" id="en-vivo" aria-labelledby="vivo-t" style="padding-block: 26px 8px; scroll-margin-top:16px">
+    <div class="lane-card">
+      <div class="map-head">
+        <div>
+          <h2 id="vivo-t" style="font-size:22px">Un pedido en vivo: cómo se hablan las tres herramientas</h2>
+          <p>Lo que pasa, en orden, desde que el cliente toca «Hacer pedido» hasta que la tienda liquida al repartidor.</p>
+        </div>
+        <div class="keys">
+          <span><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="var(--aqua)" stroke-width="2.5"/></svg>Información</span>
+          <span><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="var(--club)" stroke-width="2.5"/></svg>Aviso push al teléfono</span>
+          <span><svg viewBox="0 0 34 10"><path d="M2 5h30" stroke="var(--money)" stroke-width="2.5" stroke-dasharray="7 6"/></svg>Dinero</span>
+        </div>
+      </div>
+      <p class="hint">Desliza hacia los lados para ver los cuatro carriles.</p>
+      <div class="scroll">
+<svg class="lanes" viewBox="0 0 1110 914" role="img" aria-label="Diagrama de carriles: app del cliente, servidor, panel de la tienda y app del repartidor intercambian mensajes desde que se hace un pedido hasta la liquidación del repartidor.">
+<defs><marker id="a-i" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10z" fill="var(--aqua)"/></marker><marker id="a-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10z" fill="var(--money)"/></marker><marker id="a-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10z" fill="var(--club)"/></marker></defs>
+<line class="ln" x1="150" y1="78" x2="150" y2="908"/>
+<g class="lh"><rect x="35" y="14" width="230" height="58" rx="16" style="fill:var(--cliente-soft);stroke:var(--cliente)"/><text x="150" y="40">App VIDA Compras</text><text class="s" x="150" y="59">Cliente</text></g>
+<line class="ln" x1="420" y1="78" x2="420" y2="908"/>
+<g class="lh"><rect x="305" y="14" width="230" height="58" rx="16" style="fill:var(--sis-soft);stroke:var(--sis)"/><text x="420" y="40">Servidor VIDA</text><text class="s" x="420" y="59">Automático</text></g>
+<line class="ln" x1="690" y1="78" x2="690" y2="908"/>
+<g class="lh"><rect x="575" y="14" width="230" height="58" rx="16" style="fill:var(--tienda-soft);stroke:var(--tienda)"/><text x="690" y="40">Panel web</text><text class="s" x="690" y="59">Tienda</text></g>
+<line class="ln" x1="960" y1="78" x2="960" y2="908"/>
+<g class="lh"><rect x="845" y="14" width="230" height="58" rx="16" style="fill:var(--repa-soft);stroke:var(--repa)"/><text x="960" y="40">App Repartidor</text><text class="s" x="960" y="59">Repartidor</text></g>
+<path class="msg" d="M164 142 H416" marker-end="url(#a-i)"/>
+<g class="ml"><rect x="135" y="118" width="300" height="19" rx="9"/><text x="285" y="128">Hace el pedido: productos, dirección y pago</text></g>
+<g class="n"><circle cx="150" cy="142" r="11"/><text x="150" y="142">1</text></g>
+<g class="self"><rect x="245" y="182" width="378" height="30" rx="10"/><text x="434" y="197">Revisa stock y precios; aplica promos, cupón y puntos</text></g>
+<g class="n"><circle cx="229" cy="197" r="11"/><text x="229" y="197">2</text></g>
+<path class="msg pay" d="M164 254 H416" marker-end="url(#a-p)"/>
+<g class="ml"><rect x="132" y="230" width="306" height="19" rx="9"/><text x="285" y="240">Si paga con Pago Móvil, envía el comprobante</text></g>
+<g class="n"><circle cx="150" cy="254" r="11"/><text x="150" y="254">3</text></g>
+<path class="msg" d="M434 310 H686" marker-end="url(#a-i)"/>
+<g class="ml"><rect x="412" y="286" width="287" height="19" rx="9"/><text x="555" y="296">Pedido nuevo en vivo (o «Validando pago»)</text></g>
+<g class="n"><circle cx="420" cy="310" r="11"/><text x="420" y="310">4</text></g>
+<path class="msg" d="M676 366 H424" marker-end="url(#a-i)"/>
+<g class="ml"><rect x="428" y="342" width="254" height="19" rx="9"/><text x="555" y="352">Aprueba el pago · Preparando → Listo</text></g>
+<g class="n"><circle cx="690" cy="366" r="11"/><text x="690" y="366">5</text></g>
+<path class="msg push" d="M434 422 H956" marker-end="url(#a-b)"/>
+<g class="ml"><rect x="573" y="398" width="234" height="19" rx="9"/><text x="690" y="408">Aviso a los repartidores cercanos</text></g>
+<g class="n"><circle cx="420" cy="422" r="11"/><text x="420" y="422">6</text></g>
+<path class="msg" d="M946 478 H424" marker-end="url(#a-i)"/>
+<g class="ml"><rect x="583" y="454" width="214" height="19" rx="9"/><text x="690" y="464">Acepta en menos de 60 segundos</text></g>
+<g class="n"><circle cx="960" cy="478" r="11"/><text x="960" y="478">7</text></g>
+<path class="msg push" d="M406 534 H154" marker-end="url(#a-b)"/>
+<g class="ml"><rect x="214" y="510" width="141" height="19" rx="9"/><text x="285" y="520">Repartidor asignado</text></g>
+<path class="msg" d="M434 534 H686" marker-end="url(#a-i)"/>
+<g class="ml"><rect x="484" y="510" width="141" height="19" rx="9"/><text x="555" y="520">Repartidor asignado</text></g>
+<g class="n"><circle cx="420" cy="534" r="11"/><text x="420" y="534">8</text></g>
+<path class="msg" d="M946 590 H424" marker-end="url(#a-i)"/>
+<g class="ml"><rect x="573" y="566" width="234" height="19" rx="9"/><text x="690" y="576">Ubicación GPS cada pocos segundos</text></g>
+<path class="msg" d="M406 590 H154" marker-end="url(#a-i)"/>
+<g class="ml"><rect x="198" y="566" width="174" height="19" rx="9"/><text x="285" y="576">Lo ve moverse en el mapa</text></g>
+<g class="n"><circle cx="960" cy="590" r="11"/><text x="960" y="590">9</text></g>
+<path class="msg" d="M946 646 H424" marker-end="url(#a-i)"/>
+<g class="ml"><rect x="606" y="622" width="168" height="19" rx="9"/><text x="690" y="632">«Ya recogí» → En camino</text></g>
+<path class="msg push" d="M406 646 H154" marker-end="url(#a-b)"/>
+<g class="ml"><rect x="204" y="622" width="161" height="19" rx="9"/><text x="285" y="632">Tu pedido va en camino</text></g>
+<g class="n"><circle cx="960" cy="646" r="11"/><text x="960" y="646">10</text></g>
+<path class="msg pay" d="M946 702 H424" marker-end="url(#a-p)"/>
+<g class="ml"><rect x="557" y="678" width="267" height="19" rx="9"/><text x="690" y="688">Cobra, toma foto y confirma la entrega</text></g>
+<g class="n"><circle cx="960" cy="702" r="11"/><text x="960" y="702">11</text></g>
+<g class="self"><rect x="222" y="742" width="424" height="30" rx="10"/><text x="434" y="757">Entregado: puntos al cliente, comisión y efectivo por rendir</text></g>
+<g class="n"><circle cx="206" cy="757" r="11"/><text x="206" y="757">12</text></g>
+<path class="msg pay" d="M676 814 H424" marker-end="url(#a-p)"/>
+<g class="ml"><rect x="408" y="790" width="293" height="19" rx="9"/><text x="555" y="800">Recibe el efectivo y liquida al repartidor</text></g>
+<g class="n"><circle cx="690" cy="814" r="11"/><text x="690" y="814">13</text></g>
+<path class="msg" d="M434 870 H956" marker-end="url(#a-i)"/>
+<g class="ml"><rect x="543" y="846" width="293" height="19" rx="9"/><text x="690" y="856">Su saldo queda en cero y ve la liquidación</text></g>
+<g class="n"><circle cx="420" cy="870" r="11"/><text x="420" y="870">14</text></g>
+</svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== TODAS LAS PANTALLAS ===================== -->
+  <section class="wrap catalog" id="pantallas" aria-labelledby="pant-t" style="scroll-margin-top:16px">
+    <div class="sec-title">
+      <h2 id="pant-t">Todas las pantallas, una por una</h2>
+      <p>Qué hace cada pantalla, quién la usa y cómo funciona. Están en el mismo orden que el mapa completo.</p>
+    </div>
+
+    <!-- Panel -->
+    <div class="cat-group">
+      <div class="cat-title"><b><svg class="i"><use href="#i-monitor"/></svg></b><h3>Panel web</h3><span>23 pantallas · lo que cada quien ve depende de su rol</span></div>
+      <div class="cards">
+        <article class="mc r-acad" id="m-entrar"><header><b><svg class="i"><use href="#i-lock"/></svg></b><h4>Entrar y contraseña</h4><span class="loc">Pantalla de inicio</span></header><ul>
+          <li>Se entra con <b>usuario o correo</b> y contraseña, o con <b>Google</b> si la cuenta lo tiene vinculado.</li>
+          <li>Al crear un usuario le llega un <b>correo con contraseña temporal</b>; al entrar debe cambiarla. Si no le llegó, la pantalla permite <b>reenviarla</b>.</li>
+        </ul>
+        <p class="note">El enlace «¿Olvidaste tu contraseña?» del panel todavía no hace nada. Hoy, si alguien la olvida, un administrador le asigna una nueva.</p></article>
+        <article class="mc r-acad" id="m-dashboard"><header><b><svg class="i"><use href="#i-chart"/></svg></b><h4>Dashboard</h4><span class="loc">Menú → Dashboard</span></header><ul>
+          <li>Ventas de hoy y del período, por tienda.</li>
+          <li><b>Tiendas en línea</b>: qué puntos de venta están conectados ahora.</li>
+          <li><b>Stock bajo</b>: productos por debajo de su mínimo, para pedir reabasto.</li>
+        </ul></article>
+        <article class="mc r-acad" id="m-perfil"><header><b><svg class="i"><use href="#i-user"/></svg></b><h4>Menú y Mi perfil</h4><span class="loc">Barra izquierda</span></header><ul>
+          <li>El menú muestra <b>solo los módulos permitidos</b> para ese usuario.</li>
+          <li>Mi perfil: nombre, teléfono, foto y cambio de contraseña.</li>
+        </ul></article>
+        <article class="mc r-acad" id="m-academia"><header><b><svg class="i"><use href="#i-cap"/></svg></b><h4>Academia VIDA</h4><span class="loc">Menú → Academia VIDA</span></header><ul>
+          <li>Cursos por tema: ventas, servicio, cumplimiento, marketing y finanzas.</li>
+          <li>Lecciones en <b>video, PDF, texto y cuestionario</b> calificado al momento.</li>
+          <li>Cursos <b>obligatorios</b> con fecha límite; si vence se marca «Fuera de tiempo».</li>
+          <li>Al terminar: <b>puntos</b> y <b>constancia con folio y QR</b> verificable.</li>
+        </ul></article>
+
+        <article class="mc r-tienda" id="m-pos"><header><b><svg class="i"><use href="#i-cart"/></svg></b><h4>Tienda (punto de venta)</h4><span class="loc">Menú → Tienda · cajero</span></header><ul>
+          <li>Si la caja está cerrada, la pantalla <b>se bloquea</b> hasta abrirla.</li>
+          <li>Busca o <b>escanea</b> el código de barras; agrega al carrito.</li>
+          <li>Aplica solas las <b>promociones</b> (descuentos y «lleva N, paga M») y los <b>cupones</b>.</li>
+          <li>Cobra en <b>$, Bs o combinado</b>; efectivo, tarjeta o mixto; calcula el cambio en $ o Bs.</li>
+          <li>Suma el <b>IGTF 3%</b> en pagos en divisas si la tienda es contribuyente especial.</li>
+          <li><b>Sin internet sigue vendiendo</b>: guarda las ventas y las envía al volver la conexión.</li>
+        </ul></article>
+        <article class="mc r-tienda" id="m-caja"><header><b><svg class="i"><use href="#i-cash"/></svg></b><h4>Cierre de Caja</h4><span class="loc">Menú → Cierre de Caja</span></header><ul>
+          <li><b>Abrir caja</b> con el efectivo inicial en $ y Bs.</li>
+          <li>Registrar <b>entradas y salidas</b> de efectivo que no son ventas, con motivo.</li>
+          <li><b>Cerrar caja</b>: se cuenta el efectivo y el sistema muestra lo que sobra o falta.</li>
+          <li>Historial de turnos; las ventas sin internet que llegan después se marcan «Tardía».</li>
+        </ul></article>
+        <article class="mc r-tienda" id="m-ventas"><header><b><svg class="i"><use href="#i-receipt"/></svg></b><h4>Historial de Ventas</h4><span class="loc">Menú → Historial de Ventas</span></header><ul>
+          <li>Todas las ventas con hora, método y productos; <b>reimprimir ticket</b>.</li>
+          <li><b>Factura fiscal</b> con RIF del cliente, IVA e IGTF; luego se registra el número de control.</li>
+          <li><b>Devoluciones</b> y notas de crédito (total o parcial).</li>
+          <li><b>Libro de ventas</b> por día, exportable a Excel para el contador.</li>
+        </ul></article>
+        <article class="mc r-tienda" id="m-pedidos"><header><b><svg class="i"><use href="#i-box"/></svg></b><h4>Pedidos</h4><span class="loc">Menú → Pedidos</span></header><ul>
+          <li>Llegan <b>en tiempo real</b> los pedidos de la app.</li>
+          <li><b>Aprobar o rechazar el Pago Móvil</b> viendo el comprobante del cliente.</li>
+          <li>Avanzar el estado: Nuevo → Preparando → Listo; asignar repartidor a mano si hace falta.</li>
+          <li>Ver la <b>foto de entrega</b>, el desglose del pago y facturar el pedido.</li>
+          <li>Resolver <b>ventas sin internet rechazadas</b>: reintentar o anular con motivo.</li>
+        </ul></article>
+        <article class="mc r-tienda" id="m-consumidores"><header><b><svg class="i"><use href="#i-users"/></svg></b><h4>Consumidores Finales</h4><span class="loc">Menú → Consumidores Finales</span></header><ul>
+          <li>Los clientes registrados en la app, con búsqueda por nombre o teléfono.</li>
+          <li>Por cliente: pedidos, total gastado, <b>ticket promedio</b>, direcciones e historial.</li>
+        </ul></article>
+
+        <article class="mc r-tienda" id="m-inventarios"><header><b><svg class="i"><use href="#i-box"/></svg></b><h4>Inventarios</h4><span class="loc">Menú → Inventarios</span></header><ul>
+          <li>Crear productos: nombre, SKU, código de barras, categoría, precio en $, <b>foto</b> e IVA.</li>
+          <li>Marcar <b>Producto PLUS</b> (alta ganancia, etiqueta dorada).</li>
+          <li><b>Stock y mínimo</b> por tienda.</li>
+          <li>Movimientos: <b>entrada</b>, <b>salida</b> (merma, consumo) y <b>ajuste</b> de conteo. Las ventas descuentan solas.</li>
+        </ul></article>
+        <article class="mc r-tienda" id="m-catalogos"><header><b><svg class="i"><use href="#i-tag"/></svg></b><h4>Catálogos</h4><span class="loc">Menú → Catálogos</span></header><ul>
+          <li>Vista maestra de todos los productos de la red, con su categoría y precio.</li>
+          <li>Filtra por categoría y distingue los productos PLUS.</li>
+        </ul></article>
+        <article class="mc r-tienda" id="m-precios"><header><b><svg class="i"><use href="#i-tag"/></svg></b><h4>Precios, promos y flyer</h4><span class="loc">Menú → Precios</span></header><ul>
+          <li><b>Promociones</b> automáticas: descuento por producto o categoría y combos «lleva N, paga M», con fechas.</li>
+          <li><b>Precios</b> en $; el precio en Bs sale de la tasa del día.</li>
+          <li><b>Flyer</b>: elige producto y precio, y el sistema arma una imagen con el <b>QR de la tienda</b> para WhatsApp o descargar.</li>
+        </ul></article>
+        <article class="mc r-tienda" id="m-cupones"><header><b><svg class="i"><use href="#i-gift"/></svg></b><h4>Cupones</h4><span class="loc">Menú → Cupones</span></header><ul>
+          <li>Código con % o $ de descuento, compra mínima, tope, usos y vigencia.</li>
+          <li>Canal: en tienda, en la app o ambos.</li>
+          <li><b>Automáticos</b>: lista de cupones «te extrañamos» enviados (vigente, usado, vencido).</li>
+        </ul></article>
+        <article class="mc r-tienda" id="m-reportes"><header><b><svg class="i"><use href="#i-chart"/></svg></b><h4>Reportes y metas</h4><span class="loc">Menú → Reportes y Estadísticas</span></header><ul>
+          <li><b>Ventas</b>, <b>Caja</b>, <b>Pago Móvil</b>, <b>Red</b> (comparativo de tiendas), <b>Delivery</b>, <b>Productos</b> (más y menos vendidos), <b>Inventario</b> y <b>Movimientos</b>.</li>
+          <li><b>Metas</b> diarias, semanales y mensuales con barra de avance e insignia.</li>
+          <li><b>Rentabilidad</b>: punto de equilibrio, mezcla PLUS y normal, meta diaria y retorno.</li>
+          <li>Todo se exporta a Excel o PDF.</li>
+        </ul></article>
+        <article class="mc r-tienda" id="m-tiendas"><header><b><svg class="i"><use href="#i-store"/></svg></b><h4>Tiendas</h4><span class="loc">Menú → Tiendas</span></header><ul>
+          <li>Datos de contacto y <b>ubicación en el mapa</b> (la usan la app y los repartidores).</li>
+          <li>Datos fiscales: imprenta digital o máquina fiscal, RIF y si es <b>contribuyente especial</b>.</li>
+        </ul></article>
+
+        <article class="mc r-matriz" id="m-proveedores"><header><b><svg class="i"><use href="#i-truck"/></svg></b><h4>Proveedores y compras</h4><span class="loc">Menú → Proveedores</span></header><ul>
+          <li>Ficha del proveedor (RIF, contacto) y los productos que surte.</li>
+          <li><b>Órdenes de compra</b>: Borrador → Enviada → Parcial → Completa.</li>
+          <li>Al registrar lo recibido entra al inventario y nace la <b>cuenta por pagar</b>.</li>
+        </ul></article>
+        <article class="mc r-matriz" id="m-matriz"><header><b><svg class="i"><use href="#i-warehouse"/></svg></b><h4>Matriz y Reabasto</h4><span class="loc">Menú → Matriz y Reabasto</span></header><ul>
+          <li>La tienda arma su <b>carrito de reabasto</b> y pide a la Matriz.</li>
+          <li>Solicitado → Preparando → Enviado → <b>Recibido</b>: solo entonces suma al inventario.</li>
+          <li>Al recibir nace la cuenta entre tienda y Matriz con sus <b>días de crédito</b>.</li>
+        </ul></article>
+        <article class="mc r-matriz" id="m-cuentas"><header><b><svg class="i"><use href="#i-cash"/></svg></b><h4>Cuentas por pagar y cobrar</h4><span class="loc">Menú → Cuentas</span></header><ul>
+          <li>Deudas entre proveedores, Matriz y tiendas: total, abonado, saldo y vencimiento.</li>
+          <li><b>Abonos</b> en $ o Bs (con la tasa del día), con método y referencia.</li>
+          <li><b>Notas de crédito</b> con motivo y <b>estado de cuenta</b> exportable.</li>
+        </ul></article>
+
+        <article class="mc r-corp" id="m-logistica"><header><b><svg class="i"><use href="#i-pin"/></svg></b><h4>Repartidores y Logística</h4><span class="loc">Menú → Repartidores y Logística</span></header><ul>
+          <li><b>Aprobar</b> repartidores nuevos; ver si están disponibles, ocupados o inactivos.</li>
+          <li><b>Saldo por rendir</b> en $ y Bs, y botón <b>Liquidar</b>.</li>
+          <li><b>Mapa en vivo</b> con repartidores y pedidos en curso.</li>
+          <li><b>Configuración</b>: radio de búsqueda, máximo de pedidos por repartidor, comisión, datos de Pago Móvil y cupón por inactividad.</li>
+        </ul></article>
+        <article class="mc r-corp" id="m-operaciones"><header><b><svg class="i"><use href="#i-star"/></svg></b><h4>Operaciones del Club</h4><span class="loc">Menú → Operaciones</span></header><ul>
+          <li><b>Recargas</b> pedidas desde la app: procesarlas y marcarlas completadas.</li>
+          <li><b>Canjes de premios</b>: marcar entregados al cliente.</li>
+          <li><b>Catálogo de premios</b> (costo en puntos, stock, exclusivo por nivel) y <b>eventos del Club</b> con cupo y asistentes.</li>
+          <li>Vencimiento de puntos, cursos y operadoras.</li>
+        </ul></article>
+        <article class="mc r-corp" id="m-corporativo"><header><b><svg class="i"><use href="#i-building"/></svg></b><h4>Portal Corporativo</h4><span class="loc">Menú → Portal Corporativo</span></header><ul>
+          <li>Crecimiento de la red hacia la <b>meta 2035</b>, altas por mes y mapa por estados.</li>
+          <li><b>Dar de alta una tienda</b> en dos pasos: datos de la tienda y del empresario.</li>
+          <li>Prospecto → En proceso → Activa · Suspender o reactivar.</li>
+        </ul></article>
+        <article class="mc r-corp" id="m-seguridad"><header><b><svg class="i"><use href="#i-shield"/></svg></b><h4>Seguridad y Admin</h4><span class="loc">Menú → Seguridad y Admin</span></header><ul>
+          <li>Usuarios con <b>rol</b> (Super Admin, Admin País, Admin Estado, Admin Sucursal, Supervisor, Cajero) y <b>ámbito</b> (país, estado o tienda).</li>
+          <li>Se eligen los módulos que verá; recibe su <b>invitación por correo</b>.</li>
+          <li>Nadie gestiona a alguien de su mismo rango o superior.</li>
+        </ul></article>
+        <article class="mc r-cliente" id="m-publica"><header><b><svg class="i"><use href="#i-qr"/></svg></b><h4>Página de la tienda (QR del flyer)</h4><span class="loc">Se abre al escanear el QR · sin cuenta</span></header><ul>
+          <li>Muestra la tienda, su dirección, teléfono, cómo llegar y sus productos.</li>
+          <li>Es la puerta de entrada para quien ve un flyer en WhatsApp o en la calle.</li>
+        </ul></article>
+      </div>
+    </div>
+
+    <!-- App cliente -->
+    <div class="cat-group">
+      <div class="cat-title"><b><svg class="i"><use href="#i-phone"/></svg></b><h3>App VIDA Compras</h3><span>Para el consumidor final · Android</span></div>
+      <div class="cards">
+        <article class="mc r-cliente" id="c-cuenta"><header><b><svg class="i"><use href="#i-lock"/></svg></b><h4>Entrar o crear cuenta</h4><span class="loc">Primera pantalla</span></header><ul>
+          <li>Cuenta con nombre, teléfono, correo y contraseña, o <b>con Google</b>.</li>
+          <li>Se puede <b>explorar la tienda sin cuenta</b>; la cuenta se pide al hacer el pedido.</li>
+        </ul></article>
+        <article class="mc r-cliente" id="c-recuperar"><header><b><svg class="i"><use href="#i-lock"/></svg></b><h4>Recuperar contraseña</h4><span class="loc">«¿Olvidaste tu contraseña?»</span></header><ul>
+          <li>Con su teléfono pide un <b>código de 6 números</b> que le llega al correo.</li>
+          <li>El código vence en 15 minutos; al cambiar la contraseña queda dentro.</li>
+        </ul></article>
+        <article class="mc r-cliente" id="c-inicio"><header><b><svg class="i"><use href="#i-drop"/></svg></b><h4>Inicio</h4><span class="loc">Pestaña Inicio</span></header><ul>
+          <li>Saludo, dirección de entrega y <b>hidratación del día</b>.</li>
+          <li><b>Repetir el último pedido</b> con un toque.</li>
+          <li>Categorías y productos de su tienda.</li>
+        </ul></article>
+        <article class="mc r-cliente" id="c-tiendas"><header><b><svg class="i"><use href="#i-pin"/></svg></b><h4>Tiendas</h4><span class="loc">Pestaña Tiendas</span></header><ul>
+          <li>Tiendas VIDA activas, <b>las más cercanas primero</b> si comparte su ubicación, con la etiqueta «Más cerca».</li>
+        </ul></article>
+        <article class="mc r-cliente" id="c-tienda"><header><b><svg class="i"><use href="#i-store"/></svg></b><h4>Catálogo de la tienda</h4><span class="loc">Al abrir una tienda</span></header><ul>
+          <li>Buscador, categorías, <b>promoción vigente</b> y productos con foto y precio.</li>
+          <li>Cada pedido es de <b>una sola tienda</b>.</li>
+        </ul></article>
+        <article class="mc r-cliente" id="c-carrito"><header><b><svg class="i"><use href="#i-cart"/></svg></b><h4>Carrito y pago</h4><span class="loc">Botón aqua del centro</span></header><ul>
+          <li>Cantidades, <b>cupón</b> o «Tus cupones», y <b>usar puntos</b> como descuento.</li>
+          <li>Dirección fijada en el mapa y notas para el repartidor.</li>
+          <li><b>Efectivo</b> en $, Bs o combinado, con «¿Con cuánto pagas?» para llevar cambio; <b>tarjeta</b> (el repartidor lleva el punto); o <b>Pago Móvil</b>.</li>
+          <li>Muestra el IGTF si paga en dólares en tienda contribuyente especial.</li>
+        </ul></article>
+        <article class="mc r-cliente" id="c-pagomovil"><header><b><svg class="i"><use href="#i-cash"/></svg></b><h4>Pago Móvil</h4><span class="loc">Después de hacer el pedido</span></header><ul>
+          <li>Monto exacto en Bs y datos del banco, <b>copiables</b> con un toque.</li>
+          <li>Escribe la referencia, adjunta la captura y envía; hay una <b>cuenta regresiva</b>.</li>
+          <li>Si la tienda lo rechaza, envía otro. Si vence el plazo, se cancela y recupera sus puntos.</li>
+        </ul></article>
+        <article class="mc r-cliente" id="c-seguimiento"><header><b><svg class="i"><use href="#i-pin"/></svg></b><h4>Seguimiento en mapa</h4><span class="loc">Al tocar un pedido activo</span></header><ul>
+          <li>Mapa con la tienda, el <b>repartidor en movimiento</b> y su casa; tiempo estimado.</li>
+          <li>Etapas: Recibido → Preparando → En camino → Entregado.</li>
+          <li>Le recuerda <b>cuánto tener listo</b> y el cambio que le llevan.</li>
+          <li>Si no aparece repartidor: «Seguir esperando» o cancelar sin costo.</li>
+        </ul></article>
+        <article class="mc r-cliente" id="c-pedidos"><header><b><svg class="i"><use href="#i-receipt"/></svg></b><h4>Mis pedidos</h4><span class="loc">Pestaña Pedidos</span></header><ul>
+          <li>Pedidos activos y anteriores con su estado y total.</li>
+        </ul></article>
+        <article class="mc r-club" id="c-puntos"><header><b><svg class="i"><use href="#i-gift"/></svg></b><h4>Puntos y premios</h4><span class="loc">Pestaña Puntos</span></header><ul>
+          <li>Saldo e historial de puntos.</li>
+          <li><b>Canjear premios</b>: recibe un código y lo reclama en la tienda. Algunos son exclusivos de un nivel.</li>
+          <li>Los puntos vencen tras muchos meses sin movimiento.</li>
+        </ul></article>
+        <article class="mc r-club" id="c-club"><header><b><svg class="i"><use href="#i-qr"/></svg></b><h4>Club VIDA</h4><span class="loc">Perfil → Club VIDA</span></header><ul>
+          <li><b>Tarjeta digital con QR</b> para mostrar en la tienda.</li>
+          <li>Beneficios y <b>niveles</b>: sube de nivel con los puntos ganados.</li>
+          <li><b>Eventos del Club</b>: reservar lugar con «Asistiré» o liberarlo.</li>
+        </ul>
+        <p class="note">Hoy los puntos se ganan con pedidos por la app, recargas, hidratación y cursos. El punto de venta de la tienda todavía no lee el QR, así que las compras en mostrador no suman puntos.</p></article>
+        <article class="mc r-club" id="c-hidratacion"><header><b><svg class="i"><use href="#i-drop"/></svg></b><h4>Mi hidratación</h4><span class="loc">Desde Inicio</span></header><ul>
+          <li>Activa su programa y toca «<b>Tomé un vaso</b>»; un anillo muestra su avance.</li>
+          <li>Meta diaria, <b>racha</b> y bono de puntos cada 7 días cumplidos.</li>
+          <li>Recordatorios cada 2 horas (8 a. m. a 8 p. m.) y botón para <b>pedir agua VIDA</b>.</li>
+        </ul></article>
+        <article class="mc r-club" id="c-recargas"><header><b><svg class="i"><use href="#i-phone"/></svg></b><h4>Recargas y servicios</h4><span class="loc">Perfil → Servicios</span></header><ul>
+          <li>Teléfono, internet o TV: operadora, número y monto; muestra los <b>puntos que gana</b>.</li>
+          <li>Paga con Pago Móvil; el equipo VIDA la procesa en Operaciones y acredita los puntos.</li>
+        </ul></article>
+        <article class="mc r-club" id="c-academia"><header><b><svg class="i"><use href="#i-cap"/></svg></b><h4>Academia para clientes</h4><span class="loc">Perfil → Academia</span></header><ul>
+          <li>Cursos abiertos al consumidor con video, texto, PDF y cuestionario.</li>
+          <li>Al completar gana <b>puntos VIDA</b> y una constancia con QR.</li>
+        </ul></article>
+        <article class="mc r-cliente" id="c-perfil"><header><b><svg class="i"><use href="#i-user"/></svg></b><h4>Perfil</h4><span class="loc">Avatar en Inicio</span></header><ul>
+          <li>Resumen: puntos, pedidos y racha de agua.</li>
+          <li>Editar datos, cambiar contraseña, <b>mis direcciones</b>.</li>
+          <li>Ayuda por <b>WhatsApp</b> y correo, aviso de privacidad, quiénes somos.</li>
+          <li>Cerrar sesión o <b>eliminar la cuenta</b>. «Mis tarjetas» aparece como próximamente.</li>
+        </ul></article>
+        <article class="mc r-cliente" id="c-avisos"><header><b><svg class="i"><use href="#i-bell"/></svg></b><h4>Notificaciones</h4><span class="loc">En el teléfono</span></header><ul>
+          <li>Avisos de su pedido (confirmado, en camino, entregado), cupones personales y recordatorios de agua.</li>
+        </ul></article>
+      </div>
+    </div>
+
+    <!-- App repartidor -->
+    <div class="cat-group">
+      <div class="cat-title"><b><svg class="i"><use href="#i-bike"/></svg></b><h3>App Repartidor</h3><span>Para repartidores · Android</span></div>
+      <div class="cards">
+        <article class="mc r-repa" id="r-registro"><header><b><svg class="i"><use href="#i-user"/></svg></b><h4>Registro y aprobación</h4><span class="loc">«Quiero ser repartidor»</span></header><ul>
+          <li>Se registra con sus datos y su <b>moto o vehículo</b>.</li>
+          <li>Queda «en revisión» hasta que la administración lo <b>aprueba</b> en el panel.</li>
+          <li>Después entra con su teléfono y contraseña.</li>
+        </ul></article>
+        <article class="mc r-repa" id="r-linea"><header><b><svg class="i"><use href="#i-pin"/></svg></b><h4>En línea</h4><span class="loc">Interruptor de la pantalla principal</span></header><ul>
+          <li>Al conectarse queda <b>disponible</b> y comparte su ubicación, aun con la app en segundo plano.</li>
+          <li>Recibe los pedidos cercanos con <b>sonido y vibración</b>.</li>
+        </ul></article>
+        <article class="mc r-repa" id="r-oferta"><header><b><svg class="i"><use href="#i-bell"/></svg></b><h4>Oferta de pedido</h4><span class="loc">Aparece sola</span></header><ul>
+          <li>Mapa de la ruta (él → tienda → cliente), <b>lo que gana</b>, distancia y tiempo.</li>
+          <li>Cómo se cobra y si debe <b>llevar cambio</b>.</li>
+          <li>Tiene <b>60 segundos</b> para aceptar o pasar.</li>
+        </ul></article>
+        <article class="mc r-repa" id="r-multi"><header><b><svg class="i"><use href="#i-truck"/></svg></b><h4>Varios pedidos y ruta</h4><span class="loc">Automático</span></header><ul>
+          <li>Puede llevar varios pedidos a la vez, hasta el máximo que configure la administración.</li>
+          <li>El sistema ordena las paradas: siempre <b>recoge antes de entregar</b> y va a la más cercana primero.</li>
+        </ul></article>
+        <article class="mc r-repa" id="r-entrega"><header><b><svg class="i"><use href="#i-box"/></svg></b><h4>Recoger y entregar</h4><span class="loc">Pedido en curso</span></header><ul>
+          <li>Parada A (tienda): «<b>Ya recogí el pedido</b>». Parada B (cliente): navegación con un toque.</li>
+          <li>La app dice <b>exactamente qué cobrar</b>: efectivo $, Bs o combinado, tarjeta, o «No cobres nada» si fue Pago Móvil.</li>
+          <li>Confirma el cobro y toma la <b>foto de la entrega</b>.</li>
+          <li>«Tengo un problema»: <b>liberarlo</b> para que lo tome otro o cancelarlo.</li>
+        </ul></article>
+        <article class="mc r-repa" id="r-ganancias"><header><b><svg class="i"><use href="#i-cash"/></svg></b><h4>Ganancias</h4><span class="loc">Pestaña Ganancias</span></header><ul>
+          <li>Lo ganado en la semana, por día.</li>
+          <li><b>Efectivo por rendir</b> a la tienda, en $ y Bs por separado, ya sin su comisión.</li>
+          <li>Historial de <b>liquidaciones</b>.</li>
+        </ul></article>
+        <article class="mc r-repa" id="r-historial"><header><b><svg class="i"><use href="#i-receipt"/></svg></b><h4>Historial</h4><span class="loc">Pestaña Historial</span></header><ul>
+          <li>Sus entregas con la moneda cobrada, la comisión y la calificación del cliente.</li>
+        </ul></article>
+        <article class="mc r-repa" id="r-perfil"><header><b><svg class="i"><use href="#i-user"/></svg></b><h4>Perfil</h4><span class="loc">Pestaña Perfil</span></header><ul>
+          <li>Foto, nombre y correo; cambio de contraseña (cierra sus otras sesiones).</li>
+        </ul></article>
+      </div>
+    </div>
+
+    <!-- Servidor -->
+    <div class="cat-group" id="servidor" style="scroll-margin-top:16px">
+      <div class="cat-title"><b><svg class="i"><use href="#i-cog"/></svg></b><h3>Servidor VIDA</h3><span>Lo que pasa sin que nadie toque un botón</span></div>
+      <div class="cards">
+        <article class="mc r-sis" id="s-datos"><header><b><svg class="i"><use href="#i-shield"/></svg></b><h4>Una sola información para todos</h4><span class="loc">Base de datos central</span></header><ul>
+          <li>Panel y apps leen y escriben la misma información: un precio cambiado en el panel se ve al instante en la app.</li>
+          <li>Cada usuario ve <b>solo su ámbito</b>: su tienda, su estado o su país.</li>
+        </ul></article>
+        <article class="mc r-sis" id="s-vivo"><header><b><svg class="i"><use href="#i-clock"/></svg></b><h4>Tiempo real y avisos</h4><span class="loc">Conexión permanente</span></header><ul>
+          <li>Pedidos nuevos y cambios de estado aparecen en el panel <b>sin recargar</b>.</li>
+          <li>La ubicación del repartidor llega al mapa del cliente y al Mapa en vivo.</li>
+          <li><b>Push</b> a los teléfonos y <b>correos</b> automáticos.</li>
+        </ul></article>
+        <article class="mc r-sis" id="s-minuto"><header><b><svg class="i"><use href="#i-clock"/></svg></b><h4>Cada minuto</h4><span class="loc">Tareas automáticas</span></header><ul>
+          <li>Busca repartidor y <b>amplía el radio</b> si nadie acepta; avisa al cliente si tarda.</li>
+          <li>Cancela el Pago Móvil sin comprobante (60 min por defecto) y <b>devuelve los puntos</b>.</li>
+          <li>Cancela pedidos vencidos y detecta tiendas desconectadas.</li>
+        </ul></article>
+        <article class="mc r-sis" id="s-dia"><header><b><svg class="i"><use href="#i-clock"/></svg></b><h4>Cada día</h4><span class="loc">Tareas automáticas</span></header><ul>
+          <li>Envía el <b>cupón «te extrañamos»</b> a quien lleva días sin comprar (si está encendido).</li>
+          <li><b>Vence puntos</b> de clientes sin movimiento por varios meses.</li>
+        </ul></article>
+        <article class="mc r-sis" id="s-calculos"><header><b><svg class="i"><use href="#i-cash"/></svg></b><h4>Cálculos de dinero</h4><span class="loc">En cada operación</span></header><ul>
+          <li><b>Tasa BCV</b> del día; cada venta guarda la tasa con la que se cobró.</li>
+          <li>IVA, IGTF, promociones, cupones, puntos y <b>comisión del repartidor</b>.</li>
+          <li>Crea solas las <b>cuentas por cobrar y pagar</b> al recibir mercancía.</li>
+        </ul></article>
+        <article class="mc r-sis" id="s-offline"><header><b><svg class="i"><use href="#i-shield"/></svg></b><h4>Ventas sin internet y auditoría</h4><span class="loc">Seguridad</span></header><ul>
+          <li>Recibe las ventas guardadas sin conexión <b>sin duplicarlas</b>; las que no cuadran quedan en revisión.</li>
+          <li><b>Auditoría</b>: registro de quién hizo qué que no se puede borrar ni modificar.</li>
+        </ul></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap stages" aria-labelledby="etapas-t">
+    <div class="sec-title">
+      <h2 id="etapas-t">Paso a paso, etapa por etapa</h2>
+      <p>Cada tarjeta es un paso. El color dice quién lo hace y la etiqueta gris, dónde lo hace. Las tarjetas punteadas las hace el sistema por sí solo.</p>
+    </div>
+
+    <!-- 1 -->
+    <article class="stage" id="e1">
+      <div class="stage-head">
+        <span class="num">1</span>
+        <div class="txt"><h3>Abrir una tienda nueva</h3><p>La red crece: Corporativo suma una tienda y su empresario queda listo para operar.</p></div>
+        <div class="who-list">
+          <span class="tag" style="--c:var(--corp);--cs:var(--corp-soft)"><svg class="i"><use href="#i-building"/></svg>Corporativo</span>
+          <span class="tag" style="--c:var(--tienda);--cs:var(--tienda-soft)"><svg class="i"><use href="#i-store"/></svg>Empresario</span>
+        </div>
+      </div>
+      <ol class="flow">
+        <li class="step" style="--c:var(--corp);--cs:var(--corp-soft)"><span class="who"><b><svg class="i"><use href="#i-building"/></svg></b>Corporativo</span><p>Da de alta la tienda<small>Nombre, razón social, encargado y dirección.</small></p><span class="chip where">Panel · Portal Corporativo</span></li>
+        <li class="step" style="--c:var(--corp);--cs:var(--corp-soft)"><span class="who"><b><svg class="i"><use href="#i-building"/></svg></b>Corporativo</span><p>Registra al empresario<small>Queda como administrador de su tienda.</small></p><span class="chip where">Panel · Portal Corporativo</span></li>
+        <li class="step auto"><span class="who"><b><svg class="i"><use href="#i-cog"/></svg></b>Sistema</span><p>Le envía un correo de bienvenida<small>Con una contraseña temporal que cambia al entrar.</small></p><span class="chip where">Automático</span></li>
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Empresario</span><p>Configura su tienda<small>Ubicación en el mapa, datos fiscales y su equipo de cajeros.</small></p><span class="chip where">Panel · Tiendas</span></li>
+      </ol>
+      <div class="states"><span>Estado de la tienda:</span><span class="st y">Prospecto</span><span class="ar">→</span><span class="st a">En proceso</span><span class="ar">→</span><span class="st g">Activa</span><span class="ar">·</span><span class="st r">Suspendida</span></div>
+      <div class="prop-box"><span class="chip prop">Propuesta</span><ul>
+        <li>Afiliación del empresario con una <b>tarjeta digital</b> que presenta en los centros de distribución al comprar.</li>
+      </ul></div>
+    </article>
+
+    <!-- 2 -->
+    <article class="stage" id="e2">
+      <div class="stage-head">
+        <span class="num">2</span>
+        <div class="txt"><h3>Abastecer la red</h3><p>La Matriz le compra al proveedor y guarda la mercancía para repartirla entre las tiendas.</p></div>
+        <div class="who-list">
+          <span class="tag" style="--c:var(--matriz);--cs:var(--matriz-soft)"><svg class="i"><use href="#i-warehouse"/></svg>Matriz</span>
+          <span class="tag" style="--c:var(--prov);--cs:var(--prov-soft)"><svg class="i"><use href="#i-truck"/></svg>Proveedor</span>
+        </div>
+      </div>
+      <ol class="flow">
+        <li class="step" style="--c:var(--matriz);--cs:var(--matriz-soft)"><span class="who"><b><svg class="i"><use href="#i-warehouse"/></svg></b>Matriz</span><p>Hace la orden de compra<small>Elige proveedor, productos, cantidades y precios.</small></p><span class="chip where">Panel · Proveedores</span></li>
+        <li class="step" style="--c:var(--prov);--cs:var(--prov-soft)"><span class="who"><b><svg class="i"><use href="#i-truck"/></svg></b>Proveedor</span><p>Entrega la mercancía<small>Puede llegar completa o en partes.</small></p><span class="chip where">Fuera del sistema</span></li>
+        <li class="step" style="--c:var(--matriz);--cs:var(--matriz-soft)"><span class="who"><b><svg class="i"><use href="#i-warehouse"/></svg></b>Matriz</span><p>Registra lo que recibió<small>Entra al inventario de la Matriz.</small></p><span class="chip where">Panel · Proveedores</span></li>
+        <li class="step auto"><span class="who"><b><svg class="i"><use href="#i-cog"/></svg></b>Sistema</span><p>Crea la cuenta por pagar al proveedor<small>La Matriz la va abonando hasta liquidarla.</small></p><span class="chip where">Automático · Cuentas</span></li>
+      </ol>
+      <div class="states"><span>Orden de compra:</span><span class="st y">Borrador</span><span class="ar">→</span><span class="st b">Enviada</span><span class="ar">→</span><span class="st a">Parcial</span><span class="ar">→</span><span class="st g">Completa</span></div>
+      <div class="prop-box"><span class="chip prop">Propuesta</span><ul>
+        <li>Modalidad <b>proveedor directo</b>: el proveedor lleva el producto directo al negocio del empresario, coordinado por VIDA.</li>
+      </ul></div>
+    </article>
+
+    <!-- 3 -->
+    <article class="stage" id="e3">
+      <div class="stage-head">
+        <span class="num">3</span>
+        <div class="txt"><h3>Surtir la tienda</h3><p>La tienda le pide a la Matriz. Al recibir, el producto entra a su inventario y nace la deuda entre ambas.</p></div>
+        <div class="who-list">
+          <span class="tag" style="--c:var(--tienda);--cs:var(--tienda-soft)"><svg class="i"><use href="#i-store"/></svg>Tienda</span>
+          <span class="tag" style="--c:var(--matriz);--cs:var(--matriz-soft)"><svg class="i"><use href="#i-warehouse"/></svg>Matriz</span>
+        </div>
+      </div>
+      <ol class="flow">
+        <li class="step auto"><span class="who"><b><svg class="i"><use href="#i-cog"/></svg></b>Sistema</span><p>Avisa qué productos están bajo su mínimo<small>Aparecen como alerta en el Dashboard.</small></p><span class="chip where">Automático · Dashboard</span></li>
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Empresario</span><p>Pide a la Matriz<small>Arma su carrito de reabasto y ve el total.</small></p><span class="chip where">Panel · Matriz y Reabasto</span></li>
+        <li class="step" style="--c:var(--matriz);--cs:var(--matriz-soft)"><span class="who"><b><svg class="i"><use href="#i-warehouse"/></svg></b>Matriz</span><p>Prepara y envía el pedido</p><span class="chip where">Panel · Matriz y Reabasto</span></li>
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Empresario</span><p>Marca «Recibido»<small>Solo entonces la mercancía se suma a su inventario.</small></p><span class="chip where">Panel · Matriz y Reabasto</span></li>
+        <li class="step auto"><span class="who"><b><svg class="i"><use href="#i-cog"/></svg></b>Sistema</span><p>Crea la cuenta entre tienda y Matriz<small>Por cobrar para la Matriz, por pagar para la tienda, con sus días de crédito.</small></p><span class="chip where">Automático · Cuentas</span></li>
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Empresario</span><p>Abona su cuenta<small>Efectivo, transferencia, Pago Móvil o tarjeta, en $ o Bs.</small></p><span class="chip where">Panel · Cuentas</span></li>
+      </ol>
+      <div class="states"><span>Pedido a la Matriz:</span><span class="st b">Solicitado</span><span class="ar">→</span><span class="st a">Preparando</span><span class="ar">→</span><span class="st p">Enviado</span><span class="ar">→</span><span class="st g">Recibido</span></div>
+      <div class="prop-box"><span class="chip prop">Propuesta</span><ul>
+        <li>Que la Matriz <b>envíe sola</b> el reabasto cuando el stock de una tienda baje del mínimo (hoy solo avisa).</li>
+        <li>Que el empresario pueda <b>ir a comprar al centro de distribución</b> con su tarjeta digital, además de recibirlo.</li>
+      </ul></div>
+    </article>
+
+    <!-- 4 -->
+    <article class="stage" id="e4">
+      <div class="stage-head">
+        <span class="num">4</span>
+        <div class="txt"><h3>Arrancar el mes con una meta</h3><p>Antes de vender, el empresario sabe cuánto necesita vender para ganar y qué productos le convienen.</p></div>
+        <div class="who-list">
+          <span class="tag" style="--c:var(--tienda);--cs:var(--tienda-soft)"><svg class="i"><use href="#i-store"/></svg>Empresario</span>
+          <span class="tag" style="--c:var(--corp);--cs:var(--corp-soft)"><svg class="i"><use href="#i-building"/></svg>VIDA</span>
+        </div>
+      </div>
+      <ol class="flow">
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Empresario</span><p>Calcula su punto de equilibrio<small>La calculadora le da la venta mínima, la meta diaria y el retorno de su inversión.</small></p><span class="chip where">Panel · Reportes · Rentabilidad</span></li>
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Empresario</span><p>Elige su mezcla de productos<small>Productos PLUS (etiqueta dorada, más ganancia) y productos normales.</small></p><span class="chip where">Panel · Reportes · Rentabilidad</span></li>
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Empresario</span><p>Fija sus metas<small>Diaria, semanal y mensual, en dólares.</small></p><span class="chip where">Panel · Reportes · Metas</span></li>
+        <li class="step auto"><span class="who"><b><svg class="i"><use href="#i-cog"/></svg></b>Sistema</span><p>Muestra el avance contra la meta<small>Barra de progreso e insignia al cumplirla.</small></p><span class="chip where">Automático · Metas</span></li>
+      </ol>
+      <div class="prop-box"><span class="chip prop">Propuesta</span><ul>
+        <li><b>Cuadro de arranque del mes</b> con el comportamiento de los meses anteriores, meta contra resultado y producto más vendido, todo en una vista.</li>
+        <li><b>Producto estrella por tienda</b>: VIDA define el de mayor margen para que el empresario se enfoque en venderlo.</li>
+        <li><b>Indicador de unidades PLUS vendidas</b>, para medir cuánto empuja la tienda los productos de mayor ganancia.</li>
+      </ul></div>
+    </article>
+
+    <!-- 5 -->
+    <article class="stage" id="e5">
+      <div class="stage-head">
+        <span class="num">5</span>
+        <div class="txt"><h3>Un día de venta en la tienda</h3><p>Del fondo de caja por la mañana al arqueo por la tarde.</p></div>
+        <div class="who-list">
+          <span class="tag" style="--c:var(--tienda);--cs:var(--tienda-soft)"><svg class="i"><use href="#i-store"/></svg>Cajero</span>
+          <span class="tag" style="--c:var(--cliente);--cs:var(--cliente-soft)"><svg class="i"><use href="#i-user"/></svg>Cliente</span>
+        </div>
+      </div>
+      <ol class="flow">
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Cajero</span><p>Abre la caja<small>Cuenta el efectivo inicial en $ y Bs. Sin caja abierta no se puede vender.</small></p><span class="chip where">Panel · Cierre de Caja</span></li>
+        <li class="step" style="--c:var(--cliente);--cs:var(--cliente-soft)"><span class="who"><b><svg class="i"><use href="#i-user"/></svg></b>Cliente</span><p>Llega y elige sus productos</p><span class="chip where">En la tienda</span></li>
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Cajero</span><p>Escanea y cobra<small>Promociones como «lleva 5, paga 3» y cupones se aplican al momento. Cobra en $, Bs o combinado, efectivo o tarjeta.</small></p><span class="chip where">Panel · Tienda</span></li>
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Cajero</span><p>Entrega ticket o factura<small>La factura fiscal lleva IVA e IGTF cuando aplica.</small></p><span class="chip where">Panel · Historial de Ventas</span></li>
+        <li class="step auto"><span class="who"><b><svg class="i"><use href="#i-cog"/></svg></b>Sistema</span><p>Si se cae el internet, sigue vendiendo<small>Las ventas se guardan y se envían solas al volver la conexión.</small></p><span class="chip where">Automático</span></li>
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Cajero</span><p>Cierra la caja<small>Cuenta el efectivo y el sistema le muestra si sobra o falta.</small></p><span class="chip where">Panel · Cierre de Caja</span></li>
+      </ol>
+    </article>
+
+    <!-- 6 -->
+    <article class="stage" id="e6">
+      <div class="stage-head">
+        <span class="num">6</span>
+        <div class="txt"><h3>Pedido a domicilio por la app</h3><p>El cliente pide desde su teléfono, la tienda prepara y un repartidor cercano lo lleva.</p></div>
+        <div class="who-list">
+          <span class="tag" style="--c:var(--cliente);--cs:var(--cliente-soft)"><svg class="i"><use href="#i-user"/></svg>Cliente</span>
+          <span class="tag" style="--c:var(--tienda);--cs:var(--tienda-soft)"><svg class="i"><use href="#i-store"/></svg>Tienda</span>
+          <span class="tag" style="--c:var(--repa);--cs:var(--repa-soft)"><svg class="i"><use href="#i-bike"/></svg>Repartidor</span>
+        </div>
+      </div>
+      <ol class="flow">
+        <li class="step" style="--c:var(--cliente);--cs:var(--cliente-soft)"><span class="who"><b><svg class="i"><use href="#i-user"/></svg></b>Cliente</span><p>Busca en el catálogo<small>La app le propone la tienda más cercana, con fotos y precios.</small></p><span class="chip where">App VIDA Compras</span></li>
+        <li class="step" style="--c:var(--cliente);--cs:var(--cliente-soft)"><span class="who"><b><svg class="i"><use href="#i-user"/></svg></b>Cliente</span><p>Arma su carrito y paga<small>Usa cupones o puntos. Paga en efectivo o tarjeta al recibir, o por Pago Móvil.</small></p><span class="chip where">App VIDA Compras</span></li>
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Tienda</span><p>Valida el Pago Móvil y prepara<small>Revisa el comprobante y arma el pedido.</small></p><span class="chip where">Panel · Pedidos</span></li>
+        <li class="step auto"><span class="who"><b><svg class="i"><use href="#i-cog"/></svg></b>Sistema</span><p>Busca repartidor<small>Avisa a los más cercanos y amplía el radio si nadie acepta.</small></p><span class="chip where">Automático</span></li>
+        <li class="step" style="--c:var(--repa);--cs:var(--repa-soft)"><span class="who"><b><svg class="i"><use href="#i-bike"/></svg></b>Repartidor</span><p>Acepta, recoge y entrega<small>Cobra lo que le indica la app y toma foto de la entrega.</small></p><span class="chip where">App Repartidor</span></li>
+        <li class="step" style="--c:var(--cliente);--cs:var(--cliente-soft)"><span class="who"><b><svg class="i"><use href="#i-user"/></svg></b>Cliente</span><p>Sigue al repartidor en el mapa<small>Ve el tiempo estimado y recibe su pedido.</small></p><span class="chip where">App VIDA Compras</span></li>
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Tienda</span><p>Liquida al repartidor<small>Recibe el efectivo cobrado; él se queda con su comisión.</small></p><span class="chip where">Panel · Repartidores</span></li>
+      </ol>
+      <div class="states"><span>Pedido:</span><span class="st a">Validando pago</span><span class="ar">→</span><span class="st b">Nuevo</span><span class="ar">→</span><span class="st a">Preparando</span><span class="ar">→</span><span class="st g">Listo</span><span class="ar">→</span><span class="st p">En camino</span><span class="ar">→</span><span class="st y">Entregado</span></div>
+      <div class="prop-box"><span class="chip prop">Propuesta</span><ul>
+        <li><b>Repartidor propio de la tienda</b>, además de los repartidores independientes que hoy toman pedidos por cercanía.</li>
+      </ul></div>
+    </article>
+
+    <!-- 7 -->
+    <article class="stage" id="e7">
+      <div class="stage-head">
+        <span class="num">7</span>
+        <div class="txt"><h3>Fidelizar al cliente: Club VIDA</h3><p>Cada compra suma. El cliente gana puntos, sube de nivel y canjea premios en su tienda.</p></div>
+        <div class="who-list">
+          <span class="tag" style="--c:var(--cliente);--cs:var(--cliente-soft)"><svg class="i"><use href="#i-user"/></svg>Cliente</span>
+          <span class="tag" style="--c:var(--club);--cs:var(--club-soft)"><svg class="i"><use href="#i-star"/></svg>Club VIDA</span>
+          <span class="tag" style="--c:var(--tienda);--cs:var(--tienda-soft)"><svg class="i"><use href="#i-store"/></svg>Tienda</span>
+        </div>
+      </div>
+      <ol class="flow">
+        <li class="step" style="--c:var(--cliente);--cs:var(--cliente-soft)"><span class="who"><b><svg class="i"><use href="#i-user"/></svg></b>Cliente</span><p>Gana puntos<small>Con cada pedido entregado, recargas y su racha de hidratación.</small></p><span class="chip where">App VIDA Compras</span></li>
+        <li class="step" style="--c:var(--club);--cs:var(--club-soft)"><span class="who"><b><svg class="i"><use href="#i-star"/></svg></b>Club VIDA</span><p>Sube de nivel<small>Cada nivel abre premios y eventos exclusivos.</small></p><span class="chip where">Automático</span></li>
+        <li class="step" style="--c:var(--cliente);--cs:var(--cliente-soft)"><span class="who"><b><svg class="i"><use href="#i-user"/></svg></b>Cliente</span><p>Canjea un premio<small>Recibe un código para reclamarlo, o reserva lugar en un evento del Club.</small></p><span class="chip where">App VIDA Compras</span></li>
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Tienda</span><p>Entrega el premio<small>Lo marca como entregado.</small></p><span class="chip where">Panel · Operaciones</span></li>
+        <li class="step auto"><span class="who"><b><svg class="i"><use href="#i-cog"/></svg></b>Sistema</span><p>Recupera al cliente inactivo<small>Si deja de comprar, le envía un cupón personal «te extrañamos».</small></p><span class="chip where">Automático · Cupones</span></li>
+      </ol>
+      <div class="prop-box"><span class="chip prop">Propuesta</span><ul>
+        <li><b>Tarjeta de crédito</b> para que el cliente compre a crédito en las tiendas VIDA. Se está definiendo esta semana; en la app ya aparece como «Próximamente».</li>
+      </ul></div>
+    </article>
+
+    <!-- 8 -->
+    <article class="stage" id="e8">
+      <div class="stage-head">
+        <span class="num">8</span>
+        <div class="txt"><h3>Medir y capacitar</h3><p>Con los números de cada tienda se decide qué mejorar, y la Academia prepara al equipo.</p></div>
+        <div class="who-list">
+          <span class="tag" style="--c:var(--tienda);--cs:var(--tienda-soft)"><svg class="i"><use href="#i-store"/></svg>Empresario</span>
+          <span class="tag" style="--c:var(--corp);--cs:var(--corp-soft)"><svg class="i"><use href="#i-building"/></svg>Corporativo</span>
+          <span class="tag" style="--c:var(--acad);--cs:var(--acad-soft)"><svg class="i"><use href="#i-cap"/></svg>Academia</span>
+        </div>
+      </div>
+      <ol class="flow">
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Empresario</span><p>Revisa sus reportes<small>Ventas por día, método y moneda; productos más y menos vendidos; inventario.</small></p><span class="chip where">Panel · Reportes</span></li>
+        <li class="step" style="--c:var(--corp);--cs:var(--corp-soft)"><span class="who"><b><svg class="i"><use href="#i-building"/></svg></b>Corporativo</span><p>Compara la red<small>Tiendas por país y estado, delivery y crecimiento hacia la meta 2035.</small></p><span class="chip where">Panel · Reportes y Corporativo</span></li>
+        <li class="step" style="--c:var(--acad);--cs:var(--acad-soft)"><span class="who"><b><svg class="i"><use href="#i-cap"/></svg></b>Academia</span><p>Publica cursos<small>Ventas, servicio, cumplimiento, marketing y finanzas. Algunos obligatorios, con fecha límite.</small></p><span class="chip where">Panel · Academia VIDA</span></li>
+        <li class="step" style="--c:var(--tienda);--cs:var(--tienda-soft)"><span class="who"><b><svg class="i"><use href="#i-store"/></svg></b>Equipo de tienda</span><p>Toma el curso<small>Videos, PDF y cuestionario. Gana puntos y una constancia con código QR.</small></p><span class="chip where">Panel · Academia VIDA</span></li>
+      </ol>
+      <div class="prop-box"><span class="chip prop">Propuesta</span><ul>
+        <li>Subir las <b>capacitaciones con Empresas Polar</b>, o cursos que VIDA prepare a partir de ellas, para la formación del empresario.</li>
+      </ul></div>
+    </article>
+  </section>
+
+  <section class="wrap" id="dinero" aria-labelledby="dinero-t" style="padding-block: 18px 8px; scroll-margin-top: 16px;">
+    <div class="money">
+      <div class="sec-title" style="padding-top:0">
+        <h2 id="dinero-t">Cómo se mueve el dinero</h2>
+        <p>El dinero viaja en sentido contrario a la mercancía. Cada deuda entre la red queda registrada en Cuentas, sin hacer nada a mano.</p>
+      </div>
+      <div class="chain">
+        <div class="link" style="--c:var(--cliente);--cs:var(--cliente-soft)"><h4><svg class="i"><use href="#i-user"/></svg>Cliente</h4><p>Paga en la tienda, al repartidor o por Pago Móvil. En dólares, bolívares o combinado.</p></div>
+        <div class="link" style="--c:var(--tienda);--cs:var(--tienda-soft)"><h4><svg class="i"><use href="#i-store"/></svg>Tienda VIDA</h4><p>Abona a la Matriz lo que le debe por su reabasto, dentro de sus días de crédito.</p></div>
+        <div class="link" style="--c:var(--matriz);--cs:var(--matriz-soft)"><h4><svg class="i"><use href="#i-warehouse"/></svg>Matriz</h4><p>Paga al proveedor sus órdenes de compra.</p></div>
+        <div class="link" style="--c:var(--prov);--cs:var(--prov-soft)"><h4><svg class="i"><use href="#i-truck"/></svg>Proveedor</h4><p>Cobra por la mercancía que entregó.</p></div>
+      </div>
+      <div class="side-note"><svg class="i"><use href="#i-bike"/></svg><p><b>Y el repartidor:</b> el efectivo que cobra en las entregas es de la tienda. Lo entrega, la tienda lo liquida y él se queda con su comisión por cada pedido.</p></div>
+    </div>
+  </section>
+
+  <section class="wrap" aria-labelledby="pend-t" style="padding-block: 26px 8px;">
+    <div class="todo">
+      <div class="sec-title" style="padding-top:0">
+        <h2 id="pend-t">Lo que el audio propone y falta construir</h2>
+        <p>Resumen de todas las propuestas, para priorizarlas. El número indica la etapa.</p>
+      </div>
+      <ul class="todo-list">
+        <li><span>1·3</span><p>Afiliación del empresario con tarjeta digital para comprar en los centros de distribución.</p></li>
+        <li><span>2</span><p>Modalidad proveedor directo: entrega al negocio, coordinada por VIDA.</p></li>
+        <li><span>3</span><p>Reabasto automático cuando el stock baja del mínimo.</p></li>
+        <li><span>4</span><p>Cuadro de arranque del mes con meses anteriores, meta contra resultado y más vendido.</p></li>
+        <li><span>4</span><p>Producto estrella definido por VIDA para cada tienda.</p></li>
+        <li><span>4</span><p>Indicador de unidades PLUS vendidas.</p></li>
+        <li><span>6</span><p>Repartidor propio de la tienda.</p></li>
+        <li><span>7</span><p>Tarjeta de crédito para clientes en tiendas VIDA.</p></li>
+        <li><span>8</span><p>Cursos con Empresas Polar en la Academia.</p></li>
+      </ul>
+      <p style="color:var(--muted);font-size:14px">Detectado al revisar el sistema, fuera del audio:</p>
+      <ul class="todo-list">
+        <li><span>7</span><p>Sumar puntos del Club en compras de mostrador: la tarjeta con QR existe, pero el punto de venta aún no la lee.</p></li>
+        <li><span>—</span><p>«¿Olvidaste tu contraseña?» del panel: el enlace existe pero todavía no hace nada.</p></li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">Comercializadora VIDA · Flujograma del sistema, octubre de 2026. Basado en el sistema en producción y en la propuesta recibida por audio.</footer>
+
+</body>
+</html>

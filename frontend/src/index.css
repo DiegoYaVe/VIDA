@@ -25,6 +25,46 @@ body { font-family: 'Nunito', sans-serif; background: #F4F6F8; }
   }
 }
 
+/* ── Indicador de carga automático (src/services/cargando.js) ─────────────────
+ * El botón que disparó una petición al servidor muestra un spinner y no acepta
+ * más clics hasta que termina; la barra superior aparece mientras haya acciones
+ * o guardados en curso. Si el botón ya trae su propio spinner, no se duplica. */
+[data-cargando] {
+  cursor: progress !important;
+  pointer-events: none;
+}
+[data-cargando]:not(:has(.animate-spin))::after {
+  content: "";
+  display: inline-block;
+  flex: none;
+  width: 0.95em;
+  height: 0.95em;
+  margin-left: 0.5em;
+  vertical-align: -0.15em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: vida-giro 0.7s linear infinite;
+}
+html.vida-cargando body { cursor: progress; }
+html.vida-cargando body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 3px;
+  z-index: 10000;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, #54C4E0, #5BBE6A, transparent) no-repeat;
+  background-size: 45% 100%;
+  animation: vida-barra 1.1s ease-in-out infinite;
+}
+@keyframes vida-giro { to { transform: rotate(360deg); } }
+@keyframes vida-barra { from { background-position: -60% 0; } to { background-position: 160% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  [data-cargando]:not(:has(.animate-spin))::after { animation-duration: 2s; }
+  html.vida-cargando body::before { animation-duration: 3s; }
+}
+
 /* ── Impresión universal del ticket POS ──────────────────────────────────────
  * Al imprimir (window.print) se oculta todo menos #ticket-imprimible y se le da
  * formato de ticket térmico. Funciona con CUALQUIER impresora instalada en el

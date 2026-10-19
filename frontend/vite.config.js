@@ -25,6 +25,10 @@ export default defineConfig({
         // Assets estáticos (JS/CSS/imágenes): CacheFirst — la app carga sin red
         globPatterns: ['**/*.{js,css,html,png,jpeg,jpg,svg,ico}'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        // Páginas sueltas y públicas (flujograma-vida.html, manual-vida.html):
+        // sin esto, el service worker responde index.html a cualquier
+        // navegación y el panel manda al login.
+        navigateFallbackDenylist: [/\.html$/],
         // API: NetworkFirst solo para GETs de catálogo — los POST nunca se
         // cachean (la cola offline de IndexedDB maneja las escrituras)
         runtimeCaching: [

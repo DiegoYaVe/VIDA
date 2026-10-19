@@ -15,7 +15,7 @@ export function useHeartbeat(activo = true) {
     if (!activo || !accessToken || !usuario?.idPuntoVenta) return;
 
     const ping = () => {
-      api.post('/heartbeat/ping').catch(() => {/* silencioso */});
+      api.post('/heartbeat/ping', null, { silencioso: true }).catch(() => {/* silencioso */});
     };
 
     // Ping inmediato al montar

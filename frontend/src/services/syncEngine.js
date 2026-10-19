@@ -48,7 +48,8 @@ export async function syncNow() {
 
   try {
     const lote = queue.slice(0, LOTE_MAX).map(({ intentos, encoladaEn, ultimoError, ...venta }) => venta);
-    const res = await api.post('/pedidos/sync', { ventas: lote });
+    // silencioso: corre de fondo (cada 30 s y al volver la red), no es un clic del usuario
+    const res = await api.post('/pedidos/sync', { ventas: lote }, { silencioso: true });
 
     for (const s of res.data.synced || []) {
       await removeFromQueue(s.ClienteUUID);
