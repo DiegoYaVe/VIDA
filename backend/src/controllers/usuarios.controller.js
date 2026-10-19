@@ -1,6 +1,7 @@
 // src/controllers/usuarios.controller.js
 import bcrypt from 'bcrypt';
 import { getPool, sql } from '../db/sqlserver.js';
+import { enmascararCorreo } from '../services/correo.service.js';
 import {
   esRolValido, puedeGestionarRol, rolesAsignables, resolverUbicacion, ubicacionEnAlcance,
   ambitoParaRol, modulosAsignables, modulosFinales,
@@ -499,6 +500,58 @@ export async function toggleStatus(request, reply) {
     return reply.send({ message: `Usuario ${status === 'ACTIVO' ? 'activado' : 'desactivado'} correctamente` });
   } catch (err) {
     return reply.code(500).send({ error: 'Error al cambiar status' });
+  }
+}
+
+// ── POST /api/usuarios/reenviar-temporal ──────────────────────────────────
+// Desde "Cambia tu contraseña": genera una contraseña temporal nueva y la manda
+// al correo del usuario (la anterior deja de servir). Solo mientras debe
+// cambiarla (CambiarPass=1) y como mucho una vez por minuto. Se guarda solo si
+// el correo salió: si falla el envío, la temporal que tenía sigue valiendo.
+const ESPERA_REENVIO_MS = 60 * 1000;
+const ultimoReenvio = new Map(); // idBranch:idCuenta:idUsuario → instante
+
+export async function reenviarPasswordTemporal(request, reply) {
+  const { idBranch, idCuenta, idUsuario } = request.user;
+  const clave = `${idBranch}:${idCuenta}:${idUsuario}`;
+  const hace = Date.now() - (ultimoReenvio.get(clave) || 0);
+  if (hace < ESPERA_REENVIO_MS) {
+    return reply.code(429).send({ error: `Espera ${Math.ceil((ESPERA_REENVIO_MS - hace) / 1000)} segundos para pedir otra.` });
+  }
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+  let enTx = false;
+  try {
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idUsuario', sql.BigInt, idUsuario)
+      .query(`SELECT Nombre, Correo, Cve, TipoUsuario, CambiarPass FROM VIDA_CUENTA_USUARIOS
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario AND Status='ACTIVO'`);
+    const u = r.recordset[0];
+    if (!u) return reply.code(404).send({ error: 'Usuario no encontrado' });
+    if (!u.CambiarPass) return reply.code(409).send({ error: 'Tu cuenta ya no usa contraseña temporal.' });
+    if (!u.Correo) return reply.code(422).send({ error: 'Tu usuario no tiene correo registrado. Pide a tu administrador que te asigne una contraseña.' });
+
+    const temporal = generarPasswordTemporal();
+    await tx.begin(); enTx = true;
+    await new sql.Request(tx)
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idUsuario', sql.BigInt, idUsuario)
+      .input('Pass', sql.VarChar(255), await bcrypt.hash(temporal, 12))
+      .query(`UPDATE VIDA_CUENTA_USUARIOS SET Pass=@Pass, CambiarPass=1, FechaMod=GETUTCDATE(), UsuMod='REENVIO_TEMP'
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idUsuario=@idUsuario`);
+    try {
+      await enviarEmailInvitacion(pool, u, temporal, idBranch);
+    } catch (e) {
+      await tx.rollback(); enTx = false;
+      request.log.warn('[Usuarios] No se pudo reenviar la contraseña temporal: ' + e.message);
+      return reply.code(502).send({ error: 'No pudimos enviar el correo. Pide a tu administrador que te asigne una contraseña nueva.' });
+    }
+    await tx.commit(); enTx = false;
+    ultimoReenvio.set(clave, Date.now());
+    return reply.send({ ok: true, destino: enmascararCorreo(u.Correo) });
+  } catch (err) {
+    if (enTx) { try { await tx.rollback(); } catch { } }
+    request.log.error(err);
+    return reply.code(500).send({ error: 'No se pudo reenviar la contraseña temporal' });
   }
 }
 

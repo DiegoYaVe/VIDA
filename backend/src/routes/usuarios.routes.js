@@ -9,6 +9,7 @@ import {
   cambiarPassword,
   getPantallas,
   getRolesAsignables,
+  reenviarPasswordTemporal,
 } from '../controllers/usuarios.controller.js';
 
 // Solo administradores pueden gestionar usuarios
@@ -26,6 +27,11 @@ export async function usuariosRoutes(fastify) {
   fastify.get('/usuarios/roles-asignables', { preHandler: [requireRole(...LECTURA)] }, getRolesAsignables);
   // Cambio de contraseña propia: disponible para cualquier usuario autenticado
   fastify.post('/usuarios/cambiar-pass', { preHandler: [authenticate] }, cambiarPassword);
+  // Reenviar la contraseña temporal al correo (pantalla "Cambia tu contraseña")
+  fastify.post('/usuarios/reenviar-temporal', {
+    preHandler: [authenticate],
+    config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+  }, reenviarPasswordTemporal);
 
   // ── Rutas dinámicas después ──────────────────────────
   fastify.put('/usuarios/:idUsuario',           { preHandler: [requireRole(...ADMIN)] }, editarUsuario);

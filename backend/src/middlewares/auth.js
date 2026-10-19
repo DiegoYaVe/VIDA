@@ -1,9 +1,11 @@
 import { portalDeRol } from '../config/portales.js';
 
 // Rutas permitidas para un usuario con contraseña temporal (CambiarPass=1):
-// solo puede cambiarla, ver su sesión o salir. Todo lo demás responde 403.
+// solo puede cambiarla, pedir que se la reenvíen, ver su sesión o salir.
+// Todo lo demás responde 403.
 const RUTAS_PERMITIDAS_CAMBIO_PASS = [
   '/api/usuarios/cambiar-pass',
+  '/api/usuarios/reenviar-temporal',
   '/api/perfil/cambiar-pass',
   '/api/auth/logout',
   '/api/auth/me',

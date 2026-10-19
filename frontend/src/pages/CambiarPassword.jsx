@@ -1,7 +1,7 @@
 // src/pages/CambiarPassword.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Eye, EyeOff, Check, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
+import { Lock, Eye, EyeOff, Check, AlertCircle, Loader2, ShieldCheck, Mail } from 'lucide-react';
 import { useAuthStore } from '../store/authStore.js';
 import api from '../services/api.js';
 
@@ -15,6 +15,31 @@ export default function CambiarPassword() {
   const [loading,        setLoading]        = useState(false);
   const [error,          setError]          = useState('');
   const [exitoso,        setExitoso]        = useState(false);
+  // Reenviar la contraseña temporal al correo
+  const [reenviando,     setReenviando]     = useState(false);
+  const [reenvioMsg,     setReenvioMsg]     = useState('');
+  const [espera,         setEspera]         = useState(0);
+
+  useEffect(() => {
+    if (espera <= 0) return undefined;
+    const t = setTimeout(() => setEspera(s => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [espera]);
+
+  const reenviarTemporal = async () => {
+    setError(''); setReenvioMsg(''); setReenviando(true);
+    try {
+      const r = await api.post('/usuarios/reenviar-temporal');
+      setReenvioMsg(`Te enviamos una nueva contraseña temporal a ${r.data.destino}. La anterior ya no sirve; revisa también la carpeta de spam.`);
+      setPasswordActual('');
+      setEspera(60);
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo reenviar la contraseña temporal');
+      if (err.response?.status === 429) setEspera(60);
+    } finally {
+      setReenviando(false);
+    }
+  };
 
   const requisitos = [
     { label: 'Al menos 8 caracteres',    ok: passwordNueva.length >= 8 },
@@ -107,6 +132,19 @@ export default function CambiarPassword() {
                   required
                 />
               </div>
+              <p className="mt-2 text-xs text-gray-500">
+                ¿No te llegó o la perdiste?{' '}
+                <button type="button" onClick={reenviarTemporal} disabled={reenviando || espera > 0}
+                  className="font-bold text-vida-green hover:underline disabled:text-gray-400 disabled:no-underline disabled:cursor-not-allowed">
+                  {reenviando ? 'Enviando…' : espera > 0 ? `Reenviar en ${espera} s` : 'Reenviar contraseña temporal'}
+                </button>
+              </p>
+              {reenvioMsg && (
+                <div className="mt-2 bg-green-50 border border-green-200 rounded-xl p-3 flex items-start gap-2">
+                  <Mail size={15} className="text-green-600 shrink-0 mt-0.5" />
+                  <p className="text-green-700 text-xs font-semibold">{reenvioMsg}</p>
+                </div>
+              )}
             </div>
 
             {/* Nueva contraseña */}
@@ -137,7 +175,7 @@ export default function CambiarPassword() {
                 Confirmar nueva contraseña
               </label>
               <div className="relative">
-                <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray.400" />
+                <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type={showPass ? 'text' : 'password'}
                   value={confirmar}
