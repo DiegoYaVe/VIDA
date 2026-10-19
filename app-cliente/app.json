@@ -31,7 +31,9 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -52,8 +54,6 @@
         }
       ],
       "expo-router",
-      "expo-web-browser",
-      "@react-native-google-signin/google-signin",
       "expo-font"
     ],
     "scheme": "vida-cliente",

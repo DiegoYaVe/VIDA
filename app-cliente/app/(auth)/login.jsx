@@ -1,5 +1,8 @@
 // Entrar / crear cuenta (diseño "Agua VIDA"): cabecera marina con el logo y
-// el lema, formulario con etiquetas, Google y "¿Primera vez? Crea tu cuenta".
+// el lema, formulario con etiquetas y "¿Primera vez? Crea tu cuenta".
+// Sin "Continuar con Google": el módulo nativo de Google Sign-In rompía los
+// pods de iOS en cada build. Las cuentas creadas con Google no tienen
+// teléfono, así que no pueden entrar por aquí: deben crear una cuenta nueva.
 import { useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,18 +12,8 @@ import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
-import { ID_BRANCH, ID_CUENTA, GOOGLE_WEB_CLIENT_ID } from '../../constants/config';
+import { ID_BRANCH, ID_CUENTA } from '../../constants/config';
 import { colores, fuentes, logos } from '../../constants/tema';
-
-// Google Sign-In es un módulo nativo que Expo Go no incluye: se carga con
-// require protegido. En Expo Go el botón avisa que use su teléfono.
-let GoogleSignin = null;
-try {
-  GoogleSignin = require('@react-native-google-signin/google-signin').GoogleSignin;
-  GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
-} catch (_) {
-  GoogleSignin = null;
-}
 
 function Campo({ etiqueta, ...props }) {
   return (
@@ -36,7 +29,6 @@ export default function LoginScreen() {
   const login = useAuthStore((s) => s.login);
   const [modo, setModo] = useState('login');
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
 
@@ -88,27 +80,6 @@ export default function LoginScreen() {
     }
   };
 
-  const handleGoogle = async () => {
-    setError('');
-    if (!GoogleSignin) return setError('Entrar con Google no está disponible en Expo Go. Usa tu teléfono y contraseña, o la app instalada.');
-    setGoogleLoading(true);
-    try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const resultado = await GoogleSignin.signIn();
-      if (resultado?.type === 'cancelled') return;
-      const idToken = resultado?.data?.idToken ?? resultado?.idToken;
-      if (!idToken) return setError('Google no entregó el token. Intenta de nuevo.');
-      const r = await api.post('/delivery/cliente/google/native', { idBranch: ID_BRANCH, idCuenta: ID_CUENTA, idToken });
-      await AsyncStorage.setItem('vida_cliente_token', r.data.token);
-      login({ cliente: { idCliente: Number(r.data.idCliente), Nombre: r.data.Nombre, Email: r.data.Email }, token: r.data.token });
-    } catch (e) {
-      if (String(e?.code) === '12501' || /cancel/i.test(String(e?.message))) return;
-      setError(e.response?.data?.error || e.message);
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
-
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
@@ -145,13 +116,6 @@ export default function LoginScreen() {
 
             <TouchableOpacity style={[styles.entrar, loading && { opacity: 0.7 }]} onPress={modo === 'login' ? handleLogin : handleRegistro} disabled={loading}>
               {loading ? <ActivityIndicator color={colores.blanco} /> : <Text style={styles.entrarTexto}>{modo === 'login' ? 'Entrar' : 'Crear cuenta'}</Text>}
-            </TouchableOpacity>
-            <View style={styles.separador}>
-              <View style={styles.linea} /><Text style={styles.o}>o</Text><View style={styles.linea} />
-            </View>
-            <TouchableOpacity style={styles.google} onPress={handleGoogle} disabled={googleLoading}>
-              {googleLoading ? <ActivityIndicator color={colores.marino} /> : <View style={styles.googleAro} />}
-              <Text style={styles.googleTexto}>Continuar con Google</Text>
             </TouchableOpacity>
           </View>
 
@@ -192,12 +156,6 @@ const styles = StyleSheet.create({
   aviso: { backgroundColor: colores.verdeClaro, color: colores.verdeTexto, borderRadius: 12, padding: 10, fontSize: 14, fontWeight: '700' },
   entrar: { height: 56, borderRadius: 18, backgroundColor: colores.marino, alignItems: 'center', justifyContent: 'center' },
   entrarTexto: { color: colores.blanco, fontWeight: '800', fontSize: 17 },
-  separador: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  linea: { flex: 1, height: 1, backgroundColor: colores.bordeFuerte },
-  o: { fontSize: 13, color: colores.textoSuave },
-  google: { height: 56, borderRadius: 18, backgroundColor: colores.blanco, borderWidth: 1.5, borderColor: colores.bordeFuerte, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  googleAro: { width: 22, height: 22, borderRadius: 11, borderWidth: 3, borderColor: colores.marino },
-  googleTexto: { fontWeight: '800', fontSize: 16, color: colores.marino },
 
   pie: { marginTop: 'auto', paddingTop: 24, paddingBottom: 28, alignItems: 'center', gap: 4 },
   pieTexto: { fontSize: 15, color: colores.textoSuave },

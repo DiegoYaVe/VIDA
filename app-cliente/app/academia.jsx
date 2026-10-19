@@ -3,13 +3,12 @@
 // temario, reproductor (video embebido/subido, texto, PDF, quiz), progreso,
 // comentarios y constancia con QR al completar (+ puntos VIDA).
 import { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image, Dimensions } from 'react-native';
+import { View, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image, Dimensions, Linking } from 'react-native';
 import { Text, TextInput } from '../components/Texto';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { WebView } from 'react-native-webview';
-import * as WebBrowser from 'expo-web-browser';
 import api from '../services/api';
 import { absImg } from '../constants/config';
 
@@ -231,7 +230,7 @@ function LeccionMedia({ leccion, onEnded }) {
   }
   if (TipoLeccion === 'PDF' && ArchivoUrl) {
     return (
-      <TouchableOpacity style={styles.pdfBtn} onPress={() => WebBrowser.openBrowserAsync(absImg(ArchivoUrl))}>
+      <TouchableOpacity style={styles.pdfBtn} onPress={() => Linking.openURL(absImg(ArchivoUrl))}>
         <Ionicons name="document" size={20} color="#001034" />
         <Text style={styles.pdfTxt}>Abrir documento PDF</Text>
       </TouchableOpacity>
