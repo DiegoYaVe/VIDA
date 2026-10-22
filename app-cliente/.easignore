@@ -4,5 +4,9 @@
 node_modules/
 .expo/
 dist/
+dist-*/
 *.log
 .env
+# Carpetas nativas de un build local: EAS debe generarlas siempre con prebuild
+/android
+/ios

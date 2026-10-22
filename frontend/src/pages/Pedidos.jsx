@@ -476,7 +476,7 @@ function ModalResumenRepartidores({ onClose }) {
           </div>
         </div>
 
-        <div className="overflow-y-auto flex-1 p-5">
+        <div className="overflow-auto flex-1 p-5">
           {loading ? (
             <p className="text-center text-gray-400 py-10 text-sm">Cargando...</p>
           ) : reps.length === 0 ? (
@@ -642,9 +642,9 @@ export default function Pedidos() {
   const terminados = pedidos.filter(p => ['ENTREGADO','CANCELADO'].includes(p.Status));
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="w-full p-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-black text-gray-900">Panel de Pedidos</h1>
           <p className="text-gray-500 text-sm mt-1">Monitorea y gestiona los pedidos en tiempo real</p>

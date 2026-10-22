@@ -913,7 +913,7 @@ function TabProductos({ filtros }) {
 
       {!cargando && datos && (
         <>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <CardResumen icon={Package}   label="Productos distintos" valor={datos.totales.NumProductos}         color="blue"  />
             <CardResumen icon={TrendingUp} label="Total unidades"     valor={FMT(datos.totales.TotalCantidad)}   color="green" />
             <CardResumen icon={DollarSign} label="Ingresos totales"   valor={USD(datos.totales.TotalRevenue)}    color="amber" />
@@ -1048,7 +1048,7 @@ function TabInventario({ filtros }) {
 
       {!cargando && datos && (
         <>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <CardResumen icon={Package}      label="Total productos"  valor={datos.resumen.TotalProductos}             color="blue"  />
             <CardResumen icon={AlertTriangle} label="Bajo stock"      valor={datos.resumen.TotalBajoStock}             color="red"   />
             <CardResumen icon={DollarSign}    label="Valor en stock"  valor={USD(datos.resumen.ValorTotalStock)}        color="green" />
@@ -1875,7 +1875,7 @@ function TabRentabilidad({ filtros, puedeVerRed }) {
                 ) : (
                   <>
                     <p className="mt-1 text-sm opacity-90">Para no perder, debes vender:</p>
-                    <div className="grid grid-cols-3 gap-4 mt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
                       <div><p className="text-2xl font-black">{USD(pe.ventasMes)}</p><p className="text-xs opacity-70">al mes</p></div>
                       <div><p className="text-2xl font-black">{USD(pe.ventasDia)}</p><p className="text-xs opacity-70">al día</p></div>
                       <div><p className="text-2xl font-black">{pe.unidadesDia != null ? Math.ceil(pe.unidadesDia) : '—'}</p><p className="text-xs opacity-70">productos/día</p></div>

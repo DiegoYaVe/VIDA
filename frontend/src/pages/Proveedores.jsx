@@ -1036,7 +1036,7 @@ export default function Proveedores() {
   }, [cargandoMatriz, operaMatriz, tab]);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="w-full p-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-black text-gray-900">Proveedores</h1>

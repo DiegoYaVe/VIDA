@@ -75,7 +75,7 @@ export function Gestion() {
       </div>
 
       {cargando ? <p className="text-center text-gray-400 py-10 text-sm">Cargando…</p> : (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-400 text-xs">
               <tr>
@@ -511,7 +511,7 @@ export function Analitica() {
         <MiniStat valor={data.totales.completaciones} label="Completaciones" color="#5BBE6A"/>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-400 text-xs">
             <tr>
@@ -580,7 +580,7 @@ function AnaliticaCurso({ idCurso, onClose }) {
           <p className="font-black text-gray-800">{data?.curso?.Titulo || 'Curso'} — por usuario</p>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"><X size={20}/></button>
         </div>
-        <div className="overflow-y-auto">
+        <div className="overflow-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-400 text-xs sticky top-0">
               <tr>

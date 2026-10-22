@@ -743,7 +743,7 @@ function TabProductos({ puedeEscribir }) {
           <p className="font-bold">Sin productos</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto shadow-sm">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
@@ -924,7 +924,7 @@ function TabStock({ puedeEscribir, usuario }) {
           <p className="font-bold">Sin productos</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto shadow-sm">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>

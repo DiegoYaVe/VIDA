@@ -65,7 +65,7 @@ function CrudCatalogo({ baseUrl, idKey, fields, columns, titulo, acciones = [] }
           <Plus size={15} /> Nuevo
         </button>
       </div>
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>{columns.map(c => <th key={c.key} className="text-left px-4 py-2.5 font-bold">{c.label}</th>)}<th /></tr>
@@ -188,7 +188,7 @@ function ModalAsistentes({ evento, onClose }) {
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
-        <div className="overflow-y-auto p-5">
+        <div className="overflow-auto p-5">
           {lista === null ? <p className="text-sm text-gray-400">Cargando…</p> : lista.length === 0 ? <p className="text-sm text-gray-400">Nadie ha confirmado todavía.</p> : (
             <table className="w-full text-sm">
               <tbody className="divide-y divide-gray-50">

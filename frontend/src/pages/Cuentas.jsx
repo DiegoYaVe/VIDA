@@ -352,7 +352,7 @@ function PanelDetalle({ idDocumento, puedeAbonar, onCerrar, onCambio }) {
           <p className="text-xs text-gray-500">Estado de cuenta con tasas históricas. No sustituye factura fiscal.</p>
           {errorExportacion&&<p role="alert" className="text-sm text-red-600">{errorExportacion}</p>}
         </div>
-        <div className="p-6 grid grid-cols-3 gap-4 border-b border-gray-100">
+        <div className="p-6 grid grid-cols-1 sm:grid-cols-3 gap-4 border-b border-gray-100">
           <ResumenMoneda datos={c.TasaEmisionJSON} />
           <div><p className="text-xs text-gray-400 font-bold uppercase">Total</p><p className="text-lg font-black tabular-nums">{fmt(c.TotalUSD)}</p></div>
           <div><p className="text-xs text-gray-400 font-bold uppercase">Abonado</p><p className="text-lg font-black tabular-nums text-green-600">{fmt(c.Abonado)}</p></div>
@@ -500,7 +500,7 @@ export default function Cuentas() {
   const r = resumen?.[tab] || { saldo: 0, vencido: 0, abiertas: 0, vencidas: 0 };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="w-full p-6 max-w-6xl mx-auto">
       <div className="mb-6 overflow-hidden rounded-2xl bg-gradient-to-r from-[#0A1E3F] via-[#12335a] to-[#17647a] px-6 py-5 text-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">

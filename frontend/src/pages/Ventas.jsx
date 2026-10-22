@@ -167,7 +167,7 @@ export default function Ventas() {
     : ventas;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="w-full p-6 max-w-5xl mx-auto">
 
       {/* Ticket invisible para impresión (no mientras se ve una factura) */}
       {!verFactura && <TicketPrint venta={ventaImpr} />}

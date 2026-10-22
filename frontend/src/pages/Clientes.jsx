@@ -84,7 +84,7 @@ function ModalCliente({ idCliente, onClose }) {
             </div>
 
             {/* Métricas */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="bg-gray-50 rounded-xl p-3 text-center">
                 <p className="text-xs text-gray-400">Pedidos</p>
                 <p className="text-lg font-black text-gray-900">{datos.metricas.NumPedidos}</p>
@@ -189,7 +189,7 @@ export default function Clientes() {
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50">
-      <div className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10 flex items-center justify-between">
+      <div className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-black text-gray-900 flex items-center gap-2">
             <Users size={22} className="text-vida-blue" /> Consumidores Finales

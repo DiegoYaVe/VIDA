@@ -438,7 +438,7 @@ function TabMapa() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><Truck size={18} className="text-green-600" /></div>
           <div><p className="text-xs text-gray-400 font-semibold uppercase">En línea</p><p className="text-xl font-black text-gray-900">{totalRep}</p></div>

@@ -199,7 +199,7 @@ export default function Cupones() {
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50">
-      <div className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10 flex items-center justify-between">
+      <div className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-black text-gray-900 flex items-center gap-2">
             <Ticket size={22} className="text-vida-blue" /> Cupones
