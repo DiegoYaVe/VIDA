@@ -4,6 +4,7 @@ import { validarRecepcion } from '../services/recepcionOrden.service.js';
 import { getPool, sql } from '../db/sqlserver.js';
 import { conIdUnico } from '../db/idUnico.js';
 import { emitirCuenta } from '../services/cuentas.service.js';
+import { ordenSql, limiteSeguro } from '../services/ordenLista.js';
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
@@ -51,7 +52,12 @@ const TRANSICIONES = {
 // GET /api/proveedores
 export async function listarProveedores(request, reply) {
   const { idBranch, idCuenta } = request.user;
-  const { page = 1, limit = 20, search = '', status = '' } = request.query;
+  const { page = 1, search = '', status = '' } = request.query;
+  const limit = limiteSeguro(request.query.limit, 20);
+  const orden = ordenSql(request.query, {
+    Nombre: 'p.Nombre', RIF: 'p.RIF', Contacto: 'p.Contacto', Ciudad: 'p.Ciudad', Status: 'p.Status',
+    totalProductos: 'totalProductos', ordenesActivas: 'ordenesActivas',
+  }, 'p.Nombre', 'p.idProveedor');
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   try {
@@ -83,7 +89,7 @@ export async function listarProveedores(request, reply) {
       FROM VIDA_PROVEEDORES p
       WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
       ${whereExtra}
-      ORDER BY p.Nombre
+      ORDER BY ${orden}
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 
@@ -351,7 +357,12 @@ export async function quitarProductoProveedor(request, reply) {
 // GET /api/ordenes-compra
 export async function listarOrdenes(request, reply) {
   const { idBranch, idCuenta } = request.user;
-  const { page = 1, limit = 20, idProveedor = '', status = '', idPuntoVenta = '' } = request.query;
+  const { page = 1, idProveedor = '', status = '', idPuntoVenta = '' } = request.query;
+  const limit = limiteSeguro(request.query.limit, 20);
+  const orden = ordenSql(request.query, {
+    Folio: 'oc.Folio', Status: 'oc.Status', TotalUSD: 'oc.TotalUSD', FechaEstimada: 'oc.FechaEstimada',
+    FechaAlta: 'oc.FechaAlta', NombreProveedor: 'pr.Nombre', NombreSucursal: 'pv.NomComercial', totalItems: 'totalItems',
+  }, 'oc.FechaAlta DESC', 'oc.idOrden DESC');
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   try {
@@ -387,7 +398,7 @@ export async function listarOrdenes(request, reply) {
         ON pv.idBranch = oc.idBranch AND pv.idCuenta = oc.idCuenta AND pv.idPuntoVenta = oc.idPuntoVenta
       WHERE oc.idBranch = @idBranch AND oc.idCuenta = @idCuenta
       ${whereExtra}
-      ORDER BY oc.FechaAlta DESC
+      ORDER BY ${orden}
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 

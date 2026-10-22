@@ -4,9 +4,10 @@ import { useAuthStore } from '../store/authStore.js';
 import api from '../services/api.js';
 import {
   Plus, Search, Edit2, Power, Package, ShoppingCart,
-  ChevronLeft, ChevronRight, X, Check, AlertCircle,
+  X, Check, AlertCircle,
   Truck, ClipboardList, Eye, ArrowRight, FileText,
 } from 'lucide-react';
+import TablaDatos, { usePreferencia } from '../components/TablaDatos.jsx';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 const ROLES_RED       = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
@@ -719,19 +720,21 @@ function TabProveedores({ puedeEscribir }) {
   const [search, setSearch]     = useState('');
   const [loading, setLoading]   = useState(true);
   const [modal, setModal]       = useState(null); // null | { tipo: 'form'|'productos', proveedor }
+  const [orden, setOrden]       = useState({ col: 'Nombre', dir: 'asc' });
+  const [porPagina, setPorPagina] = usePreferencia('vida_proveedores_filas', 25);
 
   const cargar = useCallback(async (p = page) => {
     setLoading(true);
     try {
-      const r = await api.get('/proveedores', { params: { page: p, limit: 15, search } });
+      const r = await api.get('/proveedores', { params: { page: p, limit: porPagina, search, orden: orden.col, dir: orden.dir } });
       setData(r.data.data);
       setTotal(r.data.total);
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, porPagina, orden]);
 
-  useEffect(() => { cargar(1); setPage(1); }, [search]);
+  useEffect(() => { cargar(1); setPage(1); }, [search, porPagina, orden]);
   useEffect(() => { cargar(page); }, [page]);
 
   async function toggleStatus(p) {
@@ -740,13 +743,11 @@ function TabProveedores({ puedeEscribir }) {
     cargar(page);
   }
 
-  const pages = Math.ceil(total / 15);
-
   return (
     <div>
       {/* Barra superior */}
-      <div className="flex gap-3 mb-5">
-        <div className="relative flex-1">
+      <div className="flex flex-wrap gap-3 mb-5">
+        <div className="relative flex-1 min-w-48">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Buscar por nombre, RIF, contacto..."
@@ -761,83 +762,66 @@ function TabProveedores({ puedeEscribir }) {
       </div>
 
       {/* Tabla */}
-      {loading ? (
-        <p className="text-center text-gray-400 py-12">Cargando...</p>
-      ) : data.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <Truck size={40} className="mx-auto mb-3 opacity-30"/>
-          <p>No hay proveedores registrados</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {data.map(p => (
-            <div key={p.idProveedor}
-              className="flex items-center justify-between bg-white border border-gray-100 rounded-2xl px-5 py-4 hover:shadow-sm transition-shadow">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold text-gray-800 truncate">{p.Nombre}</p>
-                  {p.Status === 'INACTIVO' && (
-                    <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Inactivo</span>
-                  )}
-                </div>
-                <div className="flex gap-3 mt-0.5 text-xs text-gray-400 flex-wrap">
-                  {p.RIF       && <span>RIF: {p.RIF}</span>}
-                  {p.Contacto  && <span>{p.Contacto}</span>}
-                  {p.Email     && <span>{p.Email}</span>}
-                  {p.Ciudad    && <span>{p.Ciudad}</span>}
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 ml-4">
-                <span className="text-xs text-gray-400">{p.totalProductos} prod.</span>
-                {p.ordenesActivas > 0 && (
-                  <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
-                    {p.ordenesActivas} OC activa{p.ordenesActivas > 1 ? 's' : ''}
-                  </span>
+      <TablaDatos
+        etiqueta="Proveedores"
+        columnas={[
+          { id: 'Nombre', titulo: 'Proveedor', ordenable: true, render: p => (
+            <div className="min-w-[12rem]">
+              <p className="font-semibold text-gray-800 flex items-center gap-2">
+                {p.Nombre}
+                {p.Status === 'INACTIVO' && (
+                  <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Inactivo</span>
                 )}
-                {puedeEscribir && (
-                  <>
-                    <button onClick={() => setModal({ tipo: 'productos', proveedor: p })}
-                      title="Productos del proveedor"
-                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-vida-blue">
-                      <Package size={16}/>
-                    </button>
-                    <button onClick={() => setModal({ tipo: 'form', proveedor: p })}
-                      title="Editar"
-                      className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-vida-blue">
-                      <Edit2 size={16}/>
-                    </button>
-                    <button onClick={() => toggleStatus(p)}
-                      title={p.Status === 'ACTIVO' ? 'Desactivar' : 'Activar'}
-                      className={`p-1.5 rounded-lg hover:bg-gray-100 ${
-                        p.Status === 'ACTIVO' ? 'text-green-500' : 'text-gray-300'
-                      }`}>
-                      <Power size={16}/>
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Paginación */}
-      {pages > 1 && (
-        <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
-          <span>{total} proveedor(es)</span>
-          <div className="flex gap-2">
-            <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30">
-              <ChevronLeft size={16}/>
-            </button>
-            <span className="px-2">{page} / {pages}</span>
-            <button disabled={page === pages} onClick={() => setPage(p => p + 1)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30">
-              <ChevronRight size={16}/>
-            </button>
+              </p>
+              {p.Email && <p className="text-xs text-gray-400">{p.Email}</p>}
+            </div>) },
+          { id: 'RIF', titulo: 'RIF', ordenable: true, render: p => <span className="text-gray-600 whitespace-nowrap">{p.RIF || '—'}</span> },
+          { id: 'Contacto', titulo: 'Contacto', ordenable: true, render: p => (
+            <div className="whitespace-nowrap">
+              <p className="text-gray-700">{p.Contacto || '—'}</p>
+              {p.Telefono && <p className="text-xs text-gray-400">{p.Telefono}</p>}
+            </div>) },
+          { id: 'Ciudad', titulo: 'Ciudad', ordenable: true, render: p => <span className="text-gray-600">{p.Ciudad || '—'}</span> },
+          { id: 'totalProductos', titulo: 'Productos', ordenable: true, alinear: 'center', render: p => (
+            <span className="tabular-nums text-gray-700">{p.totalProductos}</span>) },
+          { id: 'ordenesActivas', titulo: 'OC activas', ordenable: true, alinear: 'center', render: p => (
+            p.ordenesActivas > 0
+              ? <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full tabular-nums">{p.ordenesActivas}</span>
+              : <span className="text-gray-300">0</span>) },
+          ...(puedeEscribir ? [{ id: 'acciones', titulo: '', render: p => (
+            <div className="flex items-center gap-1 justify-end">
+              <button onClick={() => setModal({ tipo: 'productos', proveedor: p })}
+                title="Productos del proveedor"
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-vida-blue">
+                <Package size={16}/>
+              </button>
+              <button onClick={() => setModal({ tipo: 'form', proveedor: p })}
+                title="Editar"
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-vida-blue">
+                <Edit2 size={16}/>
+              </button>
+              <button onClick={() => toggleStatus(p)}
+                title={p.Status === 'ACTIVO' ? 'Desactivar' : 'Activar'}
+                className={`p-1.5 rounded-lg hover:bg-gray-100 ${
+                  p.Status === 'ACTIVO' ? 'text-green-500' : 'text-gray-300'
+                }`}>
+                <Power size={16}/>
+              </button>
+            </div>) }] : []),
+        ]}
+        filas={data}
+        clave={p => p.idProveedor}
+        cargando={loading}
+        orden={orden}
+        onOrden={(col, dir) => setOrden({ col, dir })}
+        paginacion={{ page, total, porPagina, onPage: setPage, onPorPagina: setPorPagina }}
+        vacio={
+          <div className="text-center py-12 text-gray-400">
+            <Truck size={40} className="mx-auto mb-3 opacity-30"/>
+            <p>No hay proveedores registrados</p>
           </div>
-        </div>
-      )}
+        }
+      />
 
       {/* Modales */}
       {modal?.tipo === 'form' && (
@@ -868,19 +852,21 @@ function TabOrdenes({ puedeEscribir, matriz }) {
   const [loading, setLoading]   = useState(true);
   const [ordenDetalle, setOrdenDetalle] = useState(null);
   const [modal, setModal]       = useState(null); // null | 'crear' | 'estado'
+  const [orden, setOrden]       = useState({ col: 'FechaAlta', dir: 'desc' });
+  const [porPagina, setPorPagina] = usePreferencia('vida_ordenes_filas', 25);
 
   const cargar = useCallback(async (p = 1) => {
     setLoading(true);
     try {
-      const r = await api.get('/ordenes-compra', { params: { page: p, limit: 15, status: filtStatus } });
+      const r = await api.get('/ordenes-compra', { params: { page: p, limit: porPagina, status: filtStatus, orden: orden.col, dir: orden.dir } });
       setData(r.data.data);
       setTotal(r.data.total);
     } finally {
       setLoading(false);
     }
-  }, [filtStatus]);
+  }, [filtStatus, porPagina, orden]);
 
-  useEffect(() => { cargar(1); setPage(1); }, [filtStatus]);
+  useEffect(() => { cargar(1); setPage(1); }, [filtStatus, porPagina, orden]);
   useEffect(() => { cargar(page); }, [page]);
 
   async function verDetalle(orden) {
@@ -889,8 +875,6 @@ function TabOrdenes({ puedeEscribir, matriz }) {
       setOrdenDetalle(r.data);
     } catch {}
   }
-
-  const pages = Math.ceil(total / 15);
 
   return (
     <div>
@@ -916,59 +900,37 @@ function TabOrdenes({ puedeEscribir, matriz }) {
         )}
       </div>
 
-      {/* Lista */}
-      {loading ? (
-        <p className="text-center text-gray-400 py-12">Cargando...</p>
-      ) : data.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <ClipboardList size={40} className="mx-auto mb-3 opacity-30"/>
-          <p>No hay órdenes de compra</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {data.map(o => (
-            <div key={o.idOrden}
-              className="flex items-center justify-between bg-white border border-gray-100 rounded-2xl px-5 py-4 hover:shadow-sm cursor-pointer transition-shadow"
-              onClick={() => verDetalle(o)}>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="font-semibold text-gray-800">
-                    {o.Folio ? `#${o.Folio}` : `OC-${o.idOrden}`}
-                  </p>
-                  <StatusBadge status={o.Status}/>
-                </div>
-                <div className="flex gap-3 mt-0.5 text-xs text-gray-400">
-                  <span>{o.NombreProveedor}</span>
-                  {o.NombreSucursal && <span>· {o.NombreSucursal}</span>}
-                  <span>· {o.totalItems} ítem(s)</span>
-                  {o.FechaEstimada && <span>· Entrega: {new Date(o.FechaEstimada).toLocaleDateString()}</span>}
-                </div>
-              </div>
-              <div className="text-right shrink-0 ml-4">
-                <p className="font-bold text-vida-blue">${Number(o.TotalUSD).toFixed(2)}</p>
-                <p className="text-xs text-gray-400">{new Date(o.FechaAlta).toLocaleDateString()}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {pages > 1 && (
-        <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
-          <span>{total} orden(es)</span>
-          <div className="flex gap-2">
-            <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30">
-              <ChevronLeft size={16}/>
-            </button>
-            <span className="px-2">{page} / {pages}</span>
-            <button disabled={page === pages} onClick={() => setPage(p => p + 1)}
-              className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-30">
-              <ChevronRight size={16}/>
-            </button>
+      {/* Tabla */}
+      <TablaDatos
+        etiqueta="Órdenes de compra"
+        columnas={[
+          { id: 'Folio', titulo: 'Folio', ordenable: true, render: o => (
+            <span className="font-semibold text-gray-800 whitespace-nowrap">{o.Folio ? `#${o.Folio}` : `OC-${o.idOrden}`}</span>) },
+          { id: 'NombreProveedor', titulo: 'Proveedor', ordenable: true, render: o => <span className="text-gray-700">{o.NombreProveedor}</span> },
+          { id: 'NombreSucursal', titulo: 'Recibe', ordenable: true, render: o => <span className="text-gray-600 whitespace-nowrap">{o.NombreSucursal || '—'}</span> },
+          { id: 'totalItems', titulo: 'Ítems', ordenable: true, alinear: 'center', render: o => <span className="tabular-nums">{o.totalItems}</span> },
+          { id: 'Status', titulo: 'Estado', ordenable: true, render: o => <StatusBadge status={o.Status}/> },
+          { id: 'FechaEstimada', titulo: 'Entrega', ordenable: true, render: o => (
+            <span className="text-xs text-gray-500 whitespace-nowrap">{o.FechaEstimada ? new Date(o.FechaEstimada).toLocaleDateString() : '—'}</span>) },
+          { id: 'FechaAlta', titulo: 'Creada', ordenable: true, render: o => (
+            <span className="text-xs text-gray-500 whitespace-nowrap">{new Date(o.FechaAlta).toLocaleDateString()}</span>) },
+          { id: 'TotalUSD', titulo: 'Total', ordenable: true, alinear: 'right', render: o => (
+            <span className="font-bold text-vida-blue tabular-nums">${Number(o.TotalUSD).toFixed(2)}</span>) },
+        ]}
+        filas={data}
+        clave={o => o.idOrden}
+        onFila={verDetalle}
+        cargando={loading}
+        orden={orden}
+        onOrden={(col, dir) => setOrden({ col, dir })}
+        paginacion={{ page, total, porPagina, onPage: setPage, onPorPagina: setPorPagina }}
+        vacio={
+          <div className="text-center py-12 text-gray-400">
+            <ClipboardList size={40} className="mx-auto mb-3 opacity-30"/>
+            <p>No hay órdenes de compra</p>
           </div>
-        </div>
-      )}
+        }
+      />
 
       {/* Modales */}
       {modal === 'crear' && (

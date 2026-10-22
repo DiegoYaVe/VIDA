@@ -9,6 +9,7 @@ import { fechaCaracas } from '../services/fechas.service.js';
 import { tiendaEnAlcance, filtroTiendasRed, esRed } from '../services/alcance.service.js';
 import { turnoDeLaVenta } from '../services/turnoVenta.service.js';
 import { esRechazoPermanente, guardarEnRevision, obtenerEnRevision, marcarRegistrada, marcarAnulada, anotarFallo } from '../services/ventasRevision.service.js';
+import { ordenSql, limiteSeguro } from '../services/ordenLista.js';
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
@@ -50,7 +51,13 @@ const TRANSICIONES = {
 // ══════════════════════════════════════════════════════════════════════════
 export async function listarPedidos(request, reply) {
   const { idBranch, idCuenta, TipoUsuario, idPuntoVenta: pvUsuario } = request.user;
-  const { page = 1, limit = 20, status = '', canal = '', requiereRevision = '' } = request.query;
+  const { page = 1, status = '', canal = '', requiereRevision = '' } = request.query;
+  const limit = limiteSeguro(request.query.limit, 20);
+  const orden = ordenSql(request.query, {
+    idPedido: 'p.idPedido', FechaAlta: 'p.FechaAlta', TotalUSD: 'p.TotalUSD', Status: 'p.Status',
+    StatusPago: 'p.StatusPago', Canal: 'p.Canal', NombreCliente: 'cl.Nombre',
+    NombreRepartidor: 'rep.Nombre', NombreSucursal: 'pv.NomComercial',
+  }, 'p.FechaAlta DESC', 'p.idPedido DESC');
   // Roles de tienda quedan forzados a su punto de venta; los de red filtran por query.
   const esRed = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'].includes(TipoUsuario);
   const idPuntoVenta = esRed ? (request.query.idPuntoVenta || '') : pvUsuario;
@@ -100,7 +107,7 @@ export async function listarPedidos(request, reply) {
         ON rep.idBranch = p.idBranch AND rep.idCuenta = p.idCuenta AND rep.idRepartidor = p.idRepartidor
       WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
       ${whereExtra}
-      ORDER BY p.FechaAlta DESC
+      ORDER BY ${orden}
       OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
     `);
 

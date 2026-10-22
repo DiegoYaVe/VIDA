@@ -6,6 +6,7 @@ import { getPool, sql } from '../db/sqlserver.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 import { ALICUOTAS } from '../domain/fiscal.mjs';
 import { promocionesVigentes, mejorPromoUnitaria } from './promociones.controller.js';
+import { ordenSql, limiteSeguro } from '../services/ordenLista.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -147,7 +148,12 @@ export async function toggleCategoria(request, reply) {
 // GET /api/inventario/productos
 export async function listarProductos(request, reply) {
   const { idBranch, idCuenta, TipoUsuario, idPuntoVenta: pvUsuario } = request.user;
-  const { page = 1, limit = 20, search = '', idCategoria = '', status = 'ACTIVO', idPuntoVenta = '' } = request.query;
+  const { page = 1, search = '', idCategoria = '', status = 'ACTIVO', idPuntoVenta = '' } = request.query;
+  const limit = limiteSeguro(request.query.limit, 20);
+  const orden = ordenSql(request.query, {
+    Nombre: 'p.Nombre', SKU: 'p.SKU', NombreCategoria: 'c.Nombre', UnidadMedida: 'p.UnidadMedida',
+    PrecioUSD: 'p.PrecioUSD', Status: 'p.Status', StockDisponible: 'StockDisponible',
+  }, 'p.Nombre', 'p.idProducto');
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   // Cajeros y cashiers solo ven productos con stock en su punto de venta
@@ -193,7 +199,7 @@ export async function listarProductos(request, reply) {
         WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
           AND s.Cantidad > 0
         ${whereExtra}
-        ORDER BY p.Nombre
+        ORDER BY ${orden}
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
       `;
     } else {
@@ -227,7 +233,7 @@ export async function listarProductos(request, reply) {
           ON c.idBranch = p.idBranch AND c.idCuenta = p.idCuenta AND c.idCategoria = p.idCategoria
         WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
         ${whereExtra}
-        ORDER BY p.Nombre
+        ORDER BY ${orden}
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
       `;
     }

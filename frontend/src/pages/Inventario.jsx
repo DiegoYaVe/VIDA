@@ -5,10 +5,11 @@ import api, { API_ORIGIN } from '../services/api.js';
 import { useToast } from '../components/Toast.jsx';
 import {
   Plus, Search, Package, Tag, ArrowDownCircle, ArrowUpCircle,
-  SlidersHorizontal, ChevronLeft, ChevronRight, X, AlertTriangle,
+  SlidersHorizontal, X, AlertTriangle,
   Pencil, PowerOff, CheckCircle, LayoutGrid,
 } from 'lucide-react';
 import * as Icons from 'lucide-react';
+import TablaDatos, { usePreferencia, ordenarLocal } from '../components/TablaDatos.jsx';
 
 function DynamicIcon({ name, size = 20 }) {
   const Icon = Icons[name] || Tag;
@@ -676,6 +677,8 @@ function TabProductos({ puedeEscribir }) {
   const [catFiltro,   setCatFiltro]   = useState('');
   const [loading,     setLoading]     = useState(true);
   const [modal,       setModal]       = useState(null);
+  const [orden,       setOrden]       = useState({ col: 'Nombre', dir: 'asc' });
+  const [porPagina,   setPorPagina]   = usePreferencia('vida_inventario_filas', 25);
 
   const cargarCats = useCallback(async () => {
     const r = await api.get('/inventario/categorias');
@@ -685,7 +688,7 @@ function TabProductos({ puedeEscribir }) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, limit: 15, search, idCategoria: catFiltro };
+      const params = { page, limit: porPagina, search, idCategoria: catFiltro, orden: orden.col, dir: orden.dir };
       const r = await api.get('/inventario/productos', { params });
       setProductos(r.data.data);
       setTotal(r.data.total);
@@ -693,10 +696,10 @@ function TabProductos({ puedeEscribir }) {
     } finally {
       setLoading(false);
     }
-  }, [page, search, catFiltro]);
+  }, [page, search, catFiltro, porPagina, orden]);
 
   useEffect(() => { cargarCats(); }, [cargarCats]);
-  useEffect(() => { setPage(1); }, [search, catFiltro]);
+  useEffect(() => { setPage(1); }, [search, catFiltro, porPagina, orden]);
   useEffect(() => { cargar(); }, [cargar]);
 
   const toggleStatus = async (prod) => {
@@ -733,101 +736,61 @@ function TabProductos({ puedeEscribir }) {
         )}
       </div>
 
-      <p className="text-xs text-gray-400 mb-3">{total} productos encontrados</p>
-
-      {loading ? (
-        <div className="text-center py-12 text-gray-400">Cargando...</div>
-      ) : productos.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <Package size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="font-bold">Sin productos</p>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto shadow-sm">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase">Producto</th>
-                <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase">SKU</th>
-                <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase">Categoría</th>
-                <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase">Unidad</th>
-                <th className="text-right px-4 py-3 text-xs font-bold text-gray-500 uppercase">Precio USD</th>
-                <th className="text-center px-4 py-3 text-xs font-bold text-gray-500 uppercase">Status</th>
-                {puedeEscribir && <th className="px-4 py-3"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {productos.map(p => (
-                <tr key={p.idProducto} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      {p.ImagenProducto ? (
-                        <img src={`${API_ORIGIN}${p.ImagenProducto}`} alt=""
-                          className="w-10 h-10 rounded-lg object-cover shrink-0 border border-gray-100" />
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-300 shrink-0 text-lg">📷</div>
-                      )}
-                      <div>
-                        <p className="font-bold text-gray-800 flex items-center gap-1.5">
-                          {p.Nombre}
-                          {p.EsProductoPlus ? <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-amber-400 text-white">PLUS</span> : null}
-                        </p>
-                        {p.Descripcion && <p className="text-xs text-gray-400 truncate max-w-48">{p.Descripcion}</p>}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 font-mono text-xs">{p.SKU || '—'}</td>
-                  <td className="px-4 py-3">
-                    <Badge color="blue">{p.NombreCategoria || '—'}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">{p.UnidadMedida}</td>
-                  <td className="px-4 py-3 text-right font-bold text-gray-800">
-                    ${parseFloat(p.PrecioUSD).toFixed(2)}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <Badge color={p.Status === 'ACTIVO' ? 'green' : 'red'}>
-                      {p.Status}
-                    </Badge>
-                  </td>
-                  {puedeEscribir && (
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1 justify-end">
-                        <button onClick={() => setModal({ data: p })}
-                          className="p-1.5 text-gray-400 hover:text-vida-blue hover:bg-blue-50 rounded-lg transition">
-                          <Pencil size={14} />
-                        </button>
-                        <button onClick={() => toggleStatus(p)}
-                          className={`p-1.5 rounded-lg transition ${p.Status === 'ACTIVO'
-                            ? 'text-gray-400 hover:text-red-500 hover:bg-red-50'
-                            : 'text-green-500 hover:bg-green-50'}`}>
-                          {p.Status === 'ACTIVO' ? <PowerOff size={14} /> : <CheckCircle size={14} />}
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {/* Paginación */}
-          {pages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-              <p className="text-xs text-gray-400">Página {page} de {pages}</p>
-              <div className="flex gap-2">
-                <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
-                  className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 transition">
-                  <ChevronLeft size={16} />
-                </button>
-                <button disabled={page === pages} onClick={() => setPage(p => p + 1)}
-                  className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 transition">
-                  <ChevronRight size={16} />
-                </button>
+      <TablaDatos
+        etiqueta="Productos"
+        columnas={[
+          { id: 'Nombre', titulo: 'Producto', ordenable: true, render: p => (
+            <div className="flex items-center gap-3 min-w-[14rem]">
+              {p.ImagenProducto ? (
+                <img src={`${API_ORIGIN}${p.ImagenProducto}`} alt=""
+                  className="w-10 h-10 rounded-lg object-cover shrink-0 border border-gray-100" />
+              ) : (
+                <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-300 shrink-0 text-lg">📷</div>
+              )}
+              <div className="min-w-0">
+                <p className="font-bold text-gray-800 flex items-center gap-1.5">
+                  {p.Nombre}
+                  {p.EsProductoPlus ? <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-amber-400 text-white">PLUS</span> : null}
+                </p>
+                {p.Descripcion && <p className="text-xs text-gray-400 truncate max-w-48">{p.Descripcion}</p>}
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            </div>) },
+          { id: 'SKU', titulo: 'SKU', ordenable: true, render: p => <span className="text-gray-500 font-mono text-xs">{p.SKU || '—'}</span> },
+          { id: 'NombreCategoria', titulo: 'Categoría', ordenable: true, render: p => <Badge color="blue">{p.NombreCategoria || '—'}</Badge> },
+          { id: 'UnidadMedida', titulo: 'Unidad', ordenable: true, render: p => <span className="text-gray-500">{p.UnidadMedida}</span> },
+          { id: 'StockDisponible', titulo: 'Stock', ordenable: true, alinear: 'right', render: p => (
+            <span className="tabular-nums text-gray-700">{parseFloat(p.StockDisponible ?? 0).toLocaleString()}</span>) },
+          { id: 'PrecioUSD', titulo: 'Precio USD', ordenable: true, alinear: 'right', render: p => (
+            <span className="font-bold text-gray-800 tabular-nums">${parseFloat(p.PrecioUSD).toFixed(2)}</span>) },
+          { id: 'Status', titulo: 'Status', ordenable: true, alinear: 'center', render: p => (
+            <Badge color={p.Status === 'ACTIVO' ? 'green' : 'red'}>{p.Status}</Badge>) },
+          ...(puedeEscribir ? [{ id: 'acciones', titulo: '', render: p => (
+            <div className="flex gap-1 justify-end">
+              <button onClick={() => setModal({ data: p })} title="Editar"
+                className="p-1.5 text-gray-400 hover:text-vida-blue hover:bg-blue-50 rounded-lg transition">
+                <Pencil size={14} />
+              </button>
+              <button onClick={() => toggleStatus(p)} title={p.Status === 'ACTIVO' ? 'Desactivar' : 'Activar'}
+                className={`p-1.5 rounded-lg transition ${p.Status === 'ACTIVO'
+                  ? 'text-gray-400 hover:text-red-500 hover:bg-red-50'
+                  : 'text-green-500 hover:bg-green-50'}`}>
+                {p.Status === 'ACTIVO' ? <PowerOff size={14} /> : <CheckCircle size={14} />}
+              </button>
+            </div>) }] : []),
+        ]}
+        filas={productos}
+        clave={p => p.idProducto}
+        cargando={loading}
+        orden={orden}
+        onOrden={(col, dir) => setOrden({ col, dir })}
+        paginacion={{ page, total, porPagina, onPage: setPage, onPorPagina: setPorPagina }}
+        vacio={
+          <div className="text-center py-12 text-gray-400">
+            <Package size={40} className="mx-auto mb-3 opacity-30" />
+            <p className="font-bold">Sin productos</p>
+          </div>
+        }
+      />
 
       {modal !== null && (
         <ModalProducto
@@ -852,6 +815,9 @@ function TabStock({ puedeEscribir, usuario }) {
   const [search,        setSearch]        = useState('');
   const [loading,       setLoading]       = useState(false);
   const [modal,         setModal]         = useState(null); // { producto }
+  const [orden,         setOrden]         = useState({ col: 'Nombre', dir: 'asc' });
+  const [page,          setPage]          = useState(1);
+  const [porPagina,     setPorPagina]     = usePreferencia('vida_stock_filas', 25);
 
   // Cargar puntos de venta
   useEffect(() => {
@@ -884,6 +850,9 @@ function TabStock({ puedeEscribir, usuario }) {
   );
 
   const stockBajoCount = stock.filter(p => p.StockBajo).length;
+  const stockOrdenado  = ordenarLocal(stockFiltrado, orden);
+  const stockPagina    = stockOrdenado.slice((page - 1) * porPagina, page * porPagina);
+  useEffect(() => { setPage(1); }, [search, soloStockBajo, puntoVenta, porPagina, orden]);
 
   return (
     <div>
@@ -916,76 +885,59 @@ function TabStock({ puedeEscribir, usuario }) {
           <SlidersHorizontal size={40} className="mx-auto mb-3 opacity-30" />
           <p className="font-bold">Selecciona una tienda</p>
         </div>
-      ) : loading ? (
-        <div className="text-center py-12 text-gray-400">Cargando...</div>
-      ) : stockFiltrado.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <Package size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="font-bold">Sin productos</p>
-        </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto shadow-sm">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase">Producto</th>
-                <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase">Categoría</th>
-                <th className="text-center px-4 py-3 text-xs font-bold text-gray-500 uppercase">Stock</th>
-                <th className="text-center px-4 py-3 text-xs font-bold text-gray-500 uppercase">Mínimo</th>
-                <th className="text-right px-4 py-3 text-xs font-bold text-gray-500 uppercase">Precio USD</th>
-                {puedeEscribir && <th className="px-4 py-3"></th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {stockFiltrado.map(p => (
-                <tr key={p.idProducto} className={`hover:bg-gray-50 transition-colors ${p.StockBajo ? 'bg-yellow-50/40' : ''}`}>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      {p.StockBajo && <AlertTriangle size={14} className="text-yellow-500 flex-shrink-0" />}
-                      <div>
-                        <p className="font-bold text-gray-800">{p.Nombre}</p>
-                        {p.SKU && <p className="text-xs text-gray-400 font-mono">{p.SKU}</p>}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge color="blue">{p.NombreCategoria || '—'}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`font-black text-base ${p.StockBajo ? 'text-yellow-600' : 'text-gray-800'}`}>
-                      {parseFloat(p.Cantidad).toLocaleString()}
-                    </span>
-                    <span className="text-xs text-gray-400 ml-1">{p.UnidadMedida}</span>
-                  </td>
-                  <td className="px-4 py-3 text-center text-xs text-gray-400">
-                    {parseFloat(p.StockMinimo).toLocaleString()} {p.UnidadMedida}
-                  </td>
-                  <td className="px-4 py-3 text-right font-bold text-gray-800">
-                    ${parseFloat(p.PrecioUSD).toFixed(2)}
-                  </td>
-                  {puedeEscribir && (
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1 justify-end">
-                        <button onClick={() => setModal({ producto: p, tipo: 'ENTRADA' })}
-                          className="p-1.5 text-green-500 hover:bg-green-50 rounded-lg transition" title="Entrada">
-                          <ArrowDownCircle size={16} />
-                        </button>
-                        <button onClick={() => setModal({ producto: p, tipo: 'SALIDA' })}
-                          className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition" title="Salida">
-                          <ArrowUpCircle size={16} />
-                        </button>
-                        <button onClick={() => setModal({ producto: p, tipo: 'AJUSTE' })}
-                          className="p-1.5 text-blue-400 hover:bg-blue-50 rounded-lg transition" title="Ajuste">
-                          <SlidersHorizontal size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <TablaDatos
+          etiqueta="Stock por tienda"
+          columnas={[
+            { id: 'Nombre', titulo: 'Producto', ordenable: true, render: p => (
+              <div className="flex items-center gap-2 min-w-[12rem]">
+                {p.StockBajo && <AlertTriangle size={14} className="text-yellow-500 flex-shrink-0" aria-label="Stock bajo" />}
+                <div>
+                  <p className="font-bold text-gray-800">{p.Nombre}</p>
+                  {p.SKU && <p className="text-xs text-gray-400 font-mono">{p.SKU}</p>}
+                </div>
+              </div>) },
+            { id: 'NombreCategoria', titulo: 'Categoría', ordenable: true, render: p => <Badge color="blue">{p.NombreCategoria || '—'}</Badge> },
+            { id: 'Cantidad', titulo: 'Stock', ordenable: true, alinear: 'center', render: p => (
+              <span className="whitespace-nowrap">
+                <span className={`font-black text-base ${p.StockBajo ? 'text-yellow-600' : 'text-gray-800'}`}>
+                  {parseFloat(p.Cantidad).toLocaleString()}
+                </span>
+                <span className="text-xs text-gray-400 ml-1">{p.UnidadMedida}</span>
+              </span>) },
+            { id: 'StockMinimo', titulo: 'Mínimo', ordenable: true, alinear: 'center', render: p => (
+              <span className="text-xs text-gray-400 whitespace-nowrap">{parseFloat(p.StockMinimo).toLocaleString()} {p.UnidadMedida}</span>) },
+            { id: 'PrecioUSD', titulo: 'Precio USD', ordenable: true, alinear: 'right', render: p => (
+              <span className="font-bold text-gray-800 tabular-nums">${parseFloat(p.PrecioUSD).toFixed(2)}</span>) },
+            ...(puedeEscribir ? [{ id: 'acciones', titulo: '', render: p => (
+              <div className="flex gap-1 justify-end">
+                <button onClick={() => setModal({ producto: p, tipo: 'ENTRADA' })}
+                  className="p-1.5 text-green-500 hover:bg-green-50 rounded-lg transition" title="Entrada">
+                  <ArrowDownCircle size={16} />
+                </button>
+                <button onClick={() => setModal({ producto: p, tipo: 'SALIDA' })}
+                  className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition" title="Salida">
+                  <ArrowUpCircle size={16} />
+                </button>
+                <button onClick={() => setModal({ producto: p, tipo: 'AJUSTE' })}
+                  className="p-1.5 text-blue-400 hover:bg-blue-50 rounded-lg transition" title="Ajuste">
+                  <SlidersHorizontal size={16} />
+                </button>
+              </div>) }] : []),
+          ]}
+          filas={stockPagina}
+          clave={p => p.idProducto}
+          cargando={loading}
+          orden={orden}
+          onOrden={(col, dir) => setOrden({ col, dir })}
+          paginacion={{ page, total: stockOrdenado.length, porPagina, onPage: setPage, onPorPagina: setPorPagina }}
+          vacio={
+            <div className="text-center py-12 text-gray-400">
+              <Package size={40} className="mx-auto mb-3 opacity-30" />
+              <p className="font-bold">Sin productos</p>
+            </div>
+          }
+        />
       )}
 
       {modal && (

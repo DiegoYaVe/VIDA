@@ -6,7 +6,7 @@ import { useWebSocket } from '../hooks/useWebSocket.js';
 import {
   ShoppingBag, Clock, CheckCircle, Truck, XCircle, ChevronRight,
   User, Phone, RefreshCw, Check, X, ArrowRight, Eye, AlertCircle,
-  Wifi, WifiOff, AlertTriangle,
+  Wifi, WifiOff, AlertTriangle, LayoutGrid, Table2,
 } from 'lucide-react';
 import { hoyCaracas } from '../utils/fechas.js';
 import { ModalFacturar, VistaFactura, puedeFacturar } from '../components/Factura.jsx';
@@ -14,6 +14,7 @@ import { numeroDoc } from '../utils/libroVentas.mjs';
 import { ModalDevolucion, ROLES_DEVUELVEN } from '../components/Devolucion.jsx';
 import { BotonVentasRevision } from '../components/VentasOfflineRevision.jsx';
 import ResumenMoneda from '../components/ResumenMoneda.jsx';
+import TablaDatos, { usePreferencia } from '../components/TablaDatos.jsx';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
@@ -559,14 +560,21 @@ export default function Pedidos() {
   const [wsVivo,        setWsVivo]        = useState(false);
   const intervalRef = useRef(null);
   const cargarRef   = useRef(null); // referencia estable para usar dentro del WS callback
+  // Vista de tabla: orden y filas por página los resuelve el servidor
+  const [vista, setVista]         = usePreferencia('vida_pedidos_vista', 'tarjetas');
+  const [porPagina, setPorPagina] = usePreferencia('vida_pedidos_filas', 25);
+  const [orden, setOrden]         = useState({ col: 'FechaAlta', dir: 'desc' });
+  const enTabla = vista === 'tabla';
+  const limite  = enTabla ? porPagina : 20;
 
   const cargar = useCallback(async (p = page) => {
     setLoading(true);
     try {
       const r = await api.get('/pedidos', {
         params: {
-          page: p, limit: 20, status: filtStatus, canal: filtCanal,
+          page: p, limit: limite, status: filtStatus, canal: filtCanal,
           requiereRevision: filtRevision ? 1 : '',
+          ...(enTabla ? { orden: orden.col, dir: orden.dir } : {}),
         },
       });
       setPedidos(r.data.data);
@@ -574,7 +582,7 @@ export default function Pedidos() {
     } finally {
       setLoading(false);
     }
-  }, [page, filtStatus, filtCanal, filtRevision]);
+  }, [page, filtStatus, filtCanal, filtRevision, limite, enTabla, orden]);
 
   // Contador de ventas por revisar (para el badge del filtro)
   const cargarRevisionCount = useCallback(async () => {
@@ -584,7 +592,7 @@ export default function Pedidos() {
     } catch { /* sin permiso o sin red — el badge simplemente no se muestra */ }
   }, []);
 
-  useEffect(() => { cargar(1); setPage(1); }, [filtStatus, filtCanal, filtRevision]);
+  useEffect(() => { cargar(1); setPage(1); }, [filtStatus, filtCanal, filtRevision, vista, porPagina, orden]);
   useEffect(() => { cargar(page); }, [page]);
   useEffect(() => { cargarRevisionCount(); }, [cargarRevisionCount]);
 
@@ -637,9 +645,41 @@ export default function Pedidos() {
     } catch { /* recargar mostrará el estado real */ }
   }
 
-  const pages = Math.ceil(total / 20);
+  const pages = Math.ceil(total / limite);
   const activos = pedidos.filter(p => !['ENTREGADO','CANCELADO'].includes(p.Status));
   const terminados = pedidos.filter(p => ['ENTREGADO','CANCELADO'].includes(p.Status));
+
+  const columnasTabla = [
+    { id: 'idPedido', titulo: 'Pedido', ordenable: true, render: p => (
+      <span className="font-bold text-gray-800 inline-flex items-center gap-1.5 whitespace-nowrap">
+        #{p.idPedido}
+        {!!p.RequiereRevision && <AlertTriangle size={13} className="text-amber-500" aria-label="Requiere revisión de stock"/>}
+      </span>) },
+    { id: 'Canal', titulo: 'Canal', ordenable: true, render: p => (
+      <span className="text-xs text-gray-500 whitespace-nowrap">{p.Canal === 'APP' ? '📱 App' : '🖥️ POS'}</span>) },
+    { id: 'Status', titulo: 'Estado', ordenable: true, render: p => <StatusBadge status={p.Status}/> },
+    { id: 'StatusPago', titulo: 'Pago', ordenable: true, render: p => (
+      <div className="whitespace-nowrap">
+        <span className={`text-xs font-semibold ${STATUS_PAGO_CFG[p.StatusPago]?.color || 'text-gray-500'}`}>
+          {STATUS_PAGO_CFG[p.StatusPago]?.label || p.StatusPago || '—'}
+        </span>
+        {p.MetodoPago && <p className="text-[11px] text-gray-400">{METODO_PAGO_LABEL[p.MetodoPago] || p.MetodoPago}</p>}
+      </div>) },
+    { id: 'NombreCliente', titulo: 'Cliente', ordenable: true, render: p => <span className="text-gray-700">{p.NombreCliente || '—'}</span> },
+    { id: 'NombreRepartidor', titulo: 'Repartidor', ordenable: true, render: p => <span className="text-gray-600">{p.NombreRepartidor || '—'}</span> },
+    { id: 'NombreSucursal', titulo: 'Tienda', ordenable: true, render: p => <span className="text-gray-600 whitespace-nowrap">{p.NombreSucursal || '—'}</span> },
+    { id: 'TotalUSD', titulo: 'Total', ordenable: true, alinear: 'right', render: p => (
+      <span className="font-bold text-vida-blue tabular-nums">${Number(p.TotalUSD).toFixed(2)}</span>) },
+    { id: 'FechaAlta', titulo: 'Fecha', ordenable: true, render: p => (
+      <span className="text-xs text-gray-500 whitespace-nowrap tabular-nums">
+        {new Date(p.FechaAlta).toLocaleString([], { day: '2-digit', month: '2-digit', hour: 'numeric', minute: '2-digit' })}
+      </span>) },
+    { id: 'entrega', titulo: 'Entrega', render: p => (
+      p.Status === 'NUEVO' && p.FechaExpiracion ? <Countdown fechaExpiracion={p.FechaExpiracion}/>
+      : p.ETAEntrega && p.MinutosRestantes != null && p.MinutosRestantes >= 0 && !['ENTREGADO', 'CANCELADO'].includes(p.Status)
+        ? <span className="text-xs font-semibold text-vida-blue whitespace-nowrap">~{p.MinutosRestantes} min</span>
+        : <span className="text-gray-300">—</span>) },
+  ];
 
   return (
     <div className="w-full p-6 max-w-6xl mx-auto">
@@ -660,6 +700,15 @@ export default function Pedidos() {
               ? <><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"/> En vivo</>
               : <><WifiOff size={12}/> Reconectando...</>
             }
+          </div>
+          <div className="flex bg-gray-100 p-1 rounded-xl" role="group" aria-label="Vista">
+            {[['tarjetas', LayoutGrid, 'Tarjetas'], ['tabla', Table2, 'Tabla']].map(([v, Ic, txt]) => (
+              <button key={v} onClick={() => setVista(v)} aria-pressed={vista === v}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  vista === v ? 'bg-white shadow text-vida-blue' : 'text-gray-500 hover:text-gray-700'}`}>
+                <Ic size={14}/> {txt}
+              </button>
+            ))}
           </div>
           <button onClick={() => cargar(page)}
             className="flex items-center gap-2 text-sm text-gray-500 hover:text-vida-blue border border-gray-200 px-3 py-2 rounded-xl">
@@ -743,7 +792,25 @@ export default function Pedidos() {
         )}
       </div>
 
-      {loading ? (
+      {enTabla ? (
+        <TablaDatos
+          etiqueta="Pedidos"
+          columnas={columnasTabla}
+          filas={pedidos}
+          clave={p => p.idPedido}
+          onFila={p => setPedidoAbierto(p.idPedido)}
+          cargando={loading}
+          orden={orden}
+          onOrden={(col, dir) => setOrden({ col, dir })}
+          paginacion={{ page, total, porPagina, onPage: setPage, onPorPagina: setPorPagina }}
+          vacio={
+            <div className="text-center py-12 text-gray-400">
+              <ShoppingBag size={40} className="mx-auto mb-3 opacity-20"/>
+              <p className="font-medium">No hay pedidos con estos filtros</p>
+            </div>
+          }
+        />
+      ) : loading ? (
         <p className="text-center text-gray-400 py-12">Cargando pedidos...</p>
       ) : pedidos.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
@@ -849,8 +916,8 @@ export default function Pedidos() {
         </div>
       )}
 
-      {/* Paginación */}
-      {pages > 1 && (
+      {/* Paginación (la vista de tabla trae la suya) */}
+      {!enTabla && pages > 1 && (
         <div className="flex items-center justify-between mt-6 text-sm text-gray-500">
           <span>{total} pedido(s)</span>
           <div className="flex gap-2">
