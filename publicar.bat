@@ -159,9 +159,12 @@ if not defined REMOTO_BACKEND (
 )
 call :credenciales BACKEND
 rem node_modules, .env y uploads NO viajan: el .env es el de produccion y
-rem uploads guarda las imagenes subidas, que no estan en git.
-set "MASCARA=|node_modules/;.env;.env.*;uploads/;.git/;.expo/;tests/;*.log;logs/;iisnode/"
-if defined MODULOS set "MASCARA=|.env;.env.*;uploads/;.git/;.expo/;tests/;*.log;logs/;iisnode/"
+rem uploads guarda las imagenes subidas, que no estan en git. Tampoco los
+rem .rar/.zip que se usan para subir node_modules a mano, ni credenciales
+rem sueltas como firebase-service-account.json.
+set "COMUN=.env;.env.*;uploads/;.git/;.expo/;tests/;*.log;logs/;iisnode/;*.rar;*.zip;*.7z;firebase-service-account.json"
+set "MASCARA=|node_modules/;!COMUN!"
+if defined MODULOS set "MASCARA=|!COMUN!"
 call :sincronizar "%RAIZ%backend" "!REMOTO_BACKEND!" "!MASCARA!" ""
 if errorlevel 1 (
   set "FALLO=1"
