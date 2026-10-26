@@ -49,6 +49,18 @@ Stack prod: **SmarterASP.NET / IIS + iisnode** (backend Node), **SQL Server** re
 
 ## 2. Backend (Node + Fastify sobre IIS/iisnode)
 
+> **Atajo: `publicar.bat`** (raiz del repo) sube backend y/o panel por FTP con WinSCP, solo los archivos que cambiaron. Requiere [WinSCP](https://winscp.net) instalado y un `publicar.env` propio (copia de `publicar.env.example`, ignorado por git, lleva la clave del FTP).
+>
+> ```
+> publicar.bat backend            solo el backend
+> publicar.bat panel --build      compila el panel y lo sube
+> publicar.bat todo               los dos
+> publicar.bat todo --simular     lista que subiria, sin tocar el servidor
+> ```
+>
+> Nunca sube `node_modules/`, `.env` ni `uploads/` (usa `--modulos` el dia que cambien dependencias). **No reinicia IIS**: tras subir el backend hay que reciclar el sitio/pool desde el panel de SmarterASP, o iisnode sigue sirviendo el codigo viejo. Antes del primer uso confirma `REMOTO_BACKEND` / `REMOTO_PANEL` con un cliente FTP: si apuntan mal, los archivos acaban en otra carpeta. Las migraciones de BD y el reinicio del pool siguen siendo manuales; el resto del checklist de esta seccion no cambia.
+
+
 - [ ] `cd backend && npm install` (en el entorno de despliegue, con las mismas versiones de Node 20 LTS+).
 - [ ] Preparar el `.env` de producción (NO viaja en git). Mínimo:
   ```env
