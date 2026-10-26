@@ -1341,6 +1341,7 @@ export async function listarRepartidores(request, reply) {
 
     const r = await req.query(`
       SELECT idRepartidor, Nombre, Email, Telefono, FotoURL,
+             Vehiculo, PlacaVehiculo,
              StatusAprobacion, StatusActividad, FechaAlta
       FROM VIDA_REPARTIDORES
       WHERE idBranch=@idBranch AND idCuenta=@idCuenta
@@ -1365,13 +1366,20 @@ export async function aprobarRepartidor(request, reply) {
 
   try {
     const pool = await getPool();
-    await pool.request()
+    // Aprobar deja la cuenta utilizable: sin Status='ACTIVO' el login del
+    // repartidor sigue respondiendo "Repartidor no encontrado".
+    const upd = await pool.request()
       .input('idBranch',        sql.BigInt,     idBranch)
       .input('idCuenta',        sql.BigInt,     idCuenta)
       .input('idRepartidor',    sql.BigInt,     idRepartidor)
       .input('StatusAprobacion',sql.VarChar(20), StatusAprobacion)
-      .query(`UPDATE VIDA_REPARTIDORES SET StatusAprobacion=@StatusAprobacion
+      .query(`UPDATE VIDA_REPARTIDORES
+                 SET StatusAprobacion = @StatusAprobacion,
+                     Status = CASE WHEN @StatusAprobacion='APROBADO' THEN 'ACTIVO' ELSE Status END
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+
+    if (upd.rowsAffected[0] === 0)
+      return reply.code(404).send({ error: 'Repartidor no encontrado' });
 
     // Avisarle al repartidor si tiene token push registrado
     if (StatusAprobacion === 'APROBADO') {

@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Truck, MapPin, Settings, RefreshCw, Plus, Pencil, Wallet,
   Phone, Star, X, Save, AlertTriangle, DollarSign, Bike, Car,
-  CheckCircle, Circle, Package,
+  CheckCircle, Circle, Package, Check, Ban, UserCheck,
 } from 'lucide-react';
 import api from '../services/api.js';
 import { useAuthStore } from '../store/authStore.js';
@@ -15,10 +15,35 @@ const USD = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionD
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
 const STATUS_REP = {
-  DISPONIBLE: { label: 'Disponible', dot: 'bg-green-500',  text: 'text-green-700',  bg: 'bg-green-50' },
-  OCUPADO:    { label: 'Ocupado',    dot: 'bg-orange-500', text: 'text-orange-700', bg: 'bg-orange-50' },
-  INACTIVO:   { label: 'Inactivo',   dot: 'bg-gray-300',   text: 'text-gray-500',   bg: 'bg-gray-50' },
+  DISPONIBLE: { label: 'Disponible',   dot: 'bg-green-500',  text: 'text-green-700',  bg: 'bg-green-50',
+                ayuda: 'El repartidor se puso en linea desde su app' },
+  OCUPADO:    { label: 'Ocupado',      dot: 'bg-orange-500', text: 'text-orange-700', bg: 'bg-orange-50',
+                ayuda: 'Tiene pedidos en curso' },
+  INACTIVO:   { label: 'Desconectado', dot: 'bg-gray-300',   text: 'text-gray-500',   bg: 'bg-gray-50',
+                ayuda: 'Cuenta activa; el repartidor aun no se pone en linea desde su app' },
 };
+
+// El estado que se ve en la tabla mezcla tres cosas distintas de la ficha:
+// la aprobacion de la solicitud que llega desde la app (StatusAprobacion),
+// si el admin tiene habilitada la cuenta (Status) y, solo cuando ambas estan
+// en orden, la disponibilidad que el propio repartidor enciende (StatusRepartidor).
+const APROBACION = {
+  PENDIENTE: { label: 'Por aprobar', dot: 'bg-blue-500', text: 'text-blue-700', bg: 'bg-blue-50',
+               ayuda: 'Se registro desde la app y espera que lo apruebes' },
+  RECHAZADO: { label: 'Rechazado',   dot: 'bg-red-500',  text: 'text-red-700',  bg: 'bg-red-50',
+               ayuda: 'Solicitud rechazada: no puede iniciar sesion' },
+};
+
+const aprobacionDe = (r) => r.StatusAprobacion || 'APROBADO';
+
+function estadoRepartidor(r) {
+  const aprob = aprobacionDe(r);
+  if (APROBACION[aprob]) return APROBACION[aprob];
+  if (r.Status !== 'ACTIVO')
+    return { label: 'Deshabilitado', dot: 'bg-gray-300', text: 'text-gray-500', bg: 'bg-gray-50',
+             ayuda: 'Cuenta deshabilitada por el administrador' };
+  return STATUS_REP[r.StatusRepartidor] || STATUS_REP.INACTIVO;
+}
 
 function IconVehiculo({ vehiculo, size = 14 }) {
   const v = (vehiculo || '').toLowerCase();
@@ -49,8 +74,26 @@ function ModalRepartidor({ repartidor, onClose, onGuardado }) {
   });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
+  const [resolviendo, setResolviendo] = useState(false);
+  const aprob = esEdicion ? aprobacionDe(repartidor) : 'APROBADO';
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Las solicitudes que llegan desde la app quedan en PENDIENTE: hasta que se
+  // aprueban, el repartidor no puede iniciar sesion ni recibir pedidos por mas
+  // que su cuenta figure como activa.
+  async function resolverSolicitud(aprobado) {
+    setResolviendo(true); setError('');
+    try {
+      await api.patch(`/repartidores/${repartidor.idRepartidor}/aprobacion`, {
+        StatusAprobacion: aprobado ? 'APROBADO' : 'RECHAZADO',
+      });
+      onGuardado();
+    } catch (e) {
+      setError(e.response?.data?.error || 'Error al actualizar la solicitud');
+      setResolviendo(false);
+    }
+  }
 
   async function guardar() {
     if (!form.Nombre.trim()) { setError('El nombre es obligatorio'); return; }
@@ -119,14 +162,39 @@ function ModalRepartidor({ repartidor, onClose, onGuardado }) {
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="ABC-123" />
             </div>
           </div>
+          {esEdicion && aprob !== 'APROBADO' && (
+            <div className={`rounded-xl p-3 ${aprob === 'PENDIENTE' ? 'bg-blue-50 border border-blue-100' : 'bg-red-50 border border-red-100'}`}>
+              <p className={`text-sm font-semibold ${aprob === 'PENDIENTE' ? 'text-blue-800' : 'text-red-800'}`}>
+                {aprob === 'PENDIENTE' ? 'Solicitud pendiente de aprobacion' : 'Solicitud rechazada'}
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Se registro desde la app. Mientras no lo apruebes no puede iniciar sesion ni recibir pedidos.
+              </p>
+              <div className="flex gap-2 mt-2">
+                <button type="button" onClick={() => resolverSolicitud(true)} disabled={resolviendo}
+                  className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-50">
+                  <Check size={12} /> Aprobar
+                </button>
+                {aprob === 'PENDIENTE' && (
+                  <button type="button" onClick={() => resolverSolicitud(false)} disabled={resolviendo}
+                    className="flex items-center gap-1 border border-red-200 text-red-600 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-red-100 disabled:opacity-50">
+                    <Ban size={12} /> Rechazar
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           {esEdicion && (
             <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Estado</label>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Cuenta</label>
               <select value={form.Status} onChange={e => set('Status', e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
-                <option value="ACTIVO">Activo</option>
-                <option value="INACTIVO">Inactivo</option>
+                <option value="ACTIVO">Activa</option>
+                <option value="INACTIVO">Inactiva</option>
               </select>
+              <p className="text-xs text-gray-400 mt-1">
+                Inactiva le bloquea el inicio de sesion. No es lo mismo que "Disponible": esa la enciende el repartidor desde su app.
+              </p>
             </div>
           )}
           {esEdicion && (
@@ -160,6 +228,7 @@ function TabRepartidores({ puedeEscribir }) {
   const [cargando, setCarg]   = useState(true);
   const [modal, setModal]     = useState(null); // null | {} (nuevo) | repartidor (editar)
   const [liquidando, setLiq]  = useState(null);
+  const [resolviendo, setRes] = useState(null);
 
   const cargar = useCallback(async () => {
     setCarg(true);
@@ -171,6 +240,19 @@ function TabRepartidores({ puedeEscribir }) {
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  async function resolverSolicitud(rep, aprobado) {
+    if (!aprobado && !window.confirm(`Rechazar la solicitud de ${rep.Nombre}? No podra iniciar sesion en la app.`)) return;
+    setRes(rep.idRepartidor);
+    try {
+      await api.patch(`/repartidores/${rep.idRepartidor}/aprobacion`, {
+        StatusAprobacion: aprobado ? 'APROBADO' : 'RECHAZADO',
+      });
+      await cargar();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Error al actualizar la solicitud');
+    } finally { setRes(null); }
+  }
 
   async function liquidar(rep) {
     const partes = [];
@@ -188,8 +270,20 @@ function TabRepartidores({ puedeEscribir }) {
 
   if (cargando) return <Spinner />;
 
+  const pendientes = reps.filter(r => aprobacionDe(r) === 'PENDIENTE');
+
   return (
     <div className="space-y-4">
+      {pendientes.length > 0 && (
+        <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 text-blue-800 rounded-xl px-4 py-2.5 text-sm">
+          <UserCheck size={16} />
+          <span>
+            <b>{pendientes.length}</b> {pendientes.length === 1 ? 'solicitud' : 'solicitudes'} desde la app
+            {' '}por aprobar. Hasta aprobarlas no pueden iniciar sesion ni recibir pedidos.
+          </span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500">{reps.length} repartidores registrados</p>
         <div className="flex gap-2">
@@ -217,9 +311,11 @@ function TabRepartidores({ puedeEscribir }) {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {reps.map(r => {
-                const st = STATUS_REP[r.StatusRepartidor] || STATUS_REP.INACTIVO;
+                const st = estadoRepartidor(r);
+                const pendiente = aprobacionDe(r) === 'PENDIENTE';
+                const apagado = r.Status !== 'ACTIVO' || aprobacionDe(r) === 'RECHAZADO';
                 return (
-                  <tr key={r.idRepartidor} className={`hover:bg-gray-50/50 ${r.Status !== 'ACTIVO' ? 'opacity-50' : ''}`}>
+                  <tr key={r.idRepartidor} className={`hover:bg-gray-50/50 ${apagado ? 'opacity-50' : ''}`}>
                     <td className="px-4 py-3">
                       <p className="font-semibold text-gray-800">{r.Nombre}</p>
                       {r.Telefono && <p className="text-xs text-gray-400 flex items-center gap-1"><Phone size={10} />{r.Telefono}</p>}
@@ -234,7 +330,8 @@ function TabRepartidores({ puedeEscribir }) {
                       {r.ComisionPct != null ? `${Number(r.ComisionPct)}%` : <span className="text-gray-300">global</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full ${st.bg} ${st.text}`}>
+                      <span title={st.ayuda}
+                        className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full ${st.bg} ${st.text}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />{st.label}
                       </span>
                     </td>
@@ -247,6 +344,18 @@ function TabRepartidores({ puedeEscribir }) {
                     <td className="px-4 py-3">
                       {puedeEscribir && (
                         <div className="flex items-center gap-1 justify-end">
+                          {pendiente && (
+                            <>
+                              <button onClick={() => resolverSolicitud(r, true)} disabled={resolviendo === r.idRepartidor}
+                                className="flex items-center gap-1 bg-green-600 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-50">
+                                <Check size={12} /> Aprobar
+                              </button>
+                              <button onClick={() => resolverSolicitud(r, false)} disabled={resolviendo === r.idRepartidor}
+                                className="flex items-center gap-1 border border-red-200 text-red-600 text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50">
+                                <Ban size={12} /> Rechazar
+                              </button>
+                            </>
+                          )}
                           {(Number(r.SaldoPendiente) > 0 || Number(r.SaldoPendienteVES) > 0) && (
                             <button onClick={() => liquidar(r)} disabled={liquidando === r.idRepartidor}
                               className="flex items-center gap-1 bg-emerald-600 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-50">

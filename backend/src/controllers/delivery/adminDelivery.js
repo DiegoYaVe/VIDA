@@ -21,8 +21,9 @@ export async function listarRepartidores(request, reply) {
     const r = await pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
-      .query(`SELECT idRepartidor, Nombre, Telefono, Vehiculo, PlacaVehiculo,
+      .query(`SELECT idRepartidor, Nombre, Telefono, Email, Vehiculo, PlacaVehiculo,
                      ComisionPct, SaldoPendiente, SaldoPendienteVES, StatusRepartidor, Status,
+                     ISNULL(StatusAprobacion,'APROBADO') AS StatusAprobacion,
                      UltimaLatitud, UltimaLongitud, UltimaUbicacion, FechaAlta
               FROM VIDA_REPARTIDORES
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta
