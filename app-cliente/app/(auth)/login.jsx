@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   dosCol: { flexDirection: 'row', gap: 10 },
   campo: { gap: 6 },
   etiqueta: { fontSize: 14, fontWeight: '800', color: colores.marino },
-  input: { height: 52, borderRadius: 16, borderWidth: 1.5, borderColor: colores.bordeFuerte, backgroundColor: colores.blanco, paddingHorizontal: 16, fontSize: 16, color: colores.marino },
+  input: { height: 54, borderRadius: 14, backgroundColor: colores.superficie, paddingHorizontal: 16, fontSize: 16, color: colores.marino },
   olvide: { alignSelf: 'flex-end', minHeight: 36, justifyContent: 'center', marginTop: -6 },
   olvideTexto: { fontWeight: '800', fontSize: 14, color: colores.marino, textDecorationLine: 'underline' },
   error: { backgroundColor: colores.errorClaro, color: colores.error, borderRadius: 12, padding: 10, fontSize: 14, fontWeight: '700' },

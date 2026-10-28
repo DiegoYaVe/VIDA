@@ -1,5 +1,6 @@
-// Mis pedidos (diseño "Agua VIDA"): en curso con su avance y anteriores con
-// "Repetir este pedido". Es la pestaña "Pedidos" y también /mis-pedidos.
+// Mis pedidos (estilo apps de delivery): en curso con su avance y anteriores
+// en filas con la tienda, fecha, total, estado y "Repetir". Es la pestaña
+// "Pedidos" y también /mis-pedidos.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Text } from './Texto';
 import { BotonAtras } from './Cabecera';
+import { Icono, Invitado, PortadaTienda } from './ui';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
 import useCarritoStore from '../store/carritoStore';
@@ -75,90 +77,104 @@ export default function PantallaPedidos({ conAtras = false }) {
     });
   };
 
-  const Tarjeta = ({ p }) => {
+  const Fila = ({ p, ultimo }) => {
     const entregado = p.Status === 'ENTREGADO';
     return (
-      <TouchableOpacity style={styles.tarjeta} activeOpacity={0.9} onPress={() => router.push(`/pedido/${p.idPedido}`)}>
-        <View style={styles.fila}>
-          <View style={{ flexShrink: 1 }}>
-            <Text style={styles.tarjetaTitulo}>#{p.idPedido} · {p.NombreSucursal || 'VIDA'}</Text>
-            <Text style={styles.tarjetaFecha}>{fechaHora(p.FechaCreacion)}</Text>
+      <TouchableOpacity style={[styles.fila, !ultimo && styles.filaBorde]} activeOpacity={0.7} onPress={() => router.push(`/pedido/${p.idPedido}`)}>
+        <PortadaTienda nombre="" id={p.idPuntoVenta} alto={56} radio={14} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={styles.filaTitulo} numberOfLines={1}>{p.NombreSucursal || 'VIDA'}</Text>
+          <Text style={styles.filaSub} numberOfLines={1}>{fechaHora(p.FechaCreacion)} · {fmtUSD(total(p))}</Text>
+          <View style={styles.filaEstado}>
+            <Icono nombre={entregado ? 'checkmark-circle' : 'close-circle'} tam={14} color={entregado ? colores.verdeTexto : colores.error} />
+            <Text style={[styles.filaEstadoTexto, { color: entregado ? colores.verdeTexto : colores.error }]}>{ESTADO[p.Status]}</Text>
+            <Text style={styles.filaDetalle} numberOfLines={1}> · {detalle(p)}</Text>
           </View>
-          <View style={[styles.estado, { backgroundColor: entregado ? '#DDF1E2' : '#F6E1E1' }]}>
-            <Text style={[styles.estadoTexto, { color: entregado ? colores.verdeTexto : '#8A2B2B' }]}>{ESTADO[p.Status]}</Text>
-          </View>
-        </View>
-        <View style={styles.fila}>
-          <Text style={styles.detalle} numberOfLines={1}>{detalle(p)}</Text>
-          <Text style={styles.total}>{fmtUSD(total(p))}</Text>
         </View>
         {entregado && p.items?.length ? (
-          <TouchableOpacity style={styles.repetir} onPress={() => repetir(p)}>
-            <Text style={styles.repetirTexto}>Repetir este pedido</Text>
+          <TouchableOpacity style={styles.repetir} onPress={() => repetir(p)} accessibilityLabel={`Repetir pedido ${p.idPedido}`}>
+            <Icono nombre="refresh" tam={15} />
+            <Text style={styles.repetirTexto}>Repetir</Text>
           </TouchableOpacity>
-        ) : null}
+        ) : <Icono nombre="chevron-forward" tam={18} color={colores.textoTenue} />}
       </TouchableOpacity>
     );
   };
 
+  if (!token) {
+    return (
+      <SafeAreaView edges={['top']} style={styles.root}>
+        <StatusBar style="dark" />
+        {conAtras ? <View style={{ padding: 16 }}><BotonAtras /></View> : null}
+        <Invitado icono="receipt-outline" titulo="Tus pedidos" texto="Inicia sesión para seguir tus pedidos en el mapa y repetir los que más compras." />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView edges={['top']} style={styles.root}>
       <StatusBar style="dark" />
+      <View style={styles.cabecera}>
+        {conAtras ? <BotonAtras /> : null}
+        <Text style={styles.titulo}>Pedidos</Text>
+      </View>
+      <View style={styles.pestanas}>
+        {[['curso', 'En curso', enCurso.length], ['anteriores', 'Anteriores', null]].map(([k, t, n]) => (
+          <TouchableOpacity key={k} onPress={() => setPestana(k)} style={[styles.pestana, pestana === k && styles.pestanaOn]}
+            accessibilityRole="tab" accessibilityState={{ selected: pestana === k }}>
+            <Text style={[styles.pestanaTexto, pestana === k && styles.pestanaTextoOn]}>{t}</Text>
+            {n ? <View style={styles.contador}><Text style={styles.contadorTexto}>{n}</Text></View> : null}
+          </TouchableOpacity>
+        ))}
+      </View>
       <ScrollView contentContainerStyle={styles.contenido} showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refrescando} onRefresh={() => { setRefrescando(true); cargar(); }} tintColor={colores.marino} />}>
-        <View style={styles.cabecera}>
-          {conAtras ? <BotonAtras /> : null}
-          <Text style={styles.titulo}>Mis pedidos</Text>
-        </View>
-
-        {!token ? (
-          <View style={styles.vacioCaja}>
-            <Text style={styles.vacio}>Inicia sesión para ver tus pedidos.</Text>
-            <TouchableOpacity style={styles.boton} onPress={() => router.push('/(auth)/login')}><Text style={styles.botonTexto}>Entrar</Text></TouchableOpacity>
-          </View>
+        {cargando ? <ActivityIndicator color={colores.marino} style={{ marginTop: 32 }} /> : pestana === 'curso' ? (
+          <>
+            {enCurso.map((p) => {
+              const min = p.MinutosRestantes != null && p.MinutosRestantes >= 0 ? p.MinutosRestantes : null;
+              return (
+                <TouchableOpacity key={p.idPedido} style={styles.activo} activeOpacity={0.92} onPress={() => router.push(`/pedido/${p.idPedido}`)}>
+                  <View style={styles.activoDeco} />
+                  <View style={styles.activoFila}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.activoEstado}>{ESTADO[p.Status] || 'En curso'}</Text>
+                      <Text style={styles.activoTitulo} numberOfLines={1}>{min != null ? `Llega en ${min} min` : p.NombreSucursal || 'Tu pedido'}</Text>
+                    </View>
+                    <View style={styles.activoIcono}><Icono nombre={p.Status === 'EN_CAMINO' ? 'bicycle' : p.Status === 'ESPERANDO_PAGO' ? 'wallet' : 'bag-handle'} tam={24} /></View>
+                  </View>
+                  <View style={styles.barra}><View style={[styles.barraLlena, { width: `${(AVANCE[p.Status] ?? 0.2) * 100}%` }]} /></View>
+                  <View style={styles.activoFila}>
+                    <Text style={styles.activoSub} numberOfLines={1}>#{p.idPedido} · {p.NombreSucursal || 'VIDA'} · {fmtUSD(total(p))}</Text>
+                    <View style={styles.activoVer}><Icono nombre="map" tam={14} /><Text style={styles.activoVerTexto}>Seguir</Text></View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+            {enCurso.length === 0 && (
+              <View style={styles.vacio}>
+                <Icono nombre="bag-handle-outline" tam={40} color={colores.textoTenue} />
+                <Text style={styles.vacioTitulo}>Sin pedidos en curso</Text>
+                <TouchableOpacity style={styles.boton} onPress={() => router.push('/(tabs)')}><Text style={styles.botonTexto}>Hacer un pedido</Text></TouchableOpacity>
+              </View>
+            )}
+            {esteMes.length > 0 && <Text style={styles.h2}>Este mes</Text>}
+            {esteMes.map((p, i) => <Fila key={p.idPedido} p={p} ultimo={i === esteMes.length - 1} />)}
+          </>
         ) : (
           <>
-            <View style={styles.segmento}>
-              {[['curso', `En curso (${enCurso.length})`], ['anteriores', 'Anteriores']].map(([k, t]) => (
-                <TouchableOpacity key={k} onPress={() => setPestana(k)} style={[styles.segBtn, pestana === k && styles.segBtnOn]}
-                  accessibilityRole="tab" accessibilityState={{ selected: pestana === k }}>
-                  <Text style={[styles.segTexto, pestana === k && styles.segTextoOn]}>{t}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {cargando ? <ActivityIndicator color={colores.marino} style={{ marginTop: 24 }} /> : pestana === 'curso' ? (
-              <>
-                {enCurso.map((p) => (
-                  <TouchableOpacity key={p.idPedido} style={styles.activo} activeOpacity={0.9} onPress={() => router.push(`/pedido/${p.idPedido}`)}>
-                    <View style={styles.fila}>
-                      <Text style={styles.activoTitulo}>#{p.idPedido} · {p.NombreSucursal || 'VIDA'}</Text>
-                      <View style={styles.activoEstado}><Text style={styles.activoEstadoTexto}>{ESTADO[p.Status] || 'En curso'}</Text></View>
-                    </View>
-                    <View style={styles.barra}><View style={[styles.barraLlena, { width: `${(AVANCE[p.Status] ?? 0.2) * 100}%` }]} /></View>
-                    <View style={styles.fila}>
-                      <Text style={styles.activoSub}>
-                        {p.MinutosRestantes != null && p.MinutosRestantes >= 0 ? `Llega en ${p.MinutosRestantes} min` : ESTADO[p.Status]}
-                      </Text>
-                      <Text style={styles.activoLink}>Ver en el mapa</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-                {enCurso.length === 0 && <Text style={styles.vacio}>No tienes pedidos en curso.</Text>}
-                {esteMes.length > 0 && <Text style={styles.h2}>Este mes</Text>}
-                {esteMes.map((p) => <Tarjeta key={p.idPedido} p={p} />)}
-              </>
-            ) : (
-              <>
-                {grupos.length === 0 && <Text style={styles.vacio}>Aún no tienes pedidos anteriores.</Text>}
-                {grupos.map((g) => (
-                  <View key={g.titulo} style={{ gap: 10 }}>
-                    <Text style={styles.h2}>{g.titulo}</Text>
-                    {g.lista.map((p) => <Tarjeta key={p.idPedido} p={p} />)}
-                  </View>
-                ))}
-              </>
+            {grupos.length === 0 && (
+              <View style={styles.vacio}>
+                <Icono nombre="time-outline" tam={40} color={colores.textoTenue} />
+                <Text style={styles.vacioTitulo}>Aún no tienes pedidos anteriores</Text>
+              </View>
             )}
+            {grupos.map((g) => (
+              <View key={g.titulo}>
+                <Text style={styles.h2}>{g.titulo}</Text>
+                {g.lista.map((p, i) => <Fila key={p.idPedido} p={p} ultimo={i === g.lista.length - 1} />)}
+              </View>
+            ))}
           </>
         )}
       </ScrollView>
@@ -168,38 +184,42 @@ export default function PantallaPedidos({ conAtras = false }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colores.fondo },
-  contenido: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28, gap: 14 },
-  cabecera: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  titulo: { fontFamily: fuentes.tituloFuerte, fontSize: 26, color: colores.marino },
-  segmento: { flexDirection: 'row', gap: 6, backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.borde, borderRadius: 16, padding: 4 },
-  segBtn: { flex: 1, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  segBtnOn: { backgroundColor: colores.marino },
-  segTexto: { fontWeight: '700', fontSize: 14, color: colores.textoSuave },
-  segTextoOn: { fontWeight: '800', color: colores.blanco },
+  cabecera: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingTop: 14 },
+  titulo: { fontFamily: fuentes.tituloFuerte, fontSize: 28, color: colores.marino },
+  pestanas: { flexDirection: 'row', paddingHorizontal: 20, gap: 18, borderBottomWidth: 1, borderBottomColor: colores.separador, marginTop: 6 },
+  pestana: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 48, borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  pestanaOn: { borderBottomColor: colores.marino },
+  pestanaTexto: { fontWeight: '700', fontSize: 15, color: colores.textoSuave },
+  pestanaTextoOn: { fontWeight: '800', color: colores.marino },
+  contador: { minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: colores.celeste, alignItems: 'center', justifyContent: 'center' },
+  contadorTexto: { fontSize: 11, fontWeight: '800', color: colores.marino },
+  contenido: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 28, gap: 12 },
 
-  activo: { backgroundColor: colores.marino, borderRadius: 24, padding: 16, gap: 10 },
-  activoTitulo: { fontFamily: fuentes.titulo, fontSize: 16, color: colores.blanco, flexShrink: 1 },
-  activoEstado: { backgroundColor: colores.celeste, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
-  activoEstadoTexto: { color: colores.marino, fontWeight: '800', fontSize: 12 },
+  activo: { backgroundColor: colores.marino, borderRadius: 22, padding: 16, gap: 12, overflow: 'hidden' },
+  activoDeco: { position: 'absolute', right: -40, top: -60, width: 170, height: 170, borderRadius: 85, backgroundColor: colores.marinoClaro },
+  activoFila: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  activoEstado: { fontSize: 12, fontWeight: '800', color: colores.celeste, textTransform: 'uppercase', letterSpacing: 0.6 },
+  activoTitulo: { fontFamily: fuentes.tituloFuerte, fontSize: 22, color: colores.blanco },
+  activoIcono: { width: 48, height: 48, borderRadius: 24, backgroundColor: colores.celeste, alignItems: 'center', justifyContent: 'center' },
   barra: { height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.18)', overflow: 'hidden' },
-  barraLlena: { height: '100%', backgroundColor: colores.celeste },
-  activoSub: { fontSize: 14, color: colores.sobreMarino },
-  activoLink: { fontSize: 14, fontWeight: '800', color: colores.blanco },
+  barraLlena: { height: '100%', borderRadius: 3, backgroundColor: colores.celeste },
+  activoSub: { flex: 1, fontSize: 13, color: colores.sobreMarino },
+  activoVer: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colores.blanco, borderRadius: 99, paddingHorizontal: 12, height: 32 },
+  activoVerTexto: { fontSize: 13, fontWeight: '800', color: colores.marino },
 
-  h2: { marginTop: 6, fontFamily: fuentes.titulo, fontSize: 17, color: colores.marino },
-  tarjeta: { backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.borde, borderRadius: 22, padding: 14, gap: 10 },
-  fila: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
-  tarjetaTitulo: { fontWeight: '800', fontSize: 15, color: colores.marino },
-  tarjetaFecha: { fontSize: 13, color: colores.textoSuave },
-  estado: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
-  estadoTexto: { fontWeight: '800', fontSize: 12 },
-  detalle: { flex: 1, fontSize: 13, color: '#2C3D58' },
-  total: { fontFamily: fuentes.titulo, fontSize: 16, color: colores.marino },
-  repetir: { height: 44, borderRadius: 14, borderWidth: 1.5, borderColor: colores.marino, alignItems: 'center', justifyContent: 'center' },
-  repetirTexto: { fontWeight: '800', fontSize: 14, color: colores.marino },
+  h2: { marginTop: 10, fontFamily: fuentes.tituloFuerte, fontSize: 18, color: colores.marino },
+  fila: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  filaBorde: { borderBottomWidth: 1, borderBottomColor: colores.separador },
+  filaTitulo: { fontWeight: '800', fontSize: 15, color: colores.marino },
+  filaSub: { fontSize: 13, color: colores.textoSuave },
+  filaEstado: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  filaEstadoTexto: { fontSize: 12, fontWeight: '800' },
+  filaDetalle: { flex: 1, fontSize: 12, color: colores.textoTenue },
+  repetir: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 36, paddingHorizontal: 12, borderRadius: 99, backgroundColor: colores.superficie },
+  repetirTexto: { fontWeight: '800', fontSize: 13, color: colores.marino },
 
-  vacioCaja: { gap: 12, alignItems: 'flex-start' },
-  vacio: { fontSize: 14, color: colores.textoSuave },
-  boton: { backgroundColor: colores.marino, height: 44, paddingHorizontal: 18, borderRadius: 14, justifyContent: 'center' },
+  vacio: { alignItems: 'center', gap: 10, paddingVertical: 28 },
+  vacioTitulo: { fontWeight: '800', fontSize: 15, color: colores.textoSuave },
+  boton: { backgroundColor: colores.marino, height: 46, paddingHorizontal: 20, borderRadius: 99, justifyContent: 'center' },
   botonTexto: { color: colores.blanco, fontWeight: '800', fontSize: 14 },
 });

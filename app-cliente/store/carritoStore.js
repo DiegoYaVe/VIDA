@@ -37,6 +37,16 @@ const useCarritoStore = create(
         set({ items: updated });
       },
 
+      // Cantidad exacta (0 = quitar), desde el detalle del producto
+      fijarCantidad: (idProducto, cantidad) => {
+        const { items } = get();
+        set({
+          items: cantidad > 0
+            ? items.map((i) => (i.idProducto === idProducto ? { ...i, Cantidad: cantidad } : i))
+            : items.filter((i) => i.idProducto !== idProducto),
+        });
+      },
+
       limpiarCarrito: () => set({ items: [], idPuntoVenta: null, nombreSucursal: '' }),
 
       setSucursal: (idPuntoVenta, nombre) =>

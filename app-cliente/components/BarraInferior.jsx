@@ -1,20 +1,21 @@
-// Barra inferior del diseño "Agua VIDA": Inicio · Tiendas · carrito flotante
-// al centro (celeste, con contador) · Puntos · Pedidos. Solo texto en las
-// pestañas, como en el diseño.
+// Barra inferior (estilo apps de delivery): Inicio · Tiendas · Pedidos ·
+// Puntos · Cuenta, con icono y texto. Mientras hay productos, encima va la
+// barra "Ver carrito" en las pestañas de compra.
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { Text } from './Texto';
-import useCarritoStore from '../store/carritoStore';
+import { Icono, BarraCarrito } from './ui';
 import { colores } from '../constants/tema';
 
 const PESTANAS = [
-  { ruta: 'index', etiqueta: 'Inicio' },
-  { ruta: 'tiendas', etiqueta: 'Tiendas' },
-  { ruta: 'carrito', etiqueta: null },
-  { ruta: 'puntos', etiqueta: 'Puntos' },
-  { ruta: 'pedidos', etiqueta: 'Pedidos' },
+  { ruta: 'index', etiqueta: 'Inicio', icono: 'home' },
+  { ruta: 'tiendas', etiqueta: 'Tiendas', icono: 'storefront' },
+  { ruta: 'pedidos', etiqueta: 'Pedidos', icono: 'receipt' },
+  { ruta: 'puntos', etiqueta: 'Puntos', icono: 'gift' },
+  { ruta: 'perfil', etiqueta: 'Cuenta', icono: 'person' },
 ];
+const CON_CARRITO = ['index', 'tiendas'];
 
 export function IconoCarrito({ tam = 24, color = colores.marino }) {
   return (
@@ -28,8 +29,6 @@ export function IconoCarrito({ tam = 24, color = colores.marino }) {
 
 export default function BarraInferior({ state, navigation }) {
   const insets = useSafeAreaInsets();
-  const items = useCarritoStore((s) => s.items);
-  const total = items.reduce((a, i) => a + i.Cantidad, 0);
   const actual = state.routes[state.index]?.name;
   // El carrito es una pantalla completa (con su propia hoja de pago)
   if (actual === 'carrito') return null;
@@ -42,42 +41,29 @@ export default function BarraInferior({ state, navigation }) {
   };
 
   return (
-    <View style={[styles.barra, { height: 80 + insets.bottom, paddingBottom: insets.bottom }]}>
-      {PESTANAS.map((p) => p.etiqueta ? (
-        <TouchableOpacity key={p.ruta} style={styles.pestana} onPress={() => ir(p.ruta)}
-          accessibilityRole="tab" accessibilityState={{ selected: actual === p.ruta }}>
-          <Text style={[styles.texto, actual === p.ruta && styles.textoActivo]}>{p.etiqueta}</Text>
-        </TouchableOpacity>
-      ) : (
-        <View key={p.ruta} style={styles.pestana}>
-          <TouchableOpacity style={styles.carrito} onPress={() => ir('carrito')}
-            accessibilityLabel={`Carrito, ${total} producto${total === 1 ? '' : 's'}`}>
-            <IconoCarrito />
-            {total > 0 && (
-              <View style={styles.contador}><Text style={styles.contadorTexto}>{total > 99 ? '99+' : total}</Text></View>
-            )}
-          </TouchableOpacity>
-        </View>
-      ))}
+    <View style={styles.contenedor}>
+      {CON_CARRITO.includes(actual) && <View style={styles.carrito}><BarraCarrito enLinea /></View>}
+      <View style={[styles.barra, { paddingBottom: Math.max(insets.bottom, 6) }]}>
+        {PESTANAS.map((p) => {
+          const on = actual === p.ruta;
+          return (
+            <TouchableOpacity key={p.ruta} style={styles.pestana} onPress={() => ir(p.ruta)}
+              accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={p.etiqueta}>
+              <Icono nombre={on ? p.icono : `${p.icono}-outline`} tam={24} color={on ? colores.marino : colores.textoTenue} />
+              <Text style={[styles.texto, on && styles.textoActivo]}>{p.etiqueta}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  barra: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: colores.blanco,
-    borderTopWidth: 1, borderTopColor: colores.borde,
-  },
-  pestana: { flex: 1, height: 80, alignItems: 'center', justifyContent: 'center' },
-  texto: { fontSize: 12, fontWeight: '700', color: colores.textoSuave },
+  contenedor: { backgroundColor: colores.blanco },
+  carrito: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
+  barra: { flexDirection: 'row', backgroundColor: colores.blanco, borderTopWidth: 1, borderTopColor: colores.separador, paddingTop: 6 },
+  pestana: { flex: 1, minHeight: 52, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  texto: { fontSize: 11, fontWeight: '700', color: colores.textoTenue },
   textoActivo: { fontWeight: '800', color: colores.marino },
-  carrito: {
-    width: 60, height: 60, marginTop: -26, borderRadius: 30, backgroundColor: colores.celeste,
-    borderWidth: 4, borderColor: colores.fondo, alignItems: 'center', justifyContent: 'center',
-  },
-  contador: {
-    position: 'absolute', top: -2, right: -2, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 4,
-    backgroundColor: colores.marino, alignItems: 'center', justifyContent: 'center',
-  },
-  contadorTexto: { color: colores.blanco, fontSize: 11, fontWeight: '800' },
 });

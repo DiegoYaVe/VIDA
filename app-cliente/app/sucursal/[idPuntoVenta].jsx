@@ -1,64 +1,66 @@
-// Tienda (diseño "Agua VIDA"): cabecera marina con búsqueda, categorías,
-// promoción vigente, productos en cuadrícula por categoría y "Ver carrito".
-import { useState, useEffect, useCallback, useMemo } from 'react';
+// Tienda (estilo apps de delivery): portada con volver y buscar, datos de la
+// tienda (tiempo, distancia, formas de pago), pestañas de categoría fijas
+// que llevan a su sección, carrusel "Lo más pedido" y cada producto con su
+// control de cantidad (+ → − n +). Barra "Ver carrito" flotante.
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, TouchableOpacity, StyleSheet, Image, ActivityIndicator, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import Svg, { Circle, Path } from 'react-native-svg';
-import { Text, TextInput } from '../../components/Texto';
-import { BotonAtras } from '../../components/Cabecera';
+import { Text } from '../../components/Texto';
 import DetalleProducto from '../../components/DetalleProducto';
+import { FilaProducto } from '../(tabs)/index';
+import { Icono, ControlCantidad, Buscador, BarraCarrito, PortadaTienda, useCantidades } from '../../components/ui';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import useCarritoStore from '../../store/carritoStore';
-import { agregarConTienda } from '../../services/carrito';
 import { absImg } from '../../constants/config';
-import { colores, fuentes } from '../../constants/tema';
+import { colores, fuentes, sombraFuerte } from '../../constants/tema';
 import { useTasaReferencial, precioMonedas } from '../../services/moneda';
+import { obtenerUbicacion, kmEntre, textoDistancia } from '../../services/cercania';
 
-const FONDOS = ['#DDF2F8', '#EADCCB', '#F8D9D9', '#FBE3B8', '#E3F3E7', '#F5E7B8'];
-const marcaVida = (p) => /\bvida\b/i.test(p.Nombre || '');
-
-function Lupa() {
-  return (
-    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={colores.textoSuave} strokeWidth={2.2} strokeLinecap="round">
-      <Circle cx={11} cy={11} r={7} /><Path d="M20 20l-3.5-3.5" />
-    </Svg>
-  );
-}
+const ALTO_PORTADA = 190;
 
 export default function TiendaScreen() {
   const tasa = useTasaReferencial();
   const { idPuntoVenta } = useLocalSearchParams();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { idBranch, idCuenta } = useAuthStore();
+  const scrollRef = useRef(null);
+  const posiciones = useRef({}); // categoría → y de su sección (dentro del bloque de productos)
+  const base = useRef(0); // y del bloque de productos en el scroll
 
   const [productos, setProductos] = useState([]);
   const [tienda, setTienda] = useState(null);
+  const [km, setKm] = useState(null);
   const [categoria, setCategoria] = useState(null);
-  const [soloPromo, setSoloPromo] = useState(false);
+  const [buscando, setBuscando] = useState(false);
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [abierto, setAbierto] = useState(null);
+  const [compacta, setCompacta] = useState(false);
+  const [fijas, setFijas] = useState(false); // pestañas dentro de la barra superior
+  const yPestanas = useRef(0);
 
-  const items = useCarritoStore((s) => s.items);
-  const idPVCarrito = useCarritoStore((s) => s.idPuntoVenta);
-  const totalItems = items.reduce((a, i) => a + i.Cantidad, 0);
-  const totalUSD = items.reduce((a, i) => a + i.PrecioUSD * i.Cantidad, 0);
+  const hayCarrito = useCarritoStore((s) => s.items.length > 0);
 
   const cargar = useCallback(async () => {
     try {
       setError('');
-      const [pr, su] = await Promise.all([
+      const [pr, su, pos] = await Promise.all([
         api.get('/delivery/productos', { params: { idBranch, idCuenta, idPuntoVenta } }),
         api.get('/delivery/sucursales', { params: { idBranch, idCuenta } }),
+        obtenerUbicacion(),
       ]);
       const lista = pr.data?.productos ?? pr.data ?? [];
       setProductos(lista.filter((p) => String(p.idPuntoVenta) === String(idPuntoVenta)));
       const sucs = su.data?.sucursales ?? su.data ?? [];
-      setTienda(sucs.find((s) => String(s.idPuntoVenta) === String(idPuntoVenta)) || null);
+      const t = sucs.find((s) => String(s.idPuntoVenta) === String(idPuntoVenta)) || null;
+      setTienda(t);
+      const lat = parseFloat(t?.Latitud), lon = parseFloat(t?.Longitud);
+      setKm(pos && Number.isFinite(lat) && Number.isFinite(lon) ? kmEntre(pos, { lat, lon }) : null);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -68,22 +70,14 @@ export default function TiendaScreen() {
   useEffect(() => { cargar(); }, [cargar]);
 
   const nombre = tienda?.NomComercial || productos[0]?.NombreSucursal || 'Tienda';
-  const categorias = useMemo(() => {
-    const vistas = new Map();
-    productos.forEach((p) => { if (p.idCategoria && !vistas.has(p.idCategoria)) vistas.set(p.idCategoria, p.NombreCategoria || 'General'); });
-    return [...vistas.entries()].map(([id, n]) => ({ id, nombre: n }));
-  }, [productos]);
+  const { cantidadDe, mas, menos } = useCantidades(nombre);
   const promo = productos.find((p) => p.PromoNombre);
 
   const filtrados = useMemo(() => {
-    let l = productos;
-    if (soloPromo) l = l.filter((p) => p.PromoNombre);
-    if (categoria) l = l.filter((p) => p.idCategoria === categoria);
     const q = busqueda.trim().toLowerCase();
-    if (q) l = l.filter((p) => (p.Nombre || '').toLowerCase().includes(q));
-    return l;
-  }, [productos, categoria, soloPromo, busqueda]);
-  // Productos agrupados por categoría, en el orden de las píldoras
+    return q ? productos.filter((p) => (p.Nombre || '').toLowerCase().includes(q)) : productos;
+  }, [productos, busqueda]);
+  // Productos agrupados por categoría
   const secciones = useMemo(() => {
     const m = new Map();
     filtrados.forEach((p) => {
@@ -93,159 +87,220 @@ export default function TiendaScreen() {
     });
     return [...m.entries()];
   }, [filtrados]);
+  // Lo más pedido: primero las ofertas, luego los primeros del catálogo
+  const destacados = useMemo(() => {
+    const conPromo = productos.filter((p) => p.PromoBadge || p.PromoNombre);
+    return [...conPromo, ...productos.filter((p) => !conPromo.includes(p))].slice(0, 8);
+  }, [productos]);
 
-  const cantidadDe = (p) => (String(idPVCarrito) === String(p.idPuntoVenta) ? items.find((i) => i.idProducto === p.idProducto)?.Cantidad ?? 0 : 0);
-  const agregar = (p, c = 1) => agregarConTienda({ ...p, NombreSucursal: p.NombreSucursal || nombre }, c);
-  const total = precioMonedas(totalUSD, tasa);
+  const irACategoria = (k) => {
+    setCategoria(k);
+    const y = posiciones.current[k];
+    if (y != null) scrollRef.current?.scrollTo({ y: base.current + y - (insets.top + 100), animated: true });
+  };
+  const alDesplazar = (e) => {
+    const y = e.nativeEvent.contentOffset.y;
+    setCompacta(y > ALTO_PORTADA - 70);
+    setFijas(y > yPestanas.current - (insets.top + 58));
+    // La pestaña activa sigue a la sección que está a la vista
+    let actual = null;
+    for (const [k] of secciones) if (posiciones.current[k] != null && base.current + posiciones.current[k] - (insets.top + 120) <= y) actual = k;
+    if (actual !== categoria) setCategoria(actual);
+  };
+
+  const minutos = km != null ? Math.round(15 + km * 3) : null;
+  const datos = [
+    minutos ? { icono: 'time-outline', texto: `${minutos}–${minutos + 10} min` } : null,
+    km != null ? { icono: 'navigate-outline', texto: textoDistancia(km).replace(/^a /, '') } : null,
+    { icono: 'bicycle-outline', texto: 'A domicilio' },
+  ].filter(Boolean);
+
+  const Pestanas = (
+    <View style={styles.pestanas}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pestanasFila}>
+        {secciones.map(([k]) => {
+          const on = categoria === k;
+          return (
+            <TouchableOpacity key={k} style={[styles.pestana, on && styles.pestanaOn]} onPress={() => irACategoria(k)} accessibilityState={{ selected: on }}>
+              <Text style={[styles.pestanaTexto, on && styles.pestanaTextoOn]}>{k}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
 
   return (
-    <SafeAreaView edges={['top']} style={styles.root}>
+    <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
-      <StatusBar style="light" />
-      <View style={styles.cabecera}>
-        <View style={styles.cabeceraFila}>
-          <BotonAtras oscuro />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.tiendaNombre} numberOfLines={1}>{nombre}</Text>
-            <Text style={styles.tiendaSub} numberOfLines={1}>Abierta · {tienda?.Direccion?.trim() || 'pide a domicilio'}</Text>
-          </View>
-          <View style={styles.abierta}><Text style={styles.abiertaTexto}>Abierta</Text></View>
-        </View>
-        <View style={styles.buscar}>
-          <Lupa />
-          <TextInput style={styles.buscarInput} placeholder={`Buscar en ${nombre}`} placeholderTextColor={colores.textoSuave}
-            value={busqueda} onChangeText={setBusqueda} accessibilityLabel="Buscar en la tienda" />
-        </View>
+      <StatusBar style={compacta ? 'dark' : 'light'} />
+
+      {/* Barra superior: flota sobre la portada y se vuelve blanca al bajar */}
+      <View style={[styles.barraCaja, compacta && styles.barraCompacta]}>
+      <View style={[styles.barra, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity style={styles.redondo} onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} accessibilityLabel="Volver">
+          <Icono nombre="arrow-back" tam={22} />
+        </TouchableOpacity>
+        <Text style={[styles.barraTitulo, !compacta && { opacity: 0 }]} numberOfLines={1}>{nombre}</Text>
+        <TouchableOpacity style={styles.redondo} onPress={() => { setBuscando((v) => !v); if (buscando) setBusqueda(''); }}
+          accessibilityLabel={buscando ? 'Cerrar búsqueda' : 'Buscar en la tienda'}>
+          <Icono nombre={buscando ? 'close' : 'search'} tam={21} />
+        </TouchableOpacity>
+      </View>
+      {fijas && secciones.length > 0 ? Pestanas : null}
       </View>
 
-      {cargando ? <ActivityIndicator size="large" color={colores.celeste} style={{ marginTop: 40 }} /> : error ? (
-        <Text style={styles.error}>{error}</Text>
+      {cargando ? <ActivityIndicator size="large" color={colores.marino} style={{ marginTop: 240 }} /> : error ? (
+        <View style={styles.centro}>
+          <Icono nombre="cloud-offline-outline" tam={40} color={colores.textoTenue} />
+          <Text style={styles.error}>{error}</Text>
+          <TouchableOpacity style={styles.reintentar} onPress={cargar}><Text style={styles.reintentarTexto}>Reintentar</Text></TouchableOpacity>
+        </View>
       ) : (
-        <ScrollView style={{ backgroundColor: colores.fondo }} contentContainerStyle={{ paddingBottom: totalItems > 0 ? 100 : 24 }} showsVerticalScrollIndicator={false}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-            {[{ id: null, nombre: 'Todo' }, ...categorias].map((c) => {
-              const activa = categoria === c.id;
-              return (
-                <TouchableOpacity key={String(c.id)} style={[styles.chip, activa && styles.chipActivo]} onPress={() => setCategoria(c.id)}>
-                  <Text style={[styles.chipTexto, activa && { color: colores.blanco }]}>{c.nombre}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+        <ScrollView ref={scrollRef} onScroll={alDesplazar} scrollEventThrottle={32}
+          contentContainerStyle={{ paddingBottom: hayCarrito ? 110 + insets.bottom : 32 }} showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled">
+          {/* 0 · Portada */}
+          <PortadaTienda nombre={nombre} id={idPuntoVenta} alto={ALTO_PORTADA + insets.top} radio={0} />
 
-          {promo ? (
-            <View style={styles.promo}>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={styles.promoEtiqueta}>PROMOCIÓN</Text>
-                <Text style={styles.promoNombre}>{promo.PromoNombre}</Text>
-              </View>
-              <TouchableOpacity style={styles.promoVer} onPress={() => setSoloPromo((v) => !v)}>
-                <Text style={styles.promoVerTexto}>{soloPromo ? 'Todo' : 'Ver'}</Text>
-              </TouchableOpacity>
+          {/* 1 · Datos de la tienda */}
+          <View style={styles.info}>
+            <Text style={styles.nombre}>{nombre}</Text>
+            <View style={styles.estadoFila}>
+              <View style={styles.abierta}><View style={styles.punto} /><Text style={styles.abiertaTexto}>Abierta</Text></View>
+              {tienda?.Direccion?.trim() ? <Text style={styles.direccion} numberOfLines={1}>{tienda.Direccion.trim()}</Text> : null}
             </View>
-          ) : null}
+            <View style={styles.datos}>
+              {datos.map((d) => (
+                <View key={d.texto} style={styles.dato}>
+                  <Icono nombre={d.icono} tam={16} color={colores.textoSuave} />
+                  <Text style={styles.datoTexto}>{d.texto}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.pagos}>
+              <Icono nombre="wallet-outline" tam={18} />
+              <Text style={styles.pagosTexto}>Efectivo, tarjeta al recibir o Pago Móvil</Text>
+            </View>
+            {buscando ? <Buscador valor={busqueda} onCambiar={setBusqueda} placeholder={`Buscar en ${nombre}`} autoFocus /> : null}
+          </View>
 
-          {secciones.length === 0 && <Text style={styles.vacio}>No encontramos productos.</Text>}
-          {secciones.map(([titulo, lista]) => (
-            <View key={titulo} style={styles.seccion}>
-              <Text style={styles.h2}>{titulo}</Text>
-              <View style={styles.grid}>
-                {lista.map((p, i) => {
-                  const cant = cantidadDe(p);
-                  const { principal, secundario } = precioMonedas(parseFloat(p.PrecioPromo ?? p.PrecioUSD ?? 0), tasa);
-                  const img = absImg(p.ImagenProducto);
-                  return (
-                    <TouchableOpacity key={p.idProducto} style={styles.tarjeta} activeOpacity={0.9} onPress={() => setAbierto(p)}>
-                      <View style={[styles.foto, { backgroundColor: FONDOS[i % FONDOS.length] }]}>
-                        {img ? <Image source={{ uri: img }} style={styles.fotoImg} /> : null}
-                        {marcaVida(p) ? <View style={styles.vida}><Text style={styles.vidaTexto}>VIDA</Text></View> : null}
-                        {p.PromoBadge ? <View style={styles.badge}><Text style={styles.badgeTexto}>{p.PromoBadge}</Text></View> : null}
-                      </View>
-                      <Text style={styles.prodNombre} numberOfLines={2}>{p.Nombre}</Text>
-                      <View style={styles.prodPie}>
-                        <View style={{ flexShrink: 1 }}>
-                          <Text style={styles.prodPrecio}>{principal}</Text>
-                          {secundario ? <Text style={styles.prodSec} numberOfLines={1}>{secundario}</Text> : null}
+          {/* 2 · Pestañas de categoría (al bajar pasan a la barra superior) */}
+          <View onLayout={(e) => { yPestanas.current = e.nativeEvent.layout.y; }} style={fijas && { opacity: 0 }}>{Pestanas}</View>
+
+          {/* 3 · Promoción, lo más pedido y secciones */}
+          <View onLayout={(e) => { base.current = e.nativeEvent.layout.y; }}>
+            {promo && !busqueda ? (
+              <View style={styles.promo}>
+                <View style={styles.promoIcono}><Icono nombre="pricetags" tam={22} color={colores.marino} /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.promoEtiqueta}>PROMOCIÓN</Text>
+                  <Text style={styles.promoNombre}>{promo.PromoNombre}</Text>
+                </View>
+              </View>
+            ) : null}
+
+            {!busqueda && destacados.length > 2 ? (
+              <View style={{ gap: 12, paddingTop: 18 }}>
+                <Text style={styles.h2Pad}>Lo más pedido</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carrusel}>
+                  {destacados.map((p) => {
+                    const img = absImg(p.ImagenProducto);
+                    const { principal } = precioMonedas(parseFloat(p.PrecioPromo ?? p.PrecioUSD ?? 0), tasa);
+                    return (
+                      <TouchableOpacity key={p.idProducto} style={styles.destacado} activeOpacity={0.9} onPress={() => setAbierto(p)}>
+                        <View style={styles.destacadoFoto}>
+                          {img ? <Image source={{ uri: img }} style={styles.img} /> : <Icono nombre="cube-outline" tam={30} color={colores.textoTenue} />}
+                          {p.PromoBadge ? <View style={styles.badge}><Text style={styles.badgeTexto} numberOfLines={1}>{p.PromoBadge}</Text></View> : null}
+                          <View style={styles.destacadoControl}>
+                            <ControlCantidad cantidad={cantidadDe(p)} onMas={() => mas(p)} onMenos={() => menos(p)} flotante nombre={p.Nombre} />
+                          </View>
                         </View>
-                        <TouchableOpacity style={[styles.mas, cant > 0 && styles.masLleno]} onPress={() => agregar(p)} accessibilityLabel={`Agregar ${p.Nombre}`}>
-                          <Text style={[styles.masTexto, cant > 0 && { color: colores.marino }]}>{cant > 0 ? cant : '+'}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
+                        <Text style={styles.destacadoPrecio}>{principal}</Text>
+                        <Text style={styles.destacadoNombre} numberOfLines={2}>{p.Nombre}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
               </View>
-            </View>
-          ))}
+            ) : null}
+
+            {secciones.length === 0 && (
+              <View style={styles.sinResultados}>
+                <Icono nombre="search-outline" tam={36} color={colores.textoTenue} />
+                <Text style={styles.vacio}>{busqueda ? `No encontramos "${busqueda}".` : 'Esta tienda aún no tiene productos.'}</Text>
+              </View>
+            )}
+            {secciones.map(([titulo, lista]) => (
+              <View key={titulo} style={styles.seccion} onLayout={(e) => { posiciones.current[titulo] = e.nativeEvent.layout.y; }}>
+                <Text style={styles.h2}>{titulo}</Text>
+                {lista.map((p, i) => (
+                  <FilaProducto key={p.idProducto} p={p} tasa={tasa} cantidad={cantidadDe(p)} ultimo={i === lista.length - 1}
+                    onAbrir={() => setAbierto(p)} onMas={() => mas(p)} onMenos={() => menos(p)} />
+                ))}
+              </View>
+            ))}
+          </View>
         </ScrollView>
       )}
 
-      {totalItems > 0 && (
-        <TouchableOpacity style={styles.verCarrito} activeOpacity={0.9} onPress={() => router.push('/(tabs)/carrito')}>
-          <View style={styles.verCarritoNum}><Text style={styles.verCarritoNumTexto}>{totalItems}</Text></View>
-          <Text style={styles.verCarritoTexto}>Ver carrito</Text>
-          <View style={{ alignItems: 'flex-end', paddingRight: 10 }}>
-            <Text style={styles.verCarritoTotal}>{total.principal}</Text>
-            {total.secundario ? <Text style={styles.verCarritoSec}>{total.secundario}</Text> : null}
-          </View>
-        </TouchableOpacity>
-      )}
-
-      {abierto && <DetalleProducto producto={abierto} onClose={() => setAbierto(null)} onAgregar={agregar} />}
-    </SafeAreaView>
+      <BarraCarrito abajo={Math.max(insets.bottom, 12) + 4} />
+      {abierto && <DetalleProducto producto={abierto} nombreTienda={nombre} onClose={() => setAbierto(null)} />}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colores.marino },
-  cabecera: { backgroundColor: colores.marino, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 20, gap: 14 },
-  cabeceraFila: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  tiendaNombre: { fontFamily: fuentes.titulo, fontSize: 19, color: colores.blanco },
-  tiendaSub: { fontSize: 13, color: colores.sobreMarino },
-  abierta: { backgroundColor: colores.verde, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
-  abiertaTexto: { color: colores.marino, fontWeight: '800', fontSize: 12 },
-  buscar: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colores.blanco, borderRadius: 16, paddingHorizontal: 14, height: 48 },
-  buscarInput: { flex: 1, fontSize: 15, color: colores.marino },
+  root: { flex: 1, backgroundColor: colores.fondo },
+  barraCaja: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
+  barra: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 8 },
+  barraCompacta: { backgroundColor: colores.blanco, borderBottomWidth: 1, borderBottomColor: colores.separador },
+  barraTitulo: { flex: 1, textAlign: 'center', fontFamily: fuentes.titulo, fontSize: 16, color: colores.marino },
+  redondo: { width: 42, height: 42, borderRadius: 21, backgroundColor: colores.blanco, alignItems: 'center', justifyContent: 'center', ...sombraFuerte, shadowOpacity: 0.12 },
 
-  chips: { gap: 8, paddingHorizontal: 20, paddingTop: 14, backgroundColor: colores.fondo },
-  chip: { height: 40, paddingHorizontal: 16, borderRadius: 99, backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.borde, justifyContent: 'center' },
-  chipActivo: { backgroundColor: colores.marino, borderColor: colores.marino },
-  chipTexto: { fontWeight: '700', fontSize: 14, color: colores.marino },
+  info: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 6, gap: 10, backgroundColor: colores.blanco },
+  nombre: { fontFamily: fuentes.tituloFuerte, fontSize: 26, lineHeight: 31, color: colores.marino },
+  estadoFila: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  abierta: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colores.verdeClaro, borderRadius: 99, paddingHorizontal: 10, paddingVertical: 4 },
+  punto: { width: 7, height: 7, borderRadius: 4, backgroundColor: colores.verde },
+  abiertaTexto: { fontSize: 12, fontWeight: '800', color: colores.verdeTexto },
+  direccion: { flex: 1, fontSize: 13, color: colores.textoSuave },
+  datos: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  dato: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colores.superficie, borderRadius: 99, paddingHorizontal: 12, paddingVertical: 7 },
+  datoTexto: { fontSize: 13, fontWeight: '700', color: colores.marino },
+  pagos: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  pagosTexto: { fontSize: 13, color: colores.textoSuave },
 
-  promo: { marginTop: 14, marginHorizontal: 20, backgroundColor: colores.celesteClaro, borderRadius: 20, paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  promoEtiqueta: { fontSize: 12, fontWeight: '800', color: colores.marinoClaro, letterSpacing: 0.7 },
-  promoNombre: { fontFamily: fuentes.titulo, fontSize: 16, color: colores.marino },
-  promoVer: { minHeight: 44, justifyContent: 'center' },
-  promoVerTexto: { fontWeight: '800', fontSize: 14, color: colores.marino, textDecorationLine: 'underline' },
+  pestanas: { backgroundColor: colores.blanco, borderBottomWidth: 1, borderBottomColor: colores.separador },
+  pestanasFila: { paddingHorizontal: 16, gap: 4 },
+  pestana: { height: 48, paddingHorizontal: 12, justifyContent: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  pestanaOn: { borderBottomColor: colores.marino },
+  pestanaTexto: { fontWeight: '700', fontSize: 14, color: colores.textoSuave },
+  pestanaTextoOn: { fontWeight: '800', color: colores.marino },
 
-  seccion: { paddingTop: 16, paddingHorizontal: 20, gap: 10 },
-  h2: { fontFamily: fuentes.titulo, fontSize: 18, color: colores.marino },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  tarjeta: { width: '47.8%', backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.borde, borderRadius: 20, padding: 10, gap: 8 },
-  foto: { height: 96, borderRadius: 14, overflow: 'hidden' },
-  fotoImg: { width: '100%', height: '100%', resizeMode: 'cover' },
-  vida: { position: 'absolute', top: 8, right: 8, backgroundColor: colores.marino, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
-  vidaTexto: { color: colores.blanco, fontSize: 10, fontWeight: '800' },
-  badge: { position: 'absolute', top: 8, left: 8, backgroundColor: colores.verde, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 },
-  badgeTexto: { color: colores.marino, fontSize: 10, fontWeight: '800' },
-  prodNombre: { fontWeight: '800', fontSize: 14, lineHeight: 17, color: colores.marino },
-  prodPie: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 6 },
-  prodPrecio: { fontFamily: fuentes.titulo, fontSize: 16, color: colores.marino },
-  prodSec: { fontSize: 11, color: colores.textoSuave },
-  mas: { width: 44, height: 44, borderRadius: 22, backgroundColor: colores.marino, alignItems: 'center', justifyContent: 'center' },
-  masLleno: { backgroundColor: colores.celeste },
-  masTexto: { color: colores.blanco, fontWeight: '800', fontSize: 15 },
+  promo: { marginTop: 16, marginHorizontal: 20, backgroundColor: colores.celesteClaro, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  promoIcono: { width: 44, height: 44, borderRadius: 22, backgroundColor: colores.blanco, alignItems: 'center', justifyContent: 'center' },
+  promoEtiqueta: { fontSize: 11, fontWeight: '800', color: colores.marinoClaro, letterSpacing: 0.6 },
+  promoNombre: { fontFamily: fuentes.titulo, fontSize: 15, color: colores.marino },
 
-  verCarrito: {
-    position: 'absolute', left: 16, right: 16, bottom: 16, height: 62, borderRadius: 20, backgroundColor: colores.marino,
-    flexDirection: 'row', alignItems: 'center', paddingLeft: 18, paddingRight: 8, gap: 12,
-  },
-  verCarritoNum: { width: 34, height: 34, borderRadius: 12, backgroundColor: colores.celeste, alignItems: 'center', justifyContent: 'center' },
-  verCarritoNumTexto: { color: colores.marino, fontWeight: '800' },
-  verCarritoTexto: { flex: 1, color: colores.blanco, fontWeight: '800', fontSize: 16 },
-  verCarritoTotal: { fontFamily: fuentes.titulo, fontSize: 17, color: colores.blanco },
-  verCarritoSec: { fontSize: 11, color: colores.sobreMarino },
+  h2Pad: { paddingHorizontal: 20, fontFamily: fuentes.tituloFuerte, fontSize: 20, color: colores.marino },
+  carrusel: { paddingHorizontal: 20, gap: 12 },
+  destacado: { width: 136, gap: 2 },
+  destacadoFoto: { height: 136, borderRadius: 16, backgroundColor: colores.superficie, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  img: { width: '100%', height: '100%', resizeMode: 'cover' },
+  badge: { position: 'absolute', top: 8, left: 8, maxWidth: 110, backgroundColor: colores.verde, borderRadius: 99, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeTexto: { fontSize: 10, fontWeight: '800', color: colores.marino },
+  destacadoControl: { position: 'absolute', right: 6, bottom: 6 },
+  destacadoPrecio: { fontFamily: fuentes.titulo, fontSize: 15, color: colores.marino },
+  destacadoNombre: { fontSize: 13, color: colores.textoSuave, lineHeight: 17 },
 
-  error: { color: colores.error, textAlign: 'center', padding: 24, backgroundColor: colores.fondo },
-  vacio: { textAlign: 'center', color: colores.textoSuave, padding: 24 },
+  seccion: { paddingTop: 22 },
+  h2: { paddingHorizontal: 20, fontFamily: fuentes.tituloFuerte, fontSize: 20, color: colores.marino, marginBottom: 2 },
+
+  centro: { alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10, marginTop: 200 },
+  error: { color: colores.error, textAlign: 'center' },
+  reintentar: { backgroundColor: colores.marino, borderRadius: 99, paddingHorizontal: 22, minHeight: 44, justifyContent: 'center' },
+  reintentarTexto: { color: colores.blanco, fontWeight: '800' },
+  sinResultados: { alignItems: 'center', padding: 32, gap: 10 },
+  vacio: { textAlign: 'center', color: colores.textoSuave },
 });

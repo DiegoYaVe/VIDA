@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Text } from './Texto';
+import { Invitado } from './ui';
 import { BotonAtras } from './Cabecera';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
@@ -97,16 +98,7 @@ export default function PantallaPuntos({ conAtras = false }) {
   if (!token) {
     return (
       <SafeAreaView edges={['top']} style={styles.root}>
-        <View style={styles.contenido}>
-          <Text style={styles.titulo}>Puntos y premios</Text>
-          <View style={styles.saldo}>
-            <View style={styles.saldoDeco} />
-            <Text style={styles.saldoTexto}>Inicia sesión para ganar puntos con cada pedido y con tu racha de agua.</Text>
-            <TouchableOpacity style={styles.entrar} onPress={() => router.push('/(auth)/login')}>
-              <Text style={styles.entrarTexto}>Entrar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <Invitado icono="gift-outline" titulo="Gana puntos VIDA" texto="Suma puntos con cada pedido y con tu racha de agua, y cámbialos por premios y descuentos." />
       </SafeAreaView>
     );
   }

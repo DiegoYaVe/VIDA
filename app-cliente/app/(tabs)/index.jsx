@@ -1,22 +1,23 @@
-// Inicio de la app cliente (diseño "Agua VIDA", propuesta B): saludo con el
-// símbolo VIDA, dirección y avatar; hidratación del día; repetir el último
-// pedido; categorías en píldoras y productos de la tienda en lista.
+// Inicio de la app cliente (estilo apps de delivery): "Entregar en" con la
+// tienda, buscador, categorías con icono, hidratación del día, repetir el
+// último pedido, tiendas cercanas en carrusel y productos de la tienda con
+// su control de cantidad (+ → − n +) en cada uno.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, FlatList, TouchableOpacity, StyleSheet, Image, Alert, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../../components/Texto';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import Svg, { Path, Circle } from 'react-native-svg';
 import { reprogramarRecordatorios } from '../../services/recordatorios';
-import { obtenerUbicacion, ordenarPorCercania } from '../../services/cercania';
+import { obtenerUbicacion, ordenarPorCercania, textoDistancia } from '../../services/cercania';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import useCarritoStore from '../../store/carritoStore';
 import { absImg } from '../../constants/config';
-import { colores, fuentes, logos } from '../../constants/tema';
+import { colores, fuentes } from '../../constants/tema';
 import DetalleProducto from '../../components/DetalleProducto';
 import Anillo from '../../components/Anillo';
+import { Icono, ControlCantidad, Buscador, TituloSeccion, PortadaTienda, useCantidades } from '../../components/ui';
 import { useTasaReferencial, precioMonedas } from '../../services/moneda';
 import { agregarConTienda } from '../../services/carrito';
 
@@ -24,43 +25,46 @@ function saludo() {
   const h = new Date().getHours();
   return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
 }
-const iniciales = (c) => `${String(c?.Nombre || '').trim()[0] || ''}${String(c?.Apellidos || '').trim()[0] || ''}`.toUpperCase() || 'VI';
 const haceDias = (f) => {
   const d = Math.floor((Date.now() - new Date(f).getTime()) / 86400000);
   return d <= 0 ? 'hoy' : d === 1 ? 'ayer' : `hace ${d} días`;
 };
+// Icono para cada categoría según su nombre (las categorías las crea cada tienda)
+const ICONOS_CAT = [
+  [/agua|bebida|refresco|jugo/i, 'water'], [/harina|arroz|pasta|grano|v[ií]veres/i, 'basket'],
+  [/limpie|hogar|deterg/i, 'sparkles'], [/l[aá]cte|leche|queso/i, 'cafe'], [/carne|pollo|charcut/i, 'restaurant'],
+  [/fruta|verdura|vegetal/i, 'leaf'], [/snack|dulce|galleta|chuche/i, 'ice-cream'], [/higiene|personal|cuidado/i, 'happy'],
+  [/pan|panader/i, 'pizza'], [/mascota/i, 'paw'],
+];
+const iconoCategoria = (n) => ICONOS_CAT.find(([re]) => re.test(n || ''))?.[1] || 'pricetag';
 
-export function IconoMas({ color = colores.marino, tam = 18 }) {
-  return (
-    <Svg width={tam} height={tam} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.8} strokeLinecap="round">
-      <Path d="M12 5v14M5 12h14" />
-    </Svg>
-  );
-}
-function IconoUbicacion() {
-  return (
-    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colores.marino} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M12 22s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z" />
-      <Circle cx={12} cy={10} r={2.5} />
-    </Svg>
-  );
-}
-
-// Fila de producto (también la usa la tienda): foto, nombre, Bs, USD y +
-export function FilaProducto({ p, tasa, cantidad, onAbrir, onAgregar }) {
-  const { principal, secundario } = precioMonedas(parseFloat(p.PrecioUSD || 0), tasa);
+// Fila de producto (también la usa la tienda): texto a la izquierda, foto a
+// la derecha con el control de cantidad encima
+export function FilaProducto({ p, tasa, cantidad, onAbrir, onMas, onMenos, ultimo }) {
+  const precio = parseFloat(p.PrecioPromo ?? p.PrecioUSD ?? 0);
+  const { principal, secundario } = precioMonedas(precio, tasa);
+  const antes = p.PrecioPromo != null && parseFloat(p.PrecioUSD) > precio ? precioMonedas(parseFloat(p.PrecioUSD), tasa).principal : null;
   const img = absImg(p.ImagenProducto);
+  const stock = parseFloat(p.StockDisponible ?? 0);
   return (
-    <TouchableOpacity style={styles.fila} activeOpacity={0.88} onPress={onAbrir}>
-      <View style={styles.filaFoto}>{img ? <Image source={{ uri: img }} style={styles.filaImg} /> : null}</View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.filaNombre} numberOfLines={1}>{p.Nombre}</Text>
+    <TouchableOpacity style={[styles.fila, !ultimo && styles.filaBorde]} activeOpacity={0.7} onPress={onAbrir}>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text style={styles.filaNombre} numberOfLines={2}>{p.Nombre}</Text>
+        <View style={styles.filaPrecios}>
+          <Text style={styles.filaPrecio}>{principal}</Text>
+          {antes ? <Text style={styles.filaAntes}>{antes}</Text> : null}
+        </View>
         {secundario ? <Text style={styles.filaSec} numberOfLines={1}>{secundario}</Text> : null}
+        {p.PromoBadge ? <View style={styles.filaPromo}><Text style={styles.filaPromoTexto}>{p.PromoBadge}</Text></View> : null}
       </View>
-      <Text style={styles.filaPrecio}>{principal}</Text>
-      <TouchableOpacity style={[styles.mas, cantidad > 0 && styles.masLleno]} onPress={onAgregar} accessibilityLabel={`Agregar ${p.Nombre}`}>
-        {cantidad > 0 ? <Text style={styles.masNum}>{cantidad}</Text> : <IconoMas />}
-      </TouchableOpacity>
+      <View>
+        <View style={styles.filaFoto}>
+          {img ? <Image source={{ uri: img }} style={styles.filaImg} /> : <Icono nombre="cube-outline" tam={30} color={colores.textoTenue} />}
+        </View>
+        <View style={styles.filaControl}>
+          <ControlCantidad cantidad={cantidad} onMas={onMas} onMenos={onMenos} max={stock > 0 ? Math.floor(stock) : 99} flotante nombre={p.Nombre} />
+        </View>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -81,8 +85,8 @@ export default function HomeScreen() {
   const [hidra, setHidra] = useState(null);
   const [vasoOcupado, setVasoOcupado] = useState(false);
 
-  const items = useCarritoStore((s) => s.items);
   const idPVCarrito = useCarritoStore((s) => s.idPuntoVenta);
+  const { cantidadDe, mas, menos } = useCantidades();
 
   const cargar = useCallback(async () => {
     try {
@@ -135,6 +139,7 @@ export default function HomeScreen() {
 
   // Tienda que se muestra: la del carrito, la del último pedido o la más cercana (o la primera)
   const idTienda = idPVCarrito || ultimo?.idPuntoVenta || sucursales[0]?.idPuntoVenta || null;
+  const tienda = sucursales.find((s) => String(s.idPuntoVenta) === String(idTienda));
   const deTienda = useMemo(
     () => (idTienda ? productos.filter((p) => String(p.idPuntoVenta) === String(idTienda)) : productos),
     [productos, idTienda]);
@@ -144,14 +149,11 @@ export default function HomeScreen() {
     return [...vistas.entries()].map(([id, nombre]) => ({ id, nombre }));
   }, [deTienda]);
   const lista = useMemo(() => (categoria ? deTienda.filter((p) => p.idCategoria === categoria) : deTienda), [deTienda, categoria]);
-  const agua = useMemo(() => deTienda.find((p) => /agua/i.test(p.Nombre || '')) || null, [deTienda]);
-
-  const cantidadDe = (p) => (String(idPVCarrito) === String(p.idPuntoVenta) ? items.find((i) => i.idProducto === p.idProducto)?.Cantidad ?? 0 : 0);
-  const agregar = (p, cantidad = 1) => agregarConTienda(p, cantidad);
+  const promos = useMemo(() => deTienda.filter((p) => p.PromoNombre || p.PromoBadge).slice(0, 10), [deTienda]);
 
   const repetir = () => {
     if (!ultimo) return;
-    const ok = agregarConTienda(
+    agregarConTienda(
       { ...ultimo.items[0], idPuntoVenta: ultimo.idPuntoVenta, NombreSucursal: ultimo.NombreSucursal },
       ultimo.items[0].Cantidad,
       () => {
@@ -159,106 +161,125 @@ export default function HomeScreen() {
           { idProducto: it.idProducto, Nombre: it.Nombre, PrecioUSD: it.PrecioUSD, ImagenProducto: it.ImagenProducto }, it.Cantidad));
         router.push('/(tabs)/carrito');
       });
-    return ok;
   };
 
-  const direccion = ultimo?.DireccionEntrega?.split('—')[0]?.trim()
-    || sucursales.find((s) => String(s.idPuntoVenta) === String(idTienda))?.NomComercial || 'Elige tu tienda';
+  const direccion = ultimo?.DireccionEntrega?.split('—')[0]?.trim() || tienda?.NomComercial || 'Elige tu tienda';
   const meta = Math.max(1, Number(hidra?.meta) || 8);
   const vasos = Number(hidra?.vasosHoy) || 0;
   const faltan = Math.max(0, meta - vasos);
+  const abrirTienda = () => idTienda && router.push(`/sucursal/${idTienda}`);
 
   const Cabecera = (
-    <View>
-      {/* Hidratación */}
+    <View style={{ gap: 22, paddingBottom: 8 }}>
+      {/* Categorías con icono */}
+      {categorias.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cats}>
+          {[{ id: null, nombre: 'Todo' }, ...categorias].map((c) => {
+            const activa = categoria === c.id;
+            return (
+              <TouchableOpacity key={String(c.id)} style={styles.cat} onPress={() => setCategoria(c.id)} accessibilityState={{ selected: activa }}>
+                <View style={[styles.catIcono, activa && styles.catIconoOn]}>
+                  <Icono nombre={c.id == null ? 'grid' : iconoCategoria(c.nombre)} tam={26} color={activa ? colores.blanco : colores.marino} />
+                </View>
+                <Text style={[styles.catTexto, activa && styles.catTextoOn]} numberOfLines={1}>{c.nombre}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
+      {/* Hidratación del día (compacta) */}
       {token && hidra ? (
-        <View style={styles.hidra}>
+        <TouchableOpacity style={styles.hidra} activeOpacity={0.92} onPress={() => router.push('/mi-consumo')}>
           <View style={styles.hidraDeco} />
+          <Anillo tam={64} grosor={8} avance={hidra.activa ? vasos / meta : 0} color={colores.celeste} pista={colores.marinoSuave}>
+            <View style={styles.hidraCentro}><Text style={styles.hidraNum}>{hidra.activa ? vasos : 0}/{meta}</Text></View>
+          </Anillo>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={styles.hidraTitulo}>
+              {!hidra.activa ? 'Mide tu agua del día' : faltan === 0 ? '¡Meta de agua cumplida!' : `Te faltan ${faltan} vaso${faltan === 1 ? '' : 's'}`}
+            </Text>
+            <Text style={styles.hidraSub}>{hidra.activa ? `Racha de ${Number(hidra.racha) || 0} día${Number(hidra.racha) === 1 ? '' : 's'}` : 'Gana puntos VIDA por racha'}</Text>
+          </View>
           {hidra.activa ? (
-            <>
-              <Anillo tam={104} grosor={12} avance={vasos / meta} color={colores.celeste} pista={colores.marinoSuave}>
-                <View style={styles.hidraCentro}>
-                  <Text style={styles.hidraNum}>{vasos}/{meta}</Text>
-                  <Text style={styles.hidraUnidad}>vasos</Text>
-                </View>
-              </Anillo>
-              <View style={styles.hidraTexto}>
-                <Text style={styles.hidraTitulo}>
-                  {faltan === 0 ? '¡Meta cumplida!\nSigue así.' : `${vasos === 0 ? 'Empieza tu día.' : 'Vas bien hoy.'}\nTe faltan ${faltan} vaso${faltan === 1 ? '' : 's'}.`}
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TouchableOpacity style={styles.hidraBtn} onPress={tomarVaso} disabled={vasoOcupado}>
-                    <Text style={styles.hidraBtnTexto}>+ 1 vaso</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.hidraRacha} onPress={() => router.push('/mi-consumo')}>
-                    <Text style={styles.hidraRachaTexto}>Racha {Number(hidra.racha) || 0} día{Number(hidra.racha) === 1 ? '' : 's'}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
-          ) : (
-            <>
-              <Anillo tam={104} grosor={12} avance={0} pista={colores.marinoSuave}>
-                <View style={styles.hidraCentro}><Text style={styles.hidraNum}>0/8</Text><Text style={styles.hidraUnidad}>vasos</Text></View>
-              </Anillo>
-              <View style={styles.hidraTexto}>
-                <Text style={styles.hidraTitulo}>Mide tu agua del día.{'\n'}Gana puntos por racha.</Text>
-                <TouchableOpacity style={[styles.hidraBtn, { alignSelf: 'flex-start' }]} onPress={() => router.push('/mi-consumo')}>
-                  <Text style={styles.hidraBtnTexto}>Activar</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-        </View>
+            <TouchableOpacity style={styles.hidraBtn} onPress={tomarVaso} disabled={vasoOcupado} accessibilityLabel="Sumar un vaso de agua">
+              <Icono nombre="add" tam={18} /><Text style={styles.hidraBtnTexto}>Vaso</Text>
+            </TouchableOpacity>
+          ) : <Icono nombre="chevron-forward" color={colores.blanco} />}
+        </TouchableOpacity>
       ) : null}
 
-      {/* Repetir el último pedido (o pedir el agua VIDA) */}
+      {/* Repetir el último pedido */}
       {ultimo ? (() => {
         const it = ultimo.items[0];
-        const { principal, secundario } = precioMonedas(it.PrecioUSD, tasa);
         const img = absImg(it.ImagenProducto);
         return (
           <View style={styles.repetir}>
-            <View style={styles.repetirFoto}>{img ? <Image source={{ uri: img }} style={styles.repetirImg} /> : null}</View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={styles.repetirNombre} numberOfLines={2}>{it.Nombre}{ultimo.items.length > 1 ? ` y ${ultimo.items.length - 1} más` : ''}</Text>
-              <Text style={styles.repetirSub}>Tu último pedido · {haceDias(ultimo.FechaCreacion)}</Text>
-              <Text style={styles.repetirPrecio}>{principal} {secundario ? <Text style={styles.repetirPrecioSec}>{secundario}</Text> : null}</Text>
+            <View style={styles.repetirFoto}>{img ? <Image source={{ uri: img }} style={styles.repetirImg} /> : <Icono nombre="refresh" color={colores.textoTenue} />}</View>
+            <View style={{ flex: 1, gap: 1 }}>
+              <Text style={styles.repetirEtiqueta}>Pídelo otra vez · {haceDias(ultimo.FechaCreacion)}</Text>
+              <Text style={styles.repetirNombre} numberOfLines={1}>{it.Nombre}{ultimo.items.length > 1 ? ` y ${ultimo.items.length - 1} más` : ''}</Text>
+              <Text style={styles.repetirSub} numberOfLines={1}>{ultimo.NombreSucursal}</Text>
             </View>
-            <TouchableOpacity style={styles.repetirBtn} onPress={repetir}>
+            <TouchableOpacity style={styles.repetirBtn} onPress={repetir} accessibilityLabel="Repetir el último pedido">
+              <Icono nombre="refresh" tam={16} color={colores.blanco} />
               <Text style={styles.repetirBtnTexto}>Repetir</Text>
-            </TouchableOpacity>
-          </View>
-        );
-      })() : agua ? (() => {
-        const { principal, secundario } = precioMonedas(parseFloat(agua.PrecioUSD || 0), tasa);
-        const img = absImg(agua.ImagenProducto);
-        return (
-          <View style={styles.repetir}>
-            <View style={styles.repetirFoto}>{img ? <Image source={{ uri: img }} style={styles.repetirImg} /> : null}</View>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={styles.repetirNombre} numberOfLines={2}>{agua.Nombre}</Text>
-              <Text style={styles.repetirSub}>Pídela en {agua.NombreSucursal}</Text>
-              <Text style={styles.repetirPrecio}>{principal} {secundario ? <Text style={styles.repetirPrecioSec}>{secundario}</Text> : null}</Text>
-            </View>
-            <TouchableOpacity style={styles.repetirBtn} onPress={() => agregar(agua)}>
-              <Text style={styles.repetirBtnTexto}>Agregar</Text>
             </TouchableOpacity>
           </View>
         );
       })() : null}
 
-      {/* Categorías */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={{ marginTop: 20 }}>
-        {[{ id: null, nombre: 'Todo' }, ...categorias].map((c) => {
-          const activa = categoria === c.id;
-          return (
-            <TouchableOpacity key={String(c.id)} style={[styles.chip, activa && styles.chipActivo]} onPress={() => setCategoria(c.id)}>
-              <Text style={[styles.chipTexto, activa && { color: colores.blanco }]} numberOfLines={1}>{c.nombre}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      {/* Tiendas cercanas */}
+      {sucursales.length > 1 && (
+        <View style={{ gap: 12 }}>
+          <TituloSeccion titulo="Tiendas cerca de ti" accion="Ver todas" onAccion={() => router.push('/(tabs)/tiendas')} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tiendas}>
+            {sucursales.slice(0, 8).map((s) => {
+              const actual = String(s.idPuntoVenta) === String(idTienda);
+              return (
+                <TouchableOpacity key={s.idPuntoVenta} style={styles.tiendaCard} activeOpacity={0.9} onPress={() => router.push(`/sucursal/${s.idPuntoVenta}`)}>
+                  <PortadaTienda nombre={s.NomComercial} id={s.idPuntoVenta} alto={110} radio={16}>
+                    {actual ? <View style={styles.tiendaSello}><Text style={styles.tiendaSelloTexto}>Tu tienda</Text></View> : null}
+                  </PortadaTienda>
+                  <Text style={styles.tiendaNombre} numberOfLines={1}>{s.NomComercial}</Text>
+                  <Text style={styles.tiendaSub} numberOfLines={1}>
+                    {[textoDistancia(s.DistanciaKm), 'Envío a domicilio'].filter(Boolean).join(' · ')}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Ofertas */}
+      {promos.length > 0 && !categoria && (
+        <View style={{ gap: 12 }}>
+          <TituloSeccion titulo="Ofertas de hoy" />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tiendas}>
+            {promos.map((p) => {
+              const img = absImg(p.ImagenProducto);
+              const precio = precioMonedas(parseFloat(p.PrecioPromo ?? p.PrecioUSD ?? 0), tasa).principal;
+              return (
+                <TouchableOpacity key={p.idProducto} style={styles.oferta} activeOpacity={0.9} onPress={() => setProductoAbierto(p)}>
+                  <View style={styles.ofertaFoto}>
+                    {img ? <Image source={{ uri: img }} style={styles.filaImg} /> : <Icono nombre="pricetag-outline" tam={30} color={colores.textoTenue} />}
+                    <View style={styles.ofertaBadge}><Text style={styles.ofertaBadgeTexto} numberOfLines={1}>{p.PromoBadge || 'Oferta'}</Text></View>
+                    <View style={styles.ofertaControl}>
+                      <ControlCantidad cantidad={cantidadDe(p)} onMas={() => mas(p)} onMenos={() => menos(p)} flotante nombre={p.Nombre} />
+                    </View>
+                  </View>
+                  <Text style={styles.ofertaPrecio}>{precio}</Text>
+                  <Text style={styles.ofertaNombre} numberOfLines={2}>{p.Nombre}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
+      <TituloSeccion titulo={categoria ? categorias.find((c) => c.id === categoria)?.nombre : 'Todo en tu tienda'}
+        sub={tienda?.NomComercial} accion={idTienda ? 'Ver tienda' : null} onAccion={abrirTienda} />
     </View>
   );
 
@@ -266,27 +287,26 @@ export default function HomeScreen() {
     <SafeAreaView edges={['top']} style={styles.root}>
       <StatusBar style="dark" />
       <View style={styles.cabecera}>
-        <View style={styles.cabeceraIzq}>
-          <View style={styles.simbolo}>
-            <Image source={logos.simboloClaro} style={styles.simboloImg} resizeMode="contain" accessibilityLabel="VIDA" />
+        <TouchableOpacity style={styles.entregar} onPress={() => router.push('/(tabs)/tiendas')} accessibilityLabel="Cambiar de tienda">
+          <Text style={styles.saludo} numberOfLines={1}>{saludo()}{cliente?.Nombre ? `, ${String(cliente.Nombre).split(' ')[0]}` : ''}</Text>
+          <View style={styles.entregarFila}>
+            <Text style={styles.entregarTexto} numberOfLines={1}>{direccion}</Text>
+            <Icono nombre="chevron-down" tam={18} />
           </View>
-          <View style={{ flexShrink: 1 }}>
-            <Text style={styles.saludo} numberOfLines={1}>{saludo()}{cliente?.Nombre ? `, ${String(cliente.Nombre).split(' ')[0]}` : ''}</Text>
-            <TouchableOpacity style={styles.direccion} onPress={() => router.push('/(tabs)/tiendas')} accessibilityLabel="Cambiar de tienda">
-              <IconoUbicacion />
-              <Text style={styles.direccionTexto} numberOfLines={1}>{direccion}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        <TouchableOpacity style={styles.avatar} onPress={() => router.push(token ? '/(tabs)/perfil' : '/(auth)/login')} accessibilityLabel="Mi perfil">
-          <Text style={styles.avatarTexto}>{token ? iniciales(cliente) : '?'}</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.campana} onPress={() => router.push('/(tabs)/pedidos')} accessibilityLabel="Mis pedidos">
+          <Icono nombre="receipt-outline" tam={22} />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.buscarCaja}>
+        <Buscador placeholder={tienda ? `Buscar en ${tienda.NomComercial}` : 'Buscar productos'} onPress={abrirTienda} />
       </View>
 
       {loading ? (
         <View style={styles.centro}><ActivityIndicator size="large" color={colores.marino} /></View>
       ) : error ? (
         <View style={styles.centro}>
+          <Icono nombre="cloud-offline-outline" tam={40} color={colores.textoTenue} />
           <Text style={styles.error}>{error}</Text>
           <TouchableOpacity style={styles.reintentar} onPress={cargar}><Text style={styles.reintentarTexto}>Reintentar</Text></TouchableOpacity>
         </View>
@@ -294,8 +314,9 @@ export default function HomeScreen() {
         <FlatList
           data={lista}
           keyExtractor={(p) => `${p.idProducto}-${p.idPuntoVenta}`}
-          renderItem={({ item }) => (
-            <FilaProducto p={item} tasa={tasa} cantidad={cantidadDe(item)} onAbrir={() => setProductoAbierto(item)} onAgregar={() => agregar(item)} />
+          renderItem={({ item, index }) => (
+            <FilaProducto p={item} tasa={tasa} cantidad={cantidadDe(item)} ultimo={index === lista.length - 1}
+              onAbrir={() => setProductoAbierto(item)} onMas={() => mas(item)} onMenos={() => menos(item)} />
           )}
           ListHeaderComponent={Cabecera}
           contentContainerStyle={styles.lista}
@@ -305,77 +326,80 @@ export default function HomeScreen() {
         />
       )}
 
-      {productoAbierto && (
-        <DetalleProducto producto={productoAbierto} onClose={() => setProductoAbierto(null)} onAgregar={agregar} />
-      )}
+      {productoAbierto && <DetalleProducto producto={productoAbierto} onClose={() => setProductoAbierto(null)} />}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colores.fondo },
-  cabecera: { paddingTop: 20, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
-  cabeceraIzq: { flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 1 },
-  simbolo: { width: 48, height: 48, borderRadius: 15, backgroundColor: colores.blanco, borderWidth: 1, borderColor: colores.borde, alignItems: 'center', justifyContent: 'center' },
-  simboloImg: { width: 22, height: 36 },
-  saludo: { fontSize: 13, color: colores.textoSuave },
-  direccion: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 },
-  direccionTexto: { fontFamily: fuentes.titulo, fontSize: 17, color: colores.marino, flexShrink: 1 },
-  avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: colores.marino, alignItems: 'center', justifyContent: 'center' },
-  avatarTexto: { fontFamily: fuentes.titulo, fontSize: 15, color: colores.blanco },
+  cabecera: { paddingTop: 10, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  entregar: { flex: 1, minHeight: 48, justifyContent: 'center' },
+  saludo: { fontSize: 13, color: colores.textoSuave, fontWeight: '600' },
+  entregarFila: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  entregarTexto: { fontFamily: fuentes.tituloFuerte, fontSize: 18, color: colores.marino, flexShrink: 1 },
+  campana: { width: 44, height: 44, borderRadius: 22, backgroundColor: colores.superficie, alignItems: 'center', justifyContent: 'center' },
+  buscarCaja: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14 },
 
-  lista: { paddingBottom: 24 },
+  lista: { paddingTop: 4, paddingBottom: 24 },
 
-  hidra: {
-    marginTop: 16, marginHorizontal: 20, backgroundColor: colores.marino, borderRadius: 28, padding: 20,
-    flexDirection: 'row', alignItems: 'center', gap: 18, overflow: 'hidden',
-  },
-  hidraDeco: { position: 'absolute', right: -40, bottom: -60, width: 200, height: 200, borderRadius: 100, backgroundColor: colores.marinoClaro },
-  hidraCentro: { width: 80, height: 80, borderRadius: 40, backgroundColor: colores.marino, alignItems: 'center', justifyContent: 'center' },
-  hidraNum: { fontFamily: fuentes.tituloFuerte, fontSize: 26, lineHeight: 28, color: colores.blanco },
-  hidraUnidad: { fontSize: 11, color: colores.sobreMarino },
-  hidraTexto: { flex: 1, gap: 8 },
-  hidraTitulo: { fontFamily: fuentes.titulo, fontSize: 18, lineHeight: 22, color: colores.blanco },
-  hidraBtn: { backgroundColor: colores.celeste, height: 44, paddingHorizontal: 14, borderRadius: 14, justifyContent: 'center' },
-  hidraBtnTexto: { color: colores.marino, fontWeight: '800', fontSize: 14 },
-  hidraRacha: { backgroundColor: 'rgba(255,255,255,0.14)', height: 44, paddingHorizontal: 14, borderRadius: 14, justifyContent: 'center' },
-  hidraRachaTexto: { color: colores.blanco, fontWeight: '700', fontSize: 14 },
+  cats: { paddingHorizontal: 16, gap: 4 },
+  cat: { width: 76, alignItems: 'center', gap: 6 },
+  catIcono: { width: 60, height: 60, borderRadius: 20, backgroundColor: colores.superficie, alignItems: 'center', justifyContent: 'center' },
+  catIconoOn: { backgroundColor: colores.marino },
+  catTexto: { fontSize: 12, fontWeight: '700', color: colores.textoSuave, maxWidth: 76 },
+  catTextoOn: { color: colores.marino, fontWeight: '800' },
 
-  repetir: {
-    marginTop: 14, marginHorizontal: 20, backgroundColor: colores.blanco, borderRadius: 22, padding: 14,
-    flexDirection: 'row', alignItems: 'center', gap: 14, borderWidth: 1, borderColor: colores.borde,
-  },
-  repetirFoto: { width: 60, height: 72, borderRadius: 16, backgroundColor: colores.celesteClaro, overflow: 'hidden' },
+  hidra: { marginHorizontal: 20, backgroundColor: colores.marino, borderRadius: 20, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14, overflow: 'hidden' },
+  hidraDeco: { position: 'absolute', right: -30, top: -50, width: 140, height: 140, borderRadius: 70, backgroundColor: colores.marinoClaro },
+  hidraCentro: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  hidraNum: { fontFamily: fuentes.tituloFuerte, fontSize: 14, color: colores.blanco },
+  hidraTitulo: { fontFamily: fuentes.titulo, fontSize: 15, color: colores.blanco },
+  hidraSub: { fontSize: 12, color: colores.sobreMarino },
+  hidraBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colores.celeste, height: 40, paddingHorizontal: 12, borderRadius: 99 },
+  hidraBtnTexto: { color: colores.marino, fontWeight: '800', fontSize: 13 },
+
+  repetir: { marginHorizontal: 20, backgroundColor: colores.superficie, borderRadius: 20, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  repetirFoto: { width: 54, height: 54, borderRadius: 14, backgroundColor: colores.blanco, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   repetirImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  repetirEtiqueta: { fontSize: 11, fontWeight: '800', color: colores.verdeTexto, textTransform: 'uppercase', letterSpacing: 0.4 },
   repetirNombre: { fontWeight: '800', fontSize: 15, color: colores.marino },
-  repetirSub: { fontSize: 13, color: colores.textoSuave },
-  repetirPrecio: { fontFamily: fuentes.titulo, fontSize: 16, color: colores.marino },
-  repetirPrecioSec: { fontFamily: fuentes.textoSemi, fontSize: 12, color: colores.textoSuave },
-  repetirBtn: { backgroundColor: colores.marino, height: 46, paddingHorizontal: 16, borderRadius: 14, justifyContent: 'center' },
-  repetirBtnTexto: { color: colores.blanco, fontWeight: '800', fontSize: 14 },
+  repetirSub: { fontSize: 12, color: colores.textoSuave },
+  repetirBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colores.marino, height: 40, paddingHorizontal: 14, borderRadius: 99 },
+  repetirBtnTexto: { color: colores.blanco, fontWeight: '800', fontSize: 13 },
 
-  chips: { paddingHorizontal: 20, gap: 8, paddingBottom: 12 },
-  chip: { height: 40, paddingHorizontal: 16, borderRadius: 99, backgroundColor: colores.blanco, justifyContent: 'center' },
-  chipActivo: { backgroundColor: colores.marino },
-  chipTexto: { fontWeight: '700', fontSize: 14, color: colores.marino },
+  tiendas: { paddingHorizontal: 20, gap: 12 },
+  tiendaCard: { width: 210, gap: 4 },
+  tiendaSello: { position: 'absolute', top: 10, left: 10, backgroundColor: colores.celeste, borderRadius: 99, paddingHorizontal: 10, paddingVertical: 4 },
+  tiendaSelloTexto: { fontSize: 11, fontWeight: '800', color: colores.marino },
+  tiendaNombre: { marginTop: 4, fontWeight: '800', fontSize: 15, color: colores.marino },
+  tiendaSub: { fontSize: 12, color: colores.textoSuave },
 
-  fila: {
-    marginHorizontal: 20, marginBottom: 10, backgroundColor: colores.blanco, borderRadius: 20,
-    paddingVertical: 10, paddingLeft: 10, paddingRight: 12, flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderWidth: 1, borderColor: colores.borde,
-  },
-  filaFoto: { width: 54, height: 54, borderRadius: 14, backgroundColor: colores.celesteClaro, overflow: 'hidden' },
-  filaImg: { width: '100%', height: '100%', resizeMode: 'cover' },
-  filaNombre: { fontWeight: '800', fontSize: 15, color: colores.marino },
+  oferta: { width: 140, gap: 2 },
+  ofertaFoto: { height: 140, borderRadius: 16, backgroundColor: colores.superficie, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  ofertaBadge: { position: 'absolute', top: 8, left: 8, maxWidth: 110, backgroundColor: colores.verde, borderRadius: 99, paddingHorizontal: 8, paddingVertical: 3 },
+  ofertaBadgeTexto: { fontSize: 10, fontWeight: '800', color: colores.marino },
+  ofertaControl: { position: 'absolute', right: 8, bottom: 8 },
+  ofertaPrecio: { fontFamily: fuentes.titulo, fontSize: 15, color: colores.marino },
+  ofertaNombre: { fontSize: 13, color: colores.textoSuave, lineHeight: 17 },
+
+  fila: { marginHorizontal: 20, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  filaBorde: { borderBottomWidth: 1, borderBottomColor: colores.separador },
+  filaNombre: { fontWeight: '800', fontSize: 15, lineHeight: 19, color: colores.marino },
+  filaPrecios: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  filaPrecio: { fontFamily: fuentes.tituloMedio, fontSize: 15, color: colores.marino },
+  filaAntes: { fontSize: 13, color: colores.textoTenue, textDecorationLine: 'line-through' },
   filaSec: { fontSize: 12, color: colores.textoSuave },
-  filaPrecio: { fontFamily: fuentes.titulo, fontSize: 16, color: colores.marino },
-  mas: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: colores.marino, alignItems: 'center', justifyContent: 'center' },
-  masLleno: { backgroundColor: colores.celeste, borderColor: colores.celeste },
-  masNum: { fontWeight: '800', fontSize: 15, color: colores.marino },
+  filaPromo: { alignSelf: 'flex-start', marginTop: 2, backgroundColor: colores.verdeClaro, borderRadius: 99, paddingHorizontal: 8, paddingVertical: 2 },
+  filaPromoTexto: { fontSize: 11, fontWeight: '800', color: colores.verdeTexto },
+  filaFoto: { width: 96, height: 96, borderRadius: 16, backgroundColor: colores.superficie, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  filaImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  // Dentro de la foto: en Android lo que sobresale del padre no recibe toques
+  filaControl: { position: 'absolute', right: 5, bottom: 5 },
 
-  centro: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  centro: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 10 },
   error: { color: colores.error, textAlign: 'center', fontSize: 14 },
-  reintentar: { marginTop: 12, backgroundColor: colores.marino, borderRadius: 14, paddingHorizontal: 22, minHeight: 44, justifyContent: 'center' },
+  reintentar: { backgroundColor: colores.marino, borderRadius: 99, paddingHorizontal: 22, minHeight: 44, justifyContent: 'center' },
   reintentarTexto: { color: colores.blanco, fontWeight: '800' },
   vacio: { textAlign: 'center', color: colores.textoSuave, padding: 24 },
 });

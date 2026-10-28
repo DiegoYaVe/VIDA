@@ -12,7 +12,11 @@ export const colores = {
   verde: '#4DAD66',
   verdeTexto: '#1F7A3F',
   verdeClaro: '#E3F3E7',
-  fondo: '#F2F9FB',
+  // Fondo blanco y superficies grises neutras (estilo apps de delivery):
+  // el color queda para la marca y las acciones
+  fondo: '#FFFFFF',
+  superficie: '#F3F6F8',
+  separador: '#EDF1F4',
   tarjeta: '#FFFFFF',
   borde: '#DCEEF3',
   bordeFuerte: '#CFE4EB',
@@ -46,6 +50,14 @@ export const sombra = {
   shadowRadius: 12,
   shadowOffset: { width: 0, height: 4 },
   elevation: 3,
+};
+// Para lo que flota sobre el contenido (barra del carrito, botones del mapa)
+export const sombraFuerte = {
+  shadowColor: '#001034',
+  shadowOpacity: 0.18,
+  shadowRadius: 16,
+  shadowOffset: { width: 0, height: 6 },
+  elevation: 8,
 };
 
 export const logos = {
