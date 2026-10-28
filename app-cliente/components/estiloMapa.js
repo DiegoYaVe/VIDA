@@ -10,7 +10,8 @@ export const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
 // Tramos de la rampa de color según la luminancia del mapa base (en gris)
-const RAMPA = [[0, hex('#3A4A62')], [0.55, hex('#6E8299')], [0.8, hex('#C4E2EC')], [0.93, hex('#DDEFF5')], [1, hex('#F7FBFD')]];
+// Claro y con poco contraste (como Uber) para que la ruta marina resalte
+const RAMPA = [[0, hex('#5F7088')], [0.55, hex('#98AABD')], [0.8, hex('#D6EAF1')], [0.93, hex('#E6F3F7')], [1, hex('#FFFFFF')]];
 function tabla(c) {
   const v = [];
   for (let i = 0; i <= 100; i++) {
@@ -28,7 +29,7 @@ export const FILTRO_SVG = `<svg width="0" height="0" style="position:absolute"><
   + `<feFuncR type="table" tableValues="${tabla(0)}"/><feFuncG type="table" tableValues="${tabla(1)}"/><feFuncB type="table" tableValues="${tabla(2)}"/>`
   + `</feComponentTransfer></filter></svg>`;
 
-export const CSS_MAPA = 'html,body,#map{margin:0;padding:0;width:100%;height:100%;background:#DDEFF5}'
+export const CSS_MAPA = 'html,body,#map{margin:0;padding:0;width:100%;height:100%;background:#E6F3F7}'
   + '.leaflet-tile-pane{filter:url(#vida)}.leaflet-div-icon{background:none;border:none}';
 
 // Marcadores (HTML para Leaflet): repartidor = punto marino con borde blanco;
@@ -59,17 +60,18 @@ ${script}
 
 // Google Maps (react-native-maps con PROVIDER_GOOGLE)
 export const ESTILO_GOOGLE = [
-  { elementType: 'geometry', stylers: [{ color: '#DDEFF5' }] },
+  { elementType: 'geometry', stylers: [{ color: '#E6F3F7' }] },
   { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#4B5B73' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#7A8CA3' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#F2F9FB' }] },
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
   { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#F4FAFC' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#FFFFFF' }] },
   { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ visibility: 'off' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#C4E2EC' }] },
-  { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#D6ECF3' }] },
+  { featureType: 'road.local', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#C9E5EE' }] },
+  { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#DFEFF4' }] },
 ];
 
 // ── Ruta (compartido por la versión nativa y la web) ──

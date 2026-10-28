@@ -15,10 +15,10 @@ test('trazado: decodifica la polilínea de Google', () => {
   assert.deepEqual(decodificarPolilinea('_p~iF~ps|U_ulLnnqC_mqNvxq`@'), [[38.5, -120.2], [40.7, -120.95], [43.252, -126.453]]);
 });
 
-test('trazado: Google si hay llave; OSRM público solo fuera de producción', () => {
+test('trazado: Google si hay llave; si no, OSRM (propio o el público)', () => {
   assert.equal(proveedorRutas({ GOOGLE_ROUTES_API_KEY: 'k', NODE_ENV: 'production' }), 'google');
   assert.equal(proveedorRutas({ NODE_ENV: 'development' }), 'osrm');
-  assert.equal(proveedorRutas({ NODE_ENV: 'production' }), null);
+  assert.equal(proveedorRutas({ NODE_ENV: 'production' }), 'osrm');
   assert.equal(proveedorRutas({ NODE_ENV: 'production', RUTAS_OSRM_URL: 'http://osrm' }), 'osrm');
 });
 

@@ -4,10 +4,11 @@
 // Proveedor:
 //   - GOOGLE_ROUTES_API_KEY definido → Google Routes API (producción). La
 //     llave vive solo en el servidor; las apps nunca la ven.
-//   - Si no, RUTAS_OSRM_URL (un OSRM propio) o, fuera de producción, el
-//     servidor público de demostración de OSRM (solo desarrollo: tiene
-//     límites de uso y no garantiza servicio).
-//   - Sin proveedor o si falla: null, y la app dibuja la línea recta.
+//   - Si no, RUTAS_OSRM_URL (un OSRM propio) o el servidor público de
+//     demostración de OSRM (tiene límites de uso y no garantiza servicio:
+//     en producción conviene la llave de Google o un OSRM propio).
+//   - Si Google falla se intenta con OSRM; si todo falla: null, y la app
+//     dibuja la línea recta.
 //
 // Las respuestas se guardan en memoria unos minutos: el mismo trayecto lo
 // piden el mapa y las métricas de la oferta, y varios clientes a la vez.
@@ -100,8 +101,7 @@ async function osrm(pts, base) {
 
 export function proveedorRutas(env = process.env) {
   if (env.GOOGLE_ROUTES_API_KEY) return 'google';
-  if (env.RUTAS_OSRM_URL || env.NODE_ENV !== 'production') return 'osrm';
-  return null;
+  return 'osrm';
 }
 
 // puntos ya normalizados → { fuente, coords, km, min, tramos } | null
@@ -111,9 +111,13 @@ export async function trazarRuta(pts, log) {
   const clave = pts.map((p) => p.join(',')).join(';');
   const hit = cache.get(clave);
   if (hit && Date.now() - hit.t < TTL_MS) return hit.promesa;
+  const conOsrm = () => osrm(pts, process.env.RUTAS_OSRM_URL || OSRM_DEMO);
+  // Si Google falla (cuota, llave), se intenta con OSRM antes de la línea recta
   const promesa = (proveedor === 'google'
     ? google(pts, process.env.GOOGLE_ROUTES_API_KEY)
-    : osrm(pts, process.env.RUTAS_OSRM_URL || OSRM_DEMO)
+      .catch((e) => { log?.warn?.({ err: e.message }, 'Google Routes falló; se usa OSRM'); return null; })
+      .then((r) => r || conOsrm())
+    : conOsrm()
   ).catch((e) => { log?.warn?.({ err: e.message }, 'trazado de ruta no disponible'); cache.delete(clave); return null; });
   cache.set(clave, { t: Date.now(), promesa });
   if (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);

@@ -28,7 +28,10 @@ export function pedirTrazado(pts) {
   const hit = cache.get(k);
   if (hit && Date.now() - hit.t < TTL_MS) return hit.promesa;
   const promesa = api.post(ENDPOINT, { puntos: validos.map((p) => [p.lat, p.lon]) })
-    .then((r) => (r.data?.coords?.length ? r.data : null))
+    // El trazado empieza y acaba en la calle más cercana: se une a los puntos
+    // reales para que la línea llegue hasta los marcadores
+    .then((r) => (r.data?.coords?.length ? { ...r.data, coords: [[validos[0].lat, validos[0].lon], ...r.data.coords,
+      [validos[validos.length - 1].lat, validos[validos.length - 1].lon]] } : null))
     .catch(() => { cache.delete(k); return null; });
   cache.set(k, { t: Date.now(), promesa });
   if (cache.size > 60) cache.delete(cache.keys().next().value);

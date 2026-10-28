@@ -3,17 +3,18 @@
 import { createElement, useMemo } from 'react';
 import { View } from 'react-native';
 import { htmlLeaflet, CENTRO_DEFECTO } from './estiloMapa';
-import { puntosSeguimiento, depurarSeguimiento, SCRIPT_SEGUIMIENTO } from './seguimientoMapa';
+import { puntosSeguimiento, depurarSeguimiento, etiquetasSeguimiento, SCRIPT_SEGUIMIENTO } from './seguimientoMapa';
 import { useTrazado } from '../services/trazado';
 
 export default function MapaTracking({ estado }) {
   const p = puntosSeguimiento(estado);
   const vis = depurarSeguimiento(p);
   const ruta = useTrazado(vis.seq, vis.movil);
-  const html = useMemo(() => htmlLeaflet(p.repartidor ?? p.destino ?? p.tienda ?? CENTRO_DEFECTO,
-    `${SCRIPT_SEGUIMIENTO}\nwindow.update(${JSON.stringify({ ...p, trazo: ruta?.coords || null })});`), [JSON.stringify(p), ruta]);
+  const datos = JSON.stringify({ ...vis, trazo: ruta?.coords || null, etiquetas: etiquetasSeguimiento(p, vis, ruta) });
+  const html = useMemo(() => htmlLeaflet(vis.encuadre[0] ?? CENTRO_DEFECTO,
+    `${SCRIPT_SEGUIMIENTO}\nwindow.update(${datos});`), [datos]);
   return (
-    <View style={{ flex: 1, backgroundColor: '#DDEFF5' }}>
+    <View style={{ flex: 1, backgroundColor: '#E6F3F7' }}>
       {createElement('iframe', { srcDoc: html, style: { border: 0, width: '100%', height: '100%' }, title: 'Mapa' })}
     </View>
   );
