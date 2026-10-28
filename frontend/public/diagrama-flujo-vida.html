@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Diagrama de flujo VIDA</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&family=Nunito+Sans:wght@400;600;700;800&display=swap">
+<style>
+/* Layout: póster de diagramas, uno por área, cada uno en su lienzo con scroll propio.
+   Una sola apariencia clara (como el ejemplo de referencia) con colores fijos. */
+:root {
+  --bg: #F6F3EE; --surface: #FFFFFF; --ink: #1F3550; --ink-2: #4A5B73; --muted: #6B7B90; --line: #E3DDD3;
+  --verde: #2E9E78; --verde-s: #D3F2E4; --azul: #3B6E9C; --azul-s: #E7F0FA; --rosa: #D6247F; --rosa-s: #FCE7F2;
+  --gris: #7A8597; --gris-s: #F2F4F7; --naranja: #D97706; --naranja-s: #FFF1E6; --amarillo: #E5A823; --amarillo-s: #FFFBEA;
+  --display: "Poppins", "Segoe UI", system-ui, sans-serif;
+  --body: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+/* Mermaid mide el texto con las cajas por defecto; con border-box le faltaba espacio y cortaba la última letra. */
+.mermaid, .mermaid * { box-sizing: content-box; }
+.mermaid foreignObject { overflow: visible; }
+.mermaid .nodeLabel, .mermaid .edgeLabel { white-space: nowrap; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header .wrap { padding-block: 36px 18px; display: grid; grid-template-columns: 1fr auto; gap: 16px 32px; align-items: end; }
+h1 { font-family: var(--display); font-weight: 600; font-size: clamp(34px, 6vw, 58px); line-height: 1.02; margin: 0; color: var(--ink); text-wrap: balance; }
+.sub { font-family: var(--display); font-size: 17px; letter-spacing: .08em; text-transform: uppercase; color: var(--azul); margin-top: 8px; }
+.marca { text-align: right; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); line-height: 1.4; }
+.lead { grid-column: 1 / -1; max-width: 75ch; color: var(--ink-2); }
+@media (max-width: 640px) { header .wrap { grid-template-columns: 1fr; } .marca { text-align: left; } }
+.leyenda { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding-block: 6px 4px; font-size: 14px; color: var(--ink-2); }
+.leyenda span { display: inline-flex; align-items: center; gap: 8px; }
+.f { display: inline-block; width: 30px; height: 18px; border: 2px solid; }
+.f.ini { border-radius: 999px; background: var(--verde-s); border-color: var(--verde); }
+.f.dec { width: 18px; height: 18px; transform: rotate(45deg); background: #E9F8F1; border-color: var(--verde); margin-inline: 6px; }
+.f.acc { background: var(--azul-s); border-color: var(--azul); }
+.f.auto { background: var(--gris-s); border-color: var(--gris); border-style: dashed; }
+.f.fin { border-radius: 999px; background: var(--rosa-s); border-color: var(--rosa); }
+.f.mal { border-radius: 999px; background: var(--naranja-s); border-color: var(--naranja); }
+.f.nota { background: var(--amarillo-s); border-color: var(--amarillo); border-style: dashed; }
+nav.indice { display: flex; flex-wrap: wrap; gap: 8px; padding-block: 14px 6px; }
+nav.indice a { text-decoration: none; font-size: 14px; font-weight: 700; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px; padding: 6px 12px; }
+nav.indice a:hover, nav.indice a:focus-visible { border-color: var(--azul); outline: none; }
+nav.indice b { color: var(--muted); font-weight: 700; margin-right: 4px; }
+.grupo { padding-block: 26px 4px; display: grid; gap: 18px; }
+.grupo > h2 { font-family: var(--display); font-weight: 600; font-size: clamp(24px, 3.4vw, 34px); margin: 0; display: flex; align-items: center; gap: 12px; }
+.grupo > h2::before { content: ""; width: 14px; height: 14px; border-radius: 4px; background: var(--c); }
+.g-compras { --c: var(--verde); } .g-repartidor { --c: var(--rosa); } .g-panel { --c: var(--azul); } .g-servidor { --c: var(--gris); } .g-mapa { --c: var(--amarillo); }
+.lienzo { background: var(--surface); border: 1.5px solid var(--line); border-radius: 22px; padding: 18px 18px 8px; display: grid; gap: 6px; scroll-margin-top: 12px; }
+.lienzo h3 { font-family: var(--display); font-weight: 600; font-size: 20px; margin: 0; color: var(--ink); }
+.lienzo > p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.scroll { overflow: auto; padding-block: 10px; -webkit-overflow-scrolling: touch; }
+.scroll pre.mermaid { margin: 0 auto; background: transparent; font-family: Arial, Helvetica, sans-serif; width: max-content; min-width: 100%; display: flex; justify-content: center; }
+.hint { font-size: 13px; color: var(--muted); }
+footer { padding-block: 30px 44px; color: var(--muted); font-size: 13.5px; }
+a:focus-visible { outline: 3px solid var(--azul); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div><h1>Diagrama<br>de flujo</h1><div class="sub">Apps y panel de VIDA</div></div>
+  <div class="marca">Comercializadora VIDA<br>Plataforma de desarrollo<br>empresarial</div>
+  <p class="lead">Todos los procesos de la app de clientes, la app de repartidores y el panel web, tal como funcionan hoy. Cada rombo es una pregunta y sus flechas dicen qué pasa según la respuesta. Los diagramas grandes se mueven con el dedo o con la barra de desplazamiento.</p>
+</div></header>
+<main class="wrap">
+  <div class="leyenda" aria-label="Leyenda">
+    <span><i class="f ini"></i>Inicio</span><span><i class="f dec"></i>Pregunta</span><span><i class="f acc"></i>Acción de una persona</span>
+    <span><i class="f auto"></i>Lo hace el sistema</span><span><i class="f fin"></i>Final</span><span><i class="f mal"></i>Cancelado o error</span><span><i class="f nota"></i>Pendiente o aviso</span>
+  </div>
+  <nav class="indice" aria-label="Diagramas">
+    <a href="#mapa">¿Quién usa qué?</a>
+    <a href="#compras-pedido">1 · Entrar y hacer un pedido</a>
+    <a href="#compras-beneficios">2 · Beneficios y mi cuenta</a>
+    <a href="#repartidor">3 · Registrarse, tomar y entregar pedidos</a>
+    <a href="#panel-entrar">4 · Entrar al panel</a>
+    <a href="#panel-caja">5 · Un día de venta: caja y punto de venta</a>
+    <a href="#panel-ventas">6 · Pedidos a domicilio, facturas y devoluciones</a>
+    <a href="#panel-productos">7 · Productos, precios y promociones</a>
+    <a href="#panel-compras">8 · Compras y reabasto (como funciona hoy)</a>
+    <a href="#panel-red">9 · Red, usuarios, Academia y Club</a>
+    <a href="#panel-reportes">10 · Reportes, metas y rentabilidad</a>
+    <a href="#servidor">11 · Lo que el sistema hace solo</a>
+  </nav>
+  <section class="grupo g-mapa"><h2>Mapa general</h2>
+    <article class="lienzo" id="mapa">
+      <h3>¿Quién usa qué?</h3><p>El punto de partida: según quién eres, usas una de las tres herramientas.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;¿Quién eres?&quot;]):::ini --&gt; Q{&quot;¿Qué necesitas&lt;br/&gt;hacer?&quot;}:::dec
+Q --&gt;|Comprar a domicilio| C[&quot;App VIDA Compras&lt;br/&gt;(Android)&quot;]:::acc
+Q --&gt;|Repartir pedidos| R[&quot;App VIDA Repartidor&lt;br/&gt;(Android)&quot;]:::acc
+Q --&gt;|Trabajo en una tienda o en VIDA| P[&quot;Panel web&lt;br/&gt;app.comercializadoravida.com&quot;]:::acc
+C --&gt; C1([&quot;Ver sección 1 y 2&quot;]):::fin
+R --&gt; R1([&quot;Ver sección 3&quot;]):::fin
+P --&gt; L[&quot;Entrar al panel&quot;]:::acc --&gt; ROL{&quot;¿Qué rol&lt;br/&gt;tengo?&quot;}:::dec
+ROL --&gt;|Cajero| RC([&quot;Caja y punto de venta · secciones 5 y 6&quot;]):::fin
+ROL --&gt;|Empresario o administrador de tienda| RE([&quot;Tienda, pedidos, productos y reportes · secciones 5 a 7 y 10&quot;]):::fin
+ROL --&gt;|Matriz| RM([&quot;Compras y reabasto · sección 8&quot;]):::fin
+ROL --&gt;|Corporativo o Super Admin| RR([&quot;Red, usuarios y operaciones · secciones 9 y 10&quot;]):::fin
+SV[&quot;El servidor trabaja solo&lt;br/&gt;cada minuto y cada día&quot;]:::auto --&gt; SV1([&quot;Ver sección 11&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+</pre></div>
+    </article>
+  </section>
+  <section class="grupo g-compras"><h2>App VIDA Compras</h2>
+    <article class="lienzo" id="compras-pedido">
+      <h3>1 · Entrar y hacer un pedido</h3><p>Desde que el cliente abre la app hasta que recibe su pedido.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Abro VIDA Compras&quot;]):::ini --&gt; Q1{&quot;¿Tengo&lt;br/&gt;cuenta?&quot;}:::dec
+Q1 --&gt;|No| Q2{&quot;¿La creo&lt;br/&gt;ahora?&quot;}:::dec
+Q2 --&gt;|No| EX[&quot;Explorar la tienda sin cuenta&quot;]:::acc
+Q2 --&gt;|Sí| REG[&quot;Crear cuenta: nombre, teléfono,&lt;br/&gt;correo y contraseña&quot;]:::acc
+Q1 --&gt;|Sí| LOG[&quot;Entrar con teléfono y contraseña&quot;]:::acc
+LOG --&gt; Q3{&quot;¿Recuerdo mi&lt;br/&gt;contraseña?&quot;}:::dec
+Q3 --&gt;|No| REC[&quot;¿Olvidaste tu contraseña?&lt;br/&gt;código de 6 números al correo,&lt;br/&gt;vence en 15 minutos&quot;]:::acc --&gt; NUE[&quot;Pongo una contraseña nueva&lt;br/&gt;y quedo dentro&quot;]:::acc
+Q3 --&gt;|Sí| HOME
+REG --&gt; HOME
+NUE --&gt; HOME
+EX --&gt; HOME[&quot;Inicio: hidratación del día,&lt;br/&gt;repetir último pedido, categorías&quot;]:::acc
+HOME --&gt; TIE[&quot;Tiendas: la más cercana primero&quot;]:::acc --&gt; CAT[&quot;Catálogo de la tienda:&lt;br/&gt;buscar, categorías, promoción&quot;]:::acc
+CAT --&gt; CAR[&quot;Agrego productos al carrito&quot;]:::acc --&gt; Q4{&quot;¿Inicié&lt;br/&gt;sesión?&quot;}:::dec
+Q4 --&gt;|No| LOG2[&quot;La app pide entrar&lt;br/&gt;o crear cuenta&quot;]:::acc --&gt; Q4
+Q4 --&gt;|Sí| DESC[&quot;Cupón y puntos como&lt;br/&gt;descuento (opcional)&quot;]:::acc --&gt; Q5{&quot;¿Tengo dirección&lt;br/&gt;guardada?&quot;}:::dec
+Q5 --&gt;|No| MAPA[&quot;Fijo mi dirección en el mapa&lt;br/&gt;y notas para el repartidor&quot;]:::acc --&gt; PAGO
+Q5 --&gt;|Sí| PAGO{&quot;¿Cómo voy&lt;br/&gt;a pagar?&quot;}:::dec
+PAGO --&gt;|Efectivo| EF[&quot;En $, Bs o combinado.&lt;br/&gt;¿Con cuánto pagas? para el cambio&quot;]:::acc --&gt; HAC
+PAGO --&gt;|Tarjeta| TJ[&quot;El repartidor lleva&lt;br/&gt;el punto de venta&quot;]:::acc --&gt; HAC
+PAGO --&gt;|Pago Móvil| HAC[&quot;Hacer pedido&lt;br/&gt;(con IGTF si pago en $ y la tienda&lt;br/&gt;es contribuyente especial)&quot;]:::acc
+HAC --&gt; Q6{&quot;¿Elegí&lt;br/&gt;Pago Móvil?&quot;}:::dec
+Q6 --&gt;|Sí| PM[&quot;Paga con Pago Móvil: monto en Bs,&lt;br/&gt;datos del banco y cuenta regresiva&quot;]:::acc --&gt; COMP[&quot;Envío referencia y captura&quot;]:::acc
+COMP --&gt; Q7{&quot;¿La tienda&lt;br/&gt;lo aprobó?&quot;}:::dec
+Q7 --&gt;|No coincide| COMP
+PM -.-&gt;|Se venció el plazo| CANP([&quot;Pedido cancelado y&lt;br/&gt;puntos devueltos&quot;]):::mal
+Q7 --&gt;|Sí| SEG
+Q6 --&gt;|No| SEG[&quot;Seguimiento:&lt;br/&gt;Recibido → Preparando&quot;]:::acc
+SEG --&gt; Q8{&quot;¿Ya hay&lt;br/&gt;repartidor?&quot;}:::dec
+Q8 --&gt;|Todavía no| Q9{&quot;¿Sigo&lt;br/&gt;esperando?&quot;}:::dec
+Q9 --&gt;|Sí| Q8
+Q9 --&gt;|No| CAN([&quot;Cancelo sin costo&quot;]):::mal
+Q8 --&gt;|Sí| CAM[&quot;En camino: veo al repartidor en el mapa,&lt;br/&gt;el tiempo estimado y cuánto tener listo&quot;]:::acc
+CAM --&gt; ENT[&quot;Recibo y pago lo pendiente&quot;]:::acc --&gt; FIN([&quot;¡Listo! Entregado&lt;br/&gt;y gano puntos&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+</pre></div>
+    </article>
+    <article class="lienzo" id="compras-beneficios">
+      <h3>2 · Beneficios y mi cuenta</h3><p>Todo lo que el cliente puede hacer además de comprar.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Menú de la app&quot;]):::ini --&gt; Q{&quot;¿Qué quiero&lt;br/&gt;hacer?&quot;}:::dec
+Q --&gt;|Puntos| P1[&quot;Puntos y premios:&lt;br/&gt;saldo e historial&quot;]:::acc --&gt; P2{&quot;¿Me alcanzan para&lt;br/&gt;un premio?&quot;}:::dec
+P2 --&gt;|Sí| P3[&quot;Canjeo y recibo un código&quot;]:::acc --&gt; P4([&quot;Lo reclamo en la tienda&quot;]):::fin
+P2 --&gt;|No| P5[&quot;Sigo sumando: pedidos, recargas,&lt;br/&gt;hidratación y cursos&quot;]:::acc
+Q --&gt;|Club VIDA| C1[&quot;Tarjeta digital con QR y mi nivel&quot;]:::acc --&gt; C2{&quot;¿Hay un evento&lt;br/&gt;del Club?&quot;}:::dec
+C2 --&gt;|Sí| C3([&quot;Asistiré: reservo mi lugar&quot;]):::fin
+C2 --&gt;|No| C4([&quot;Veo los beneficios de mi nivel&quot;]):::fin
+Q --&gt;|Hidratación| H1{&quot;¿Mi programa&lt;br/&gt;está activo?&quot;}:::dec
+H1 --&gt;|No| H2[&quot;Lo activo y fijo mi meta diaria&quot;]:::acc --&gt; H3
+H1 --&gt;|Sí| H3[&quot;Toco «Tomé un vaso»&quot;]:::acc --&gt; H4{&quot;¿Cumplí la meta&lt;br/&gt;7 días seguidos?&quot;}:::dec
+H4 --&gt;|Sí| H5([&quot;Bono de puntos&quot;]):::fin
+H4 --&gt;|No| H6[&quot;Recordatorio cada 2 horas,&lt;br/&gt;de 8 a. m. a 8 p. m.&quot;]:::auto
+Q --&gt;|Recargas| R1[&quot;Operadora, número y monto&quot;]:::acc --&gt; R2[&quot;Pago con Pago Móvil&quot;]:::acc --&gt; R3[&quot;VIDA la procesa&quot;]:::auto --&gt; R4([&quot;Recarga hecha y puntos&quot;]):::fin
+Q --&gt;|Academia| A1[&quot;Cursos para clientes&quot;]:::acc --&gt; A2[&quot;Video, PDF, texto y cuestionario&quot;]:::acc --&gt; A3{&quot;¿Terminé&lt;br/&gt;el curso?&quot;}:::dec
+A3 --&gt;|No| A2
+A3 --&gt;|Sí| A4([&quot;Constancia con QR y puntos&quot;]):::fin
+Q --&gt;|Mi cuenta| M1[&quot;Editar datos, contraseña, direcciones,&lt;br/&gt;ayuda por WhatsApp, privacidad&quot;]:::acc --&gt; M2{&quot;¿Quiero&lt;br/&gt;salir?&quot;}:::dec
+M2 --&gt;|Cerrar sesión| M3([&quot;Sesión cerrada&quot;]):::fin
+M2 --&gt;|Eliminar cuenta| M4([&quot;Cuenta eliminada&quot;]):::mal
+Q --&gt;|Mis tarjetas| T1([&quot;Próximamente&quot;]):::nota
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+</pre></div>
+    </article>
+  </section>
+  <section class="grupo g-repartidor"><h2>App VIDA Repartidor</h2>
+    <article class="lienzo" id="repartidor">
+      <h3>3 · Registrarse, tomar y entregar pedidos</h3><p>Desde el registro del repartidor hasta su liquidación.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Abro VIDA Repartidor&quot;]):::ini --&gt; Q1{&quot;¿Tengo&lt;br/&gt;cuenta?&quot;}:::dec
+Q1 --&gt;|No| R1[&quot;Quiero ser repartidor: datos,&lt;br/&gt;vehículo, placa y contraseña&quot;]:::acc --&gt; R2[&quot;Solicitud en revisión&quot;]:::auto --&gt; Q2{&quot;¿VIDA la&lt;br/&gt;aprobó?&quot;}:::dec
+Q2 --&gt;|No| R3([&quot;Solicitud rechazada&quot;]):::mal
+Q2 --&gt;|Sí| LOG
+Q1 --&gt;|Sí| LOG[&quot;Entrar con teléfono y contraseña&quot;]:::acc
+LOG --&gt; ON{&quot;¿Me pongo&lt;br/&gt;en línea?&quot;}:::dec
+ON --&gt;|No| OFF([&quot;Desconectado:&lt;br/&gt;no recibo pedidos&quot;]):::fin
+ON --&gt;|Sí| GPS[&quot;Comparto mi ubicación,&lt;br/&gt;aun con la app en segundo plano&quot;]:::auto --&gt; ESP[&quot;Esperando pedidos cerca&quot;]:::acc
+ESP --&gt; OF[&quot;Llega una oferta con sonido: ruta, lo que gano,&lt;br/&gt;distancia, cómo se cobra y cambio a llevar&quot;]:::acc
+OF --&gt; Q3{&quot;¿Acepto en&lt;br/&gt;60 segundos?&quot;}:::dec
+Q3 --&gt;|No, paso| ESP
+Q3 --&gt;|Sí| RUTA[&quot;El sistema ordena mis paradas:&lt;br/&gt;recoger antes de entregar (hasta 3 pedidos)&quot;]:::auto
+RUTA --&gt; TI[&quot;Voy a la tienda y toco&lt;br/&gt;«Ya recogí el pedido»&quot;]:::acc --&gt; CL[&quot;Voy al cliente con navegación&quot;]:::acc
+CL --&gt; PR{&quot;¿Tengo algún&lt;br/&gt;problema?&quot;}:::dec
+PR --&gt;|Sí| PR2{&quot;¿Qué hago?&quot;}:::dec
+PR2 --&gt;|Liberarlo| LIB[&quot;Lo toma otro repartidor&quot;]:::auto --&gt; ESP
+PR2 --&gt;|Cancelarlo| CANC([&quot;Pedido cancelado&quot;]):::mal
+PR --&gt;|No| MET{&quot;¿Cómo paga&lt;br/&gt;el cliente?&quot;}:::dec
+MET --&gt;|Efectivo| EF[&quot;Cobro en $, Bs o combinado&lt;br/&gt;y entrego el cambio&quot;]:::acc --&gt; CONF
+MET --&gt;|Tarjeta| TJ[&quot;Cobro con el punto de venta&quot;]:::acc --&gt; CONF
+MET --&gt;|Pago Móvil| PM[&quot;No cobro nada: ya pagó&quot;]:::acc --&gt; CONF
+CONF[&quot;Marco «Recibí el pago»&quot;]:::acc --&gt; FOTO{&quot;¿Me piden&lt;br/&gt;foto?&quot;}:::dec
+FOTO --&gt;|Sí| F1[&quot;Tomo la foto de la entrega&quot;]:::acc --&gt; ENT
+FOTO --&gt;|No| ENT[&quot;Pedido entregado:&lt;br/&gt;gano mi comisión&quot;]:::acc
+ENT --&gt; Q5{&quot;¿Cobré&lt;br/&gt;efectivo?&quot;}:::dec
+Q5 --&gt;|Sí| SAL[&quot;Saldo por rendir a la tienda,&lt;br/&gt;en $ y en Bs por separado&quot;]:::auto --&gt; LIQ([&quot;La tienda me liquida&quot;]):::fin
+Q5 --&gt;|No| SIG([&quot;Sigo en línea&quot;]):::fin
+ENT -.-&gt; GAN[&quot;Ganancias, historial y perfil&quot;]:::nota
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+</pre></div>
+    </article>
+  </section>
+  <section class="grupo g-panel"><h2>Panel web</h2>
+    <article class="lienzo" id="panel-entrar">
+      <h3>4 · Entrar al panel</h3><p>Igual para todos los roles: cajero, empresario, Matriz y corporativo.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Abro el panel&quot;]):::ini --&gt; L[&quot;Usuario o correo y contraseña&quot;]:::acc --&gt; Q{&quot;¿Los datos son&lt;br/&gt;correctos?&quot;}:::dec
+Q --&gt;|No| E[&quot;Credenciales incorrectas&quot;]:::mal --&gt; Q2{&quot;¿La olvidé?&quot;}:::dec
+Q2 --&gt;|No| L
+Q2 --&gt;|Sí| OLV([&quot;Un administrador me asigna una nueva:&lt;br/&gt;el enlace «¿Olvidaste tu contraseña?»&lt;br/&gt;todavía no funciona&quot;]):::nota
+Q --&gt;|Sí| T{&quot;¿Es una contraseña&lt;br/&gt;temporal?&quot;}:::dec
+T --&gt;|Sí| C[&quot;Cambia tu contraseña&quot;]:::acc --&gt; Q3{&quot;¿Tengo la&lt;br/&gt;temporal?&quot;}:::dec
+Q3 --&gt;|No| RE[&quot;Reenviar contraseña temporal:&lt;br/&gt;llega una nueva al correo&quot;]:::acc --&gt; C
+Q3 --&gt;|Sí| NUE[&quot;Pongo mi contraseña personal&quot;]:::acc --&gt; M
+T --&gt;|No| M[&quot;Menú con mis módulos,&lt;br/&gt;según mi rol y mi tienda&quot;]:::acc --&gt; FIN([&quot;Listo para trabajar&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+</pre></div>
+    </article>
+    <article class="lienzo" id="panel-caja">
+      <h3>5 · Un día de venta: caja y punto de venta</h3><p>Lo que hace el cajero de la mañana a la tarde.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Llego a la tienda&quot;]):::ini --&gt; Q{&quot;¿La caja está&lt;br/&gt;abierta?&quot;}:::dec
+Q --&gt;|No| AB[&quot;Abrir caja: cuento el fondo&lt;br/&gt;en $ y en Bs&quot;]:::acc --&gt; V
+Q --&gt;|Sí| V[&quot;Tienda: punto de venta&quot;]:::acc
+V --&gt; ESC[&quot;Escaneo o busco los productos&quot;]:::acc --&gt; PROMO[&quot;Se aplican solas las promociones:&lt;br/&gt;descuentos y «lleva N, paga M»&quot;]:::auto
+PROMO --&gt; CUP{&quot;¿El cliente trae&lt;br/&gt;cupón?&quot;}:::dec
+CUP --&gt;|Sí| AP[&quot;Aplico el cupón&quot;]:::acc --&gt; COB
+CUP --&gt;|No| COB[&quot;Cobrar&quot;]:::acc
+COB --&gt; MON{&quot;¿En qué&lt;br/&gt;moneda?&quot;}:::dec
+MON --&gt;|$, Bs o combinado| MET{&quot;¿Con qué&lt;br/&gt;paga?&quot;}:::dec
+MET --&gt;|Efectivo| CAMB[&quot;Escribo lo recibido; el sistema&lt;br/&gt;calcula el cambio en $ o Bs&quot;]:::acc --&gt; IG
+MET --&gt;|Tarjeta| IG
+MET --&gt;|Efectivo y tarjeta| IG{&quot;¿Pagó en $ y la tienda es&lt;br/&gt;contribuyente especial?&quot;}:::dec
+IG --&gt;|Sí| IGTF[&quot;Se suma el IGTF de 3 %&quot;]:::auto --&gt; NET
+IG --&gt;|No| NET{&quot;¿Hay&lt;br/&gt;internet?&quot;}:::dec
+NET --&gt;|Sí| OK[&quot;Venta registrada con la&lt;br/&gt;tasa BCV del día&quot;]:::auto
+NET --&gt;|No| OFF[&quot;Se guarda en la computadora y&lt;br/&gt;se envía sola al volver la conexión&quot;]:::auto --&gt; OK
+OK --&gt; TK[&quot;Ticket&quot;]:::acc --&gt; FAC{&quot;¿Pide&lt;br/&gt;factura?&quot;}:::dec
+FAC --&gt;|Sí| F1[&quot;Facturar: RIF y razón social&quot;]:::acc --&gt; F2[&quot;Registrar el número de control&lt;br/&gt;de la imprenta o máquina fiscal&quot;]:::acc --&gt; MAS
+FAC --&gt;|No| MAS{&quot;¿Hay más&lt;br/&gt;clientes?&quot;}:::dec
+MAS --&gt;|Sí| V
+MAS --&gt;|No| MOV{&quot;¿Saqué o metí efectivo&lt;br/&gt;que no es venta?&quot;}:::dec
+MOV --&gt;|Sí| MV[&quot;Registro el movimiento con motivo&quot;]:::acc --&gt; CIE
+MOV --&gt;|No| CIE[&quot;Cerrar caja: cuento el efectivo por moneda&quot;]:::acc
+CIE --&gt; DIF{&quot;¿Cuadra con&lt;br/&gt;lo esperado?&quot;}:::dec
+DIF --&gt;|Sí| FIN([&quot;Turno cerrado&quot;]):::fin
+DIF --&gt;|No| NOTA[&quot;Explico la diferencia en la nota&quot;]:::acc --&gt; FIN
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+</pre></div>
+    </article>
+    <article class="lienzo" id="panel-ventas">
+      <h3>6 · Pedidos a domicilio, facturas y devoluciones</h3><p>Lo que hace la tienda con los pedidos de la app y con sus ventas ya hechas.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Llega un pedido de la app, en vivo&quot;]):::ini --&gt; PM{&quot;¿Pagó con&lt;br/&gt;Pago Móvil?&quot;}:::dec
+PM --&gt;|Sí| VAL[&quot;Validando pago: reviso el comprobante&lt;br/&gt;contra mi banco&quot;]:::acc --&gt; OKP{&quot;¿Llegó el&lt;br/&gt;monto exacto?&quot;}:::dec
+OKP --&gt;|No| REJ[&quot;Rechazar: el cliente envía otro&quot;]:::mal --&gt; VAL
+OKP --&gt;|Sí| NUE
+PM --&gt;|No| NUE[&quot;Nuevo&quot;]:::acc
+NUE --&gt; PREP[&quot;Preparando&quot;]:::acc --&gt; LIS[&quot;Listo&quot;]:::acc --&gt; BUS[&quot;El sistema avisa a los repartidores&lt;br/&gt;cercanos y amplía el radio&quot;]:::auto
+BUS --&gt; Q{&quot;¿Alguien&lt;br/&gt;aceptó?&quot;}:::dec
+Q --&gt;|No| MAN{&quot;¿Lo asigno&lt;br/&gt;a mano?&quot;}:::dec
+MAN --&gt;|Sí| ASG[&quot;Asignar repartidor&quot;]:::acc --&gt; CAM
+MAN --&gt;|No| TIE{&quot;¿Se acabó el&lt;br/&gt;tiempo de búsqueda?&quot;}:::dec
+TIE --&gt;|No| BUS
+TIE --&gt;|Sí| CANC([&quot;Cancelado y puntos devueltos&quot;]):::mal
+Q --&gt;|Sí| CAM[&quot;En camino: lo sigo en el Mapa en vivo&quot;]:::acc --&gt; ENT[&quot;Entregado, con foto&quot;]:::acc
+ENT --&gt; EFE{&quot;¿El repartidor&lt;br/&gt;cobró efectivo?&quot;}:::dec
+EFE --&gt;|Sí| LIQ[&quot;Liquidar al repartidor:&lt;br/&gt;me entrega el efectivo sin su comisión&quot;]:::acc --&gt; FIN
+EFE --&gt;|No| FIN([&quot;Pedido cerrado&quot;]):::fin
+H([&quot;Historial de Ventas&quot;]):::ini --&gt; HQ{&quot;¿Qué necesito?&quot;}:::dec
+HQ --&gt;|Copia| H1[&quot;Reimprimir ticket&quot;]:::acc
+HQ --&gt;|Factura| H2[&quot;Facturar y registrar el número de control&quot;]:::acc
+HQ --&gt;|Devolución| H3[&quot;Elijo productos y cantidades&quot;]:::acc --&gt; H4{&quot;¿La venta estaba&lt;br/&gt;facturada?&quot;}:::dec
+H4 --&gt;|Sí| H5([&quot;Nota de crédito&quot;]):::fin
+H4 --&gt;|No| H6([&quot;Reembolso&quot;]):::fin
+HQ --&gt;|Contador| H7([&quot;Libro de ventas en Excel&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+</pre></div>
+    </article>
+    <article class="lienzo" id="panel-productos">
+      <h3>7 · Productos, precios y promociones</h3><p>Cómo el empresario mantiene su catálogo y atrae clientes.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Gestionar mi catálogo&quot;]):::ini --&gt; Q{&quot;¿Qué&lt;br/&gt;necesito?&quot;}:::dec
+Q --&gt;|Producto nuevo| P1[&quot;Inventarios: nombre, SKU, código de barras,&lt;br/&gt;categoría, precio, foto, IVA y PLUS&quot;]:::acc --&gt; P2([&quot;Disponible en la tienda y en la app&quot;]):::fin
+Q --&gt;|Mover stock| S1{&quot;¿Qué pasó&lt;br/&gt;con el stock?&quot;}:::dec
+S1 --&gt;|Llegó mercancía| S2[&quot;Entrada&quot;]:::acc --&gt; S5
+S1 --&gt;|Merma o consumo| S3[&quot;Salida con motivo&quot;]:::acc --&gt; S5
+S1 --&gt;|El conteo no cuadra| S4[&quot;Ajuste&quot;]:::acc --&gt; S5([&quot;Stock actualizado&quot;]):::fin
+S5 -.-&gt; BAJO{&quot;¿Quedó bajo&lt;br/&gt;su mínimo?&quot;}:::dec
+BAJO --&gt;|Sí| AL[&quot;Aviso en el Dashboard&quot;]:::auto --&gt; RE([&quot;Pedir reabasto · sección 8&quot;]):::fin
+Q --&gt;|Cambiar precio| PR[&quot;Precios: cambio en $;&lt;br/&gt;el precio en Bs sale de la tasa del día&quot;]:::acc --&gt; PR2([&quot;Precio nuevo en tienda y app&quot;]):::fin
+Q --&gt;|Promoción| PO{&quot;¿Qué tipo?&quot;}:::dec
+PO --&gt;|Descuento| D1[&quot;Por producto o categoría, con fechas&quot;]:::acc --&gt; D3([&quot;Se aplica sola al cobrar&quot;]):::fin
+PO --&gt;|Combo| D2[&quot;Lleva N, paga M&quot;]:::acc --&gt; D3
+Q --&gt;|Cupón| CU[&quot;Código, % o $, compra mínima, tope,&lt;br/&gt;canal, usos y vigencia&quot;]:::acc --&gt; CU2([&quot;Lo usan en tienda o en la app&quot;]):::fin
+Q --&gt;|Publicidad| FL[&quot;Flyer: producto y precio en oferta&quot;]:::acc --&gt; FL2[&quot;Imagen con el QR de la tienda&quot;]:::auto --&gt; FL3([&quot;Compartir por WhatsApp&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+</pre></div>
+    </article>
+    <article class="lienzo" id="panel-compras">
+      <h3>8 · Compras y reabasto (como funciona hoy)</h3><p>La Matriz le compra al proveedor y surte a las tiendas. El flujo nuevo con proveedores está en el diagrama de reabasto.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;La Matriz necesita mercancía&quot;]):::ini --&gt; OC[&quot;Orden de compra: proveedor,&lt;br/&gt;productos, cantidades y precio&quot;]:::acc --&gt; ENV[&quot;Enviada al proveedor&quot;]:::acc
+ENV --&gt; LLE[&quot;El proveedor entrega en la Matriz&quot;]:::acc --&gt; REG[&quot;Registro lo que llegó&quot;]:::acc --&gt; Q{&quot;¿Llegó todo?&quot;}:::dec
+Q --&gt;|No| PAR[&quot;Parcial: espero el resto&quot;]:::acc --&gt; LLE
+Q --&gt;|Sí| COM[&quot;Completa&quot;]:::acc
+REG -.-&gt; CXP[&quot;Entra al inventario de la Matriz&lt;br/&gt;y nace la cuenta por pagar al proveedor&quot;]:::auto
+T([&quot;La tienda necesita mercancía&quot;]):::ini --&gt; CAR[&quot;Matriz y Reabasto: carrito con precio&lt;br/&gt;de suministro (costo + margen)&quot;]:::acc --&gt; SOL[&quot;Solicitado&quot;]:::acc
+SOL --&gt; Q2{&quot;¿La tienda lo&lt;br/&gt;cancela?&quot;}:::dec
+Q2 --&gt;|Sí| CAN([&quot;Cancelado&quot;]):::mal
+Q2 --&gt;|No| PREP[&quot;La Matriz prepara y envía&quot;]:::acc --&gt; REC[&quot;La tienda marca «Recibido»&lt;br/&gt;con lo que llegó&quot;]:::acc
+REC --&gt; MOV[&quot;Baja el stock de la Matriz, sube el de la tienda&lt;br/&gt;y nace la deuda de la tienda con la Matriz&quot;]:::auto
+CXP --&gt; CU
+MOV --&gt; CU[&quot;Cuentas: abonos en $ o Bs&quot;]:::acc --&gt; Q3{&quot;¿Saldo&lt;br/&gt;en cero?&quot;}:::dec
+Q3 --&gt;|No| CU
+Q3 --&gt;|Sí| FIN([&quot;Cuenta liquidada&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+</pre></div>
+    </article>
+    <article class="lienzo" id="panel-red">
+      <h3>9 · Red, usuarios, Academia y Club</h3><p>Lo que hacen Corporativo, los administradores y Operaciones.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Abrir una tienda nueva&quot;]):::ini --&gt; T1[&quot;Portal Corporativo · paso 1:&lt;br/&gt;datos de la tienda&quot;]:::acc --&gt; T2[&quot;Paso 2: datos del empresario&quot;]:::acc
+T2 --&gt; T3[&quot;Se crea su usuario y le llega un correo&lt;br/&gt;con contraseña temporal&quot;]:::auto --&gt; T4[&quot;Empresario configura su tienda:&lt;br/&gt;ubicación, datos fiscales y cajeros&quot;]:::acc
+T4 --&gt; T5{&quot;¿Todo listo?&quot;}:::dec
+T5 --&gt;|No| T4
+T5 --&gt;|Sí| T6([&quot;Tienda Activa&quot;]):::fin
+T6 -.-&gt;|Si hay problemas| T7([&quot;Suspendida&quot;]):::mal
+U([&quot;Dar acceso a alguien&quot;]):::ini --&gt; U1[&quot;Nuevo usuario: rol y ámbito&lt;br/&gt;(país, estado o tienda)&quot;]:::acc --&gt; U2[&quot;Marco los módulos que verá&quot;]:::acc --&gt; U3{&quot;¿Hay correo&lt;br/&gt;configurado?&quot;}:::dec
+U3 --&gt;|Sí| U4([&quot;Le llega la invitación&quot;]):::fin
+U3 --&gt;|No| U5([&quot;El panel muestra la contraseña&lt;br/&gt;temporal para entregarla&quot;]):::fin
+A([&quot;Capacitar al equipo&quot;]):::ini --&gt; A1[&quot;Academia: publicar curso&lt;br/&gt;(algunos obligatorios, con fecha)&quot;]:::acc --&gt; A2{&quot;¿Lo terminó&lt;br/&gt;a tiempo?&quot;}:::dec
+A2 --&gt;|Sí| A3([&quot;Puntos y constancia con QR&quot;]):::fin
+A2 --&gt;|No| A4([&quot;Fuera de tiempo&quot;]):::mal
+O([&quot;Operaciones del Club&quot;]):::ini --&gt; O1{&quot;¿Qué llegó?&quot;}:::dec
+O1 --&gt;|Recarga| O2[&quot;La proceso y la marco completada&quot;]:::acc
+O1 --&gt;|Canje de premio| O3[&quot;Entrego el premio y lo marco&quot;]:::acc
+O1 --&gt;|Evento| O4[&quot;Creo el evento y veo asistentes&quot;]:::acc
+O1 --&gt;|Repartidor nuevo| O5{&quot;¿Lo apruebo?&quot;}:::dec
+O5 --&gt;|Sí| O6([&quot;Ya puede entrar a la app&quot;]):::fin
+O5 --&gt;|No| O7([&quot;Rechazado&quot;]):::mal
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+</pre></div>
+    </article>
+    <article class="lienzo" id="panel-reportes">
+      <h3>10 · Reportes, metas y rentabilidad</h3><p>Cómo se mide cada tienda y la red.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Quiero ver cómo vamos&quot;]):::ini --&gt; F[&quot;Elijo período y tienda&quot;]:::acc --&gt; Q{&quot;¿Qué quiero&lt;br/&gt;saber?&quot;}:::dec
+Q --&gt;|Cuánto vendí| V[&quot;Ventas por día, tienda, método y moneda&quot;]:::acc
+Q --&gt;|Cómo cerró la caja| C[&quot;Turnos y diferencias de arqueo&quot;]:::acc
+Q --&gt;|Qué se vende| P[&quot;Productos más y menos vendidos&quot;]:::acc
+Q --&gt;|Qué tengo| IN[&quot;Inventario y movimientos&quot;]:::acc
+Q --&gt;|Cómo va el delivery| D[&quot;Pedidos, tiempos y repartidores&quot;]:::acc
+Q --&gt;|Cómo va la red| R[&quot;Comparativo entre tiendas&quot;]:::acc
+Q --&gt;|Cuánto debo vender| RE[&quot;Rentabilidad: capturo costos fijos y %&quot;]:::acc --&gt; RE2[&quot;Punto de equilibrio, meta diaria&lt;br/&gt;y retorno de la inversión&quot;]:::auto
+Q --&gt;|Mi meta| ME[&quot;Metas diaria, semanal y mensual&quot;]:::acc --&gt; ME2{&quot;¿La cumplí?&quot;}:::dec
+ME2 --&gt;|Sí| ME3([&quot;Insignia de meta cumplida&quot;]):::fin
+ME2 --&gt;|No| ME4([&quot;Barra de avance&quot;]):::fin
+V --&gt; X
+C --&gt; X
+P --&gt; X
+IN --&gt; X
+D --&gt; X
+R --&gt; X
+RE2 --&gt; X([&quot;Exportar a Excel o PDF&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+</pre></div>
+    </article>
+  </section>
+  <section class="grupo g-servidor"><h2>Servidor</h2>
+    <article class="lienzo" id="servidor">
+      <h3>11 · Lo que el sistema hace solo</h3><p>Tareas automáticas que corren sin que nadie toque un botón.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Cada minuto&quot;]):::ini --&gt; B{&quot;¿Hay pedidos&lt;br/&gt;buscando repartidor?&quot;}:::dec
+B --&gt;|Sí| B1[&quot;Amplío el radio de búsqueda&quot;]:::auto --&gt; B2{&quot;¿Pasó mucho&lt;br/&gt;tiempo?&quot;}:::dec
+B2 --&gt;|Sí| B3([&quot;Aviso al cliente o cancelo&quot;]):::mal
+B2 --&gt;|No| B4([&quot;Sigo buscando&quot;]):::fin
+I --&gt; P{&quot;¿Hay Pago Móvil&lt;br/&gt;sin comprobante?&quot;}:::dec
+P --&gt;|Sí, vencido| P1([&quot;Cancelo y devuelvo los puntos&quot;]):::mal
+I --&gt; T{&quot;¿Alguna tienda dejó&lt;br/&gt;de dar señal?&quot;}:::dec
+T --&gt;|Sí| T1([&quot;La marco desconectada&quot;]):::auto
+D([&quot;Cada día&quot;]):::ini --&gt; C{&quot;¿El cupón «te extrañamos»&lt;br/&gt;está encendido?&quot;}:::dec
+C --&gt;|Sí| C1{&quot;¿Hay clientes sin comprar&lt;br/&gt;hace varios días?&quot;}:::dec
+C1 --&gt;|Sí| C2([&quot;Les envío un cupón personal&lt;br/&gt;por notificación y correo&quot;]):::fin
+D --&gt; V{&quot;¿Hay puntos sin movimiento&lt;br/&gt;por varios meses?&quot;}:::dec
+V --&gt;|Sí| V1([&quot;Los vencen&quot;]):::mal
+K([&quot;En cada cobro&quot;]):::ini --&gt; K1[&quot;Consulto la tasa BCV del día&quot;]:::auto --&gt; K2([&quot;Cada venta guarda su tasa&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+</pre></div>
+    </article>
+  </section>
+</main>
+<footer class="wrap">Comercializadora VIDA · Diagrama de flujo de las apps y el panel, octubre de 2026. Describe el sistema en producción; el flujo nuevo de proveedores está en el diagrama de reabasto.</footer>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: false, securityLevel: "loose" });
+(document.fonts ? document.fonts.ready : Promise.resolve()).then(function () { mermaid.run(); });</script>
+</body>
+</html>
