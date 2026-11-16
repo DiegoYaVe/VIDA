@@ -6,7 +6,7 @@ import {
   catalogoVida, crearPedidoVida, obtenerPedidoVida, reportarPago, validarPago,
   cancelarPedidoVida, recibirPaquete,
 } from '../controllers/reabastoVida.controller.js';
-import { verPortal, avanzarPedidoPortal } from '../controllers/portalProveedor.controller.js';
+import { verPortal, avanzarPedidoPortal, avanzarPedidoApi } from '../controllers/portalProveedor.controller.js';
 
 // Los mismos que piden reabasto a la Matriz: tiendas y corporativo. Qué puede
 // hacer cada uno (pagar, validar, recibir) lo decide el controlador.
@@ -27,4 +27,9 @@ export async function reabastoVidaRoutes(fastify) {
   const limite = (max) => ({ config: { rateLimit: { max, timeWindow: '1 minute' } } });
   fastify.get('/portal-proveedor/:token', limite(60), verPortal);
   fastify.post('/portal-proveedor/:token/pedidos/:folio/:accion', limite(15), avanzarPedidoPortal);
+
+  // API entrante para proveedores con integración: mismo paso, pero con el
+  // PortalToken en Authorization: Bearer. El folio lo trae el pedido que VIDA
+  // le envió (ver el callback en notificarProveedoresApi).
+  fastify.post('/proveedor-api/pedidos/:folio/:accion', limite(30), avanzarPedidoApi);
 }

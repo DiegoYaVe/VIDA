@@ -78,39 +78,68 @@ const PASOS = {
   entregar:  { desde: ['CONFIRMADO', 'LISTO'], hacia: 'RETIRADO' },
 };
 
+// Aplica un paso (confirmar/listo/entregar) a un pedido del proveedor dado.
+// Comparte la misma lógica entre el Portal (enlace en la URL) y la API entrante
+// (Bearer con el PortalToken). Devuelve { code, body } para que cada vía
+// responda igual. No lanza: los errores esperados vienen como código 4xx.
+async function aplicarPasoProveedor(pool, prov, folio, accion, body) {
+  const paso = PASOS[accion];
+  if (!paso) return { code: 404, body: { error: 'Acción desconocida' } };
+  const r = await pool.request()
+    .input('idBranch', sql.BigInt, prov.idBranch).input('idCuenta', sql.BigInt, prov.idCuenta)
+    .input('idProveedor', sql.BigInt, prov.idProveedor).input('folio', sql.VarChar(30), String(folio || ''))
+    .query(`SELECT pp.idPedidoProveedor, pp.Status, pp.CodigoRetiro, pm.ModoRecepcion FROM VIDA_PEDIDOS_PROVEEDOR pp
+            JOIN VIDA_PEDIDOS_MATRIZ pm ON pm.idBranch=pp.idBranch AND pm.idCuenta=pp.idCuenta AND pm.idPedidoMatriz=pp.idPedidoMatriz
+            WHERE pp.idBranch=@idBranch AND pp.idCuenta=@idCuenta AND pp.idProveedor=@idProveedor AND pp.Folio=@folio`);
+  const paq = r.recordset[0];
+  if (!paq || !VISIBLES.includes(paq.Status)) return { code: 404, body: { error: 'Pedido no encontrado' } };
+  if (!paso.desde.includes(paq.Status)) return { code: 409, body: { error: 'El pedido ya no está en ese paso', Status: paq.Status } };
+  if (accion === 'entregar' && normalizarCodigo(body?.codigo) !== paq.CodigoRetiro)
+    return { code: 422, body: { error: 'El código no coincide con el del QR del pedido' } };
+
+  const notas = accion === 'confirmar' ? (String(body?.Notas || '').trim().slice(0, 500) || null) : undefined;
+  // El UPDATE repite el Status esperado: si dos tocan el pedido a la vez, solo entra uno.
+  const upd = await pool.request()
+    .input('idBranch', sql.BigInt, prov.idBranch).input('idCuenta', sql.BigInt, prov.idCuenta)
+    .input('pp', sql.BigInt, paq.idPedidoProveedor).input('antes', sql.VarChar(20), paq.Status)
+    .input('st', sql.VarChar(20), paso.hacia).input('notas', sql.VarChar(500), notas ?? null)
+    .input('retiro', sql.VarChar(12), paq.ModoRecepcion === 'RECOJO' ? 'TIENDA' : 'REPARTIDOR')
+    .query(`UPDATE VIDA_PEDIDOS_PROVEEDOR SET Status=@st, FechaMod=GETUTCDATE()
+              ${accion === 'confirmar' ? ', NotasProveedor=@notas' : ''}
+              ${accion === 'entregar' ? ', RetiradoPor=@retiro, FechaRetiro=GETUTCDATE()' : ''}
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoProveedor=@pp AND Status=@antes`);
+  if (!upd.rowsAffected[0]) return { code: 409, body: { error: 'El pedido cambió mientras tanto; vuelve a leerlo' } };
+  return { code: 200, body: { ok: true, Status: paso.hacia } };
+}
+
+// Portal (enlace secreto en la URL): el proveedor sin API avanza su pedido.
 export async function avanzarPedidoPortal(request, reply) {
   const { token, folio, accion } = request.params;
-  const paso = PASOS[accion];
-  if (!paso) return reply.code(404).send({ error: 'Acción desconocida' });
   try {
     const pool = await getPool();
     const prov = await proveedorPorToken(pool, token);
     if (!prov) return reply.code(404).send({ error: 'Este enlace no es válido. Pídele a VIDA uno nuevo.' });
-    const r = await pool.request()
-      .input('idBranch', sql.BigInt, prov.idBranch).input('idCuenta', sql.BigInt, prov.idCuenta)
-      .input('idProveedor', sql.BigInt, prov.idProveedor).input('folio', sql.VarChar(30), String(folio || ''))
-      .query(`SELECT pp.idPedidoProveedor, pp.Status, pp.CodigoRetiro, pm.ModoRecepcion FROM VIDA_PEDIDOS_PROVEEDOR pp
-              JOIN VIDA_PEDIDOS_MATRIZ pm ON pm.idBranch=pp.idBranch AND pm.idCuenta=pp.idCuenta AND pm.idPedidoMatriz=pp.idPedidoMatriz
-              WHERE pp.idBranch=@idBranch AND pp.idCuenta=@idCuenta AND pp.idProveedor=@idProveedor AND pp.Folio=@folio`);
-    const paq = r.recordset[0];
-    if (!paq || !VISIBLES.includes(paq.Status)) return reply.code(404).send({ error: 'Pedido no encontrado' });
-    if (!paso.desde.includes(paq.Status)) return reply.code(409).send({ error: 'El pedido ya no está en ese paso; recarga la página' });
-    if (accion === 'entregar' && normalizarCodigo(request.body?.codigo) !== paq.CodigoRetiro)
-      return reply.code(422).send({ error: 'El código no coincide. Pide que te muestren el QR del pedido.' });
+    const { code, body } = await aplicarPasoProveedor(pool, prov, folio, accion, request.body);
+    return reply.code(code).send(body);
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'No se pudo actualizar el pedido' });
+  }
+}
 
-    const notas = accion === 'confirmar' ? (String(request.body?.Notas || '').trim().slice(0, 500) || null) : undefined;
-    // El UPDATE repite el Status esperado: si dos personas tocan el pedido a la vez, solo entra una.
-    const upd = await pool.request()
-      .input('idBranch', sql.BigInt, prov.idBranch).input('idCuenta', sql.BigInt, prov.idCuenta)
-      .input('pp', sql.BigInt, paq.idPedidoProveedor).input('antes', sql.VarChar(20), paq.Status)
-      .input('st', sql.VarChar(20), paso.hacia).input('notas', sql.VarChar(500), notas ?? null)
-      .input('retiro', sql.VarChar(12), paq.ModoRecepcion === 'RECOJO' ? 'TIENDA' : 'REPARTIDOR')
-      .query(`UPDATE VIDA_PEDIDOS_PROVEEDOR SET Status=@st, FechaMod=GETUTCDATE()
-                ${accion === 'confirmar' ? ', NotasProveedor=@notas' : ''}
-                ${accion === 'entregar' ? ', RetiradoPor=@retiro, FechaRetiro=GETUTCDATE()' : ''}
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoProveedor=@pp AND Status=@antes`);
-    if (!upd.rowsAffected[0]) return reply.code(409).send({ error: 'El pedido cambió mientras tanto; recarga la página' });
-    return reply.send({ ok: true, Status: paso.hacia });
+// API entrante: el proveedor con integración avanza su pedido por programa.
+// Auth con su PortalToken (el mismo secreto que le da VIDA) en el header
+// Authorization: Bearer <token>. POST /api/proveedor-api/pedidos/:folio/:accion
+export async function avanzarPedidoApi(request, reply) {
+  const { folio, accion } = request.params;
+  const auth = request.headers?.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : null;
+  try {
+    const pool = await getPool();
+    const prov = await proveedorPorToken(pool, token);
+    if (!prov) return reply.code(401).send({ error: 'Credencial de API inválida' });
+    const { code, body } = await aplicarPasoProveedor(pool, prov, folio, accion, request.body);
+    return reply.code(code).send(body);
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'No se pudo actualizar el pedido' });

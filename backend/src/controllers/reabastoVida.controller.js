@@ -447,12 +447,20 @@ async function notificarProveedoresApi(pool, { idBranch, idCuenta, idPedidoMatri
               LEFT JOIN VIDA_PROVEEDORES_PRODUCTOS pr ON pr.idBranch=d.idBranch AND pr.idCuenta=d.idCuenta
                 AND pr.idProveedor=pp.idProveedor AND pr.idProducto=d.idProducto
               WHERE d.idBranch=@idBranch AND d.idCuenta=@idCuenta AND d.idPedidoProveedor=@pp`);
+    const base = (process.env.BASE_URL || 'https://api.comercializadoravida.com').replace(/\/$/, '');
     const resultado = await enviarPedidoApi(p.ApiUrl, {
       folio: p.Folio, codigoRetiro: p.CodigoRetiro, recoge: ModoRecepcion === 'RECOJO' ? 'CLIENTE_VIDA' : 'REPARTIDOR_VIDA',
       sucursal: p.Sucursal, totalLista: Number(p.TotalListaUSD), pagado: true,
       productos: lineas.recordset.map(l => ({
         codigoProveedor: l.CodigoProveedor, sku: l.SKU, nombre: l.Nombre, cantidad: Number(l.Cantidad), precioLista: Number(l.PrecioLista),
       })),
+      // A dónde reportar el avance del pedido (auth: Authorization: Bearer <tu API key de VIDA>).
+      callback: {
+        auth: 'Authorization: Bearer <tu API key de VIDA>',
+        confirmar: `${base}/api/proveedor-api/pedidos/${encodeURIComponent(p.Folio)}/confirmar`,
+        listo:     `${base}/api/proveedor-api/pedidos/${encodeURIComponent(p.Folio)}/listo`,
+        entregar:  `${base}/api/proveedor-api/pedidos/${encodeURIComponent(p.Folio)}/entregar`,
+      },
     }, log);
     await pool.request()
       .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('pp', sql.BigInt, p.idPedidoProveedor)
