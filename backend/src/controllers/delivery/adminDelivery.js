@@ -22,6 +22,7 @@ export async function listarRepartidores(request, reply) {
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
       .query(`SELECT idRepartidor, Nombre, Telefono, Email, Vehiculo, PlacaVehiculo,
+                     ISNULL(TipoReparto,'CLIENTES') AS TipoReparto, CapacidadKg,
                      ComisionPct, SaldoPendiente, SaldoPendienteVES, StatusRepartidor, Status,
                      ISNULL(StatusAprobacion,'APROBADO') AS StatusAprobacion,
                      UltimaLatitud, UltimaLongitud, UltimaUbicacion, FechaAlta

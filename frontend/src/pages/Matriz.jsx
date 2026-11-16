@@ -1,6 +1,6 @@
 // src/pages/Matriz.jsx
-// Matriz y reabasto (T-0040): pedir a la Matriz (catálogo + carrito) y
-// bandeja de pedidos (preparar/enviar/recibir con movimiento de stock).
+// Matriz y reabasto (T-0040): pedir a VIDA (proveedores, tarea 24), pedir a
+// la Matriz (catálogo + carrito) y bandeja de pedidos de las dos modalidades.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Warehouse, Store, ShoppingCart, Plus, Minus, Search, RefreshCw, X,
@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api.js';
 import { useAuthStore } from '../store/authStore.js';
+import { TabPedirVida, ModalPedidoVida, BadgeVida } from '../components/ReabastoVida.jsx';
 
 const USD = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const FECHA = (f) => f ? new Date(f).toLocaleString('es-VE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -371,7 +372,7 @@ function TabPedidos({ operaMatriz, puedeRecibir, refresh }) {
       {pedidos.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           <ClipboardList size={48} className="mx-auto mb-3 opacity-20" />
-          <p className="font-medium">Aún no hay pedidos a la Matriz</p>
+          <p className="font-medium">Aún no hay pedidos de reabasto</p>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -379,20 +380,21 @@ function TabPedidos({ operaMatriz, puedeRecibir, refresh }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-left">
-                  {['#', 'Tienda', 'Items', 'Total tienda', 'Estado', 'Fecha', ''].map((h, i) => (
+                  {['#', 'Tienda', 'Origen', 'Items', 'Total tienda', 'Estado', 'Fecha', ''].map((h, i) => (
                     <th key={i} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {pedidos.map(p => (
-                  <tr key={p.idPedidoMatriz} onClick={() => setAbierto(p.idPedidoMatriz)}
+                  <tr key={p.idPedidoMatriz} onClick={() => setAbierto(p)}
                     className="hover:bg-gray-50/50 cursor-pointer transition-colors">
                     <td className="px-4 py-3 font-bold text-gray-700">#{p.idPedidoMatriz}</td>
                     <td className="px-4 py-3 text-gray-700"><span className="inline-flex items-center gap-1.5"><Store size={13} className="text-gray-400" />{p.NombreTienda}</span></td>
+                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{p.Modalidad === 'PROVEEDOR' ? (p.ModoRecepcion === 'RECOJO' ? 'VIDA · Recojo yo' : 'VIDA · Envío VIDA') : 'Matriz'}</td>
                     <td className="px-4 py-3 text-gray-500">{p.TotalItems}</td>
                     <td className="px-4 py-3 font-bold text-gray-900">{p.TotalSuministroUSD == null ? 'Histórico: sin precio fijado' : USD(p.TotalSuministroUSD)}</td>
-                    <td className="px-4 py-3"><StatusBadge status={p.Status} /></td>
+                    <td className="px-4 py-3">{p.Modalidad === 'PROVEEDOR' ? <BadgeVida status={p.Status} /> : <StatusBadge status={p.Status} />}</td>
                     <td className="px-4 py-3 text-xs text-gray-400">{FECHA(p.FechaAlta)}</td>
                     <td className="px-4 py-3 text-right"><ArrowRight size={15} className="text-gray-300" /></td>
                   </tr>
@@ -402,7 +404,9 @@ function TabPedidos({ operaMatriz, puedeRecibir, refresh }) {
           </div>
         </div>
       )}
-      {abierto && <ModalPedido idPedidoMatriz={abierto} operaMatriz={operaMatriz} puedeRecibir={puedeRecibir} onClose={() => setAbierto(null)} onCambiado={cargar} />}
+      {abierto && (abierto.Modalidad === 'PROVEEDOR'
+        ? <ModalPedidoVida idPedidoMatriz={abierto.idPedidoMatriz} onClose={() => setAbierto(null)} onCambiado={cargar} />
+        : <ModalPedido idPedidoMatriz={abierto.idPedidoMatriz} operaMatriz={operaMatriz} puedeRecibir={puedeRecibir} onClose={() => setAbierto(null)} onCambiado={cargar} />)}
     </div>
   );
 }
@@ -410,7 +414,8 @@ function TabPedidos({ operaMatriz, puedeRecibir, refresh }) {
 // ─── Página principal ──────────────────────────────────────────────────────────
 export default function Matriz() {
   const { usuario } = useAuthStore();
-  const [tab, setTab] = useState('pedir');
+  const [tab, setTab] = useState('pedir-vida');
+  const [recienCreado, setRecienCreado] = useState(null);
   const [estado, setEstado] = useState(null);
   const [cargando, setCarg] = useState(true);
   const [refresh, setRefresh] = useState(0);
@@ -427,7 +432,8 @@ export default function Matriz() {
   const puedeRecibir = operaMatriz || ROLES_TIENDA_REABASTO.includes(usuario?.TipoUsuario);
 
   const TABS = [
-    { id: 'pedir', label: 'Pedir a la Matriz', icon: ShoppingCart },
+    { id: 'pedir-vida', label: 'Pedir a VIDA', icon: ShoppingCart },
+    { id: 'pedir', label: 'Desde el almacén', icon: Warehouse },
     { id: 'pedidos', label: 'Pedidos', icon: ClipboardList },
   ];
 
@@ -438,7 +444,7 @@ export default function Matriz() {
           <Warehouse size={22} className="text-vida-blue" /> Matriz y Reabasto
         </h1>
         <p className="text-xs text-gray-400 mt-0.5">
-          Surte a tus tiendas desde el almacén central
+          Pide tu mercancía a VIDA y recíbela en tu tienda
           {estado?.matriz ? <> · Matriz: <b className="text-gray-600">{estado.matriz.NomComercial}</b></> : null}
         </p>
       </div>
@@ -448,12 +454,12 @@ export default function Matriz() {
       ) : (
         <>
           <div className="bg-white border-b border-gray-100 px-6">
-            <div className="flex gap-1">
+            <div className="flex gap-1 overflow-x-auto">
               {TABS.map(t => {
                 const Icon = t.icon;
                 return (
                   <button key={t.id} onClick={() => setTab(t.id)}
-                    className={`flex items-center gap-2 px-4 py-3.5 text-sm font-semibold border-b-2 transition-all
+                    className={`flex items-center gap-2 px-4 py-3.5 text-sm font-semibold border-b-2 transition-all whitespace-nowrap
                       ${tab === t.id ? 'border-vida-blue text-vida-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                     <Icon size={15} /> {t.label}
                   </button>
@@ -462,9 +468,12 @@ export default function Matriz() {
             </div>
           </div>
           <div className="p-6">
+            {tab === 'pedir-vida' && <TabPedirVida matriz={estado.matriz} puntosVenta={estado.puntosVenta} operaMatriz={operaMatriz}
+              onPedidoCreado={(id) => { setRefresh(x => x + 1); setTab('pedidos'); setRecienCreado(id); }} />}
             {tab === 'pedir'   && <TabPedir matriz={estado.matriz} puntosVenta={estado.puntosVenta} onPedidoCreado={() => setRefresh(x => x + 1)} />}
             {tab === 'pedidos' && <TabPedidos operaMatriz={operaMatriz} puedeRecibir={puedeRecibir} refresh={refresh} />}
           </div>
+          {recienCreado && <ModalPedidoVida idPedidoMatriz={recienCreado} onClose={() => setRecienCreado(null)} onCambiado={() => setRefresh(x => x + 1)} />}
         </>
       )}
     </div>

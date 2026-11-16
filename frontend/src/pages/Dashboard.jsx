@@ -183,7 +183,7 @@ function DashboardAdmin({ stats, conexiones, setConexiones }) {
       </div>
 
       {/* KPIs secundarios */}
-      <div className={`grid grid-cols-2 gap-3 ${verRed ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+      <div className={`grid grid-cols-2 gap-3 ${verRed ? 'lg:grid-cols-4' : ''}`}>
         {verRed && (
           <KpiCard icon={Wifi}   label="Tiendas online"
             valor={`${globales?.SucursalesOnline || 0} / ${globales?.TotalSucursales || 0}`}
@@ -193,8 +193,11 @@ function DashboardAdmin({ stats, conexiones, setConexiones }) {
         )}
         <KpiCard icon={Package} label="Productos"   valor={globales?.TotalProductos  || '—'} color="#E67E22"
           sub="En inventario" onClick={() => navigate('/inventarios')} />
-        <KpiCard icon={Truck} label="Proveedores activos" valor={globales?.TotalProveedores ?? '—'} color="#5BBE6A"
-          sub="Registrados y activos" onClick={() => navigate('/proveedores')} />
+        {/* Los proveedores son solo de VIDA: la tienda no debe saber quiénes son */}
+        {verRed && (
+          <KpiCard icon={Truck} label="Proveedores activos" valor={globales?.TotalProveedores ?? '—'} color="#5BBE6A"
+            sub="Registrados y activos" onClick={() => navigate('/proveedores')} />
+        )}
         <KpiCard icon={AlertTriangle} label="Bajo stock" valor={stockBajo?.total || 0} color="#E74C3C"
           sub="Productos por reponer" onClick={() => navigate('/reportes')} />
       </div>

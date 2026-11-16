@@ -22,6 +22,7 @@ import { cajaRoutes }       from './routes/caja.routes.js';
 import { deliveryRoutes }   from './routes/delivery.routes.js';
 import { promocionesRoutes } from './routes/promociones.routes.js';
 import { matrizRoutes }      from './routes/matriz.routes.js';
+import { reabastoVidaRoutes } from './routes/reabastoVida.routes.js';
 import { corporativoRoutes } from './routes/corporativo.routes.js';
 import { paisesRoutes }     from './routes/paises.routes.js';
 import { estadosRoutes }    from './routes/estados.routes.js';
@@ -40,6 +41,7 @@ import { expirarPedidosVencidos } from './controllers/pedidos.controller.js';
 import { expirarPuntosInactivosJob } from './controllers/premios.controller.js';
 import { emitirCuponesInactividad } from './services/cuponesAutomaticos.service.js';
 import { procesarBusquedas } from './services/dispatch.service.js';
+import { procesarEnviosProveedor } from './services/reabastoDispatch.service.js';
 import { vencerPagosMovilesImpagos } from './services/pagoMovil.service.js';
 import { wsRoutes } from './ws/ws.routes.js';
 import multipart from '@fastify/multipart';
@@ -202,6 +204,7 @@ fastify.register(cajaRoutes,       { prefix: '/api' });
 fastify.register(deliveryRoutes,   { prefix: '/api' });
 fastify.register(promocionesRoutes, { prefix: '/api' });
 fastify.register(matrizRoutes,      { prefix: '/api' });
+fastify.register(reabastoVidaRoutes, { prefix: '/api' });
 fastify.register(corporativoRoutes, { prefix: '/api' });
 fastify.register(paisesRoutes,     { prefix: '/api' });
 fastify.register(estadosRoutes,    { prefix: '/api' });
@@ -240,6 +243,14 @@ setInterval(async () => {
 setInterval(async () => {
   try {
     await procesarBusquedas(fastify.log);
+  } catch {}
+}, 60_000);
+
+// Job: despacho del envío proveedor → tienda — ofrece cada paquete listo a los
+// repartidores de proveedores cuyo vehículo aguanta el peso (cada 60 segundos)
+setInterval(async () => {
+  try {
+    await procesarEnviosProveedor(fastify.log);
   } catch {}
 }, 60_000);
 

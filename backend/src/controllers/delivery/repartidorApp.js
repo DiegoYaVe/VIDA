@@ -15,6 +15,7 @@ import path from 'path';
 import fs from 'fs';
 import { getConfigVal, nextId, nextIdTx, tokenClientePedido } from './comun.js';
 import { reembolsarPuntosPedido } from './puntos.js';
+import { normalizarCodigo, repartidorAguanta } from '../../services/reabastoProveedor.service.js';
 
 // ══════════════════════════════════════════════════════════════════════════
 // REPARTIDOR — REGISTRO DESDE LA APP (queda pendiente de aprobación)
@@ -22,12 +23,20 @@ import { reembolsarPuntosPedido } from './puntos.js';
 // ══════════════════════════════════════════════════════════════════════════
 export async function registrarRepartidor(request, reply) {
   const { idBranch, idCuenta, Nombre, Telefono, Email, Vehiculo, PlacaVehiculo, Contrasena } = request.body || {};
+  const TipoReparto = ['CLIENTES', 'PROVEEDORES', 'AMBOS'].includes(request.body?.TipoReparto)
+    ? request.body.TipoReparto : 'CLIENTES';
+  const reparteProveedores = TipoReparto === 'PROVEEDORES' || TipoReparto === 'AMBOS';
+  const capacidad = Number(request.body?.CapacidadKg);
+  const CapacidadKg = reparteProveedores && capacidad > 0 ? capacidad : null;
 
   if (!Nombre?.trim() || !Telefono?.trim()) {
     return reply.code(400).send({ error: 'Nombre y teléfono son obligatorios' });
   }
   if (!Contrasena || Contrasena.length < 6) {
     return reply.code(400).send({ error: 'La contraseña es obligatoria (mínimo 6 caracteres)' });
+  }
+  if (reparteProveedores && !(CapacidadKg > 0)) {
+    return reply.code(400).send({ error: 'Para repartir a tiendas indica la capacidad de carga en kg' });
   }
 
   try {
@@ -61,11 +70,13 @@ export async function registrarRepartidor(request, reply) {
         .input('Email',        sql.VarChar(100), Email?.trim() || null)
         .input('Vehiculo',     sql.VarChar(100), Vehiculo?.trim() || null)
         .input('PlacaVehiculo',sql.VarChar(20),  PlacaVehiculo?.trim() || null)
+        .input('TipoReparto',  sql.VarChar(12),  TipoReparto)
+        .input('CapacidadKg',  sql.Decimal(10, 2), CapacidadKg)
         .input('Contrasena',   sql.NVarChar(200), contrasenaHash)
         .query(`INSERT INTO VIDA_REPARTIDORES
-                  (idBranch, idCuenta, idRepartidor, Nombre, Telefono, Email, Vehiculo, PlacaVehiculo, Contrasena, StatusAprobacion)
+                  (idBranch, idCuenta, idRepartidor, Nombre, Telefono, Email, Vehiculo, PlacaVehiculo, TipoReparto, CapacidadKg, Contrasena, StatusAprobacion)
                 VALUES
-                  (@idBranch, @idCuenta, @idRepartidor, @Nombre, @Telefono, @Email, @Vehiculo, @PlacaVehiculo, @Contrasena, 'PENDIENTE')`);
+                  (@idBranch, @idCuenta, @idRepartidor, @Nombre, @Telefono, @Email, @Vehiculo, @PlacaVehiculo, @TipoReparto, @CapacidadKg, @Contrasena, 'PENDIENTE')`);
       return idRepartidor;
     });
 
@@ -1418,5 +1429,238 @@ export async function calificarRepartidor(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al calificar' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ENVÍO PROVEEDOR → TIENDA (tarea 24, fase 2)
+// El repartidor de proveedores ve las recolecciones disponibles, acepta una,
+// la recoge en la sucursal con el código de retiro (QR) y la lleva a la tienda.
+// La tienda confirma la recepción por su lado (es la que ingresa el inventario).
+// ══════════════════════════════════════════════════════════════════════════
+const ENVIO_MAX_ACTIVOS = 2;
+
+// Paquete + su punto de retiro (sucursal) + la tienda destino + su peso.
+const SELECT_ENVIO = `
+  SELECT pp.idPedidoProveedor, pp.idPedidoMatriz, pp.Folio, pp.Status, pp.CodigoRetiro, pp.idRepartidor,
+         s.Nombre AS NombreSucursal, s.Direccion AS DireccionSucursal,
+         s.Latitud AS LatSucursal, s.Longitud AS LonSucursal,
+         tienda.NomComercial AS NombreTienda, tienda.Direccion AS DireccionTienda,
+         tienda.Latitud AS LatTienda, tienda.Longitud AS LonTienda,
+         w.PesoKg, w.SinPeso
+  FROM VIDA_PEDIDOS_PROVEEDOR pp
+  JOIN VIDA_PEDIDOS_MATRIZ pm
+    ON pm.idBranch=pp.idBranch AND pm.idCuenta=pp.idCuenta AND pm.idPedidoMatriz=pp.idPedidoMatriz
+  LEFT JOIN VIDA_PROVEEDORES_SUCURSALES s
+    ON s.idBranch=pp.idBranch AND s.idCuenta=pp.idCuenta AND s.idProveedor=pp.idProveedor AND s.idSucursal=pp.idSucursal
+  LEFT JOIN VIDA_CUENTA_PUNTOS_VENTA tienda
+    ON tienda.idBranch=pm.idBranch AND tienda.idCuenta=pm.idCuenta AND tienda.idPuntoVenta=pm.idPuntoVentaSolicita
+  OUTER APPLY (
+    SELECT SUM(d.CantidadSolicitada * inv.PesoKg) AS PesoKg,
+           SUM(CASE WHEN inv.PesoKg IS NULL THEN 1 ELSE 0 END) AS SinPeso
+    FROM VIDA_PEDIDOS_MATRIZ_DETALLE d
+    LEFT JOIN VIDA_INVENTARIO_PRODUCTOS inv
+      ON inv.idBranch=d.idBranch AND inv.idCuenta=d.idCuenta AND inv.idProducto=d.idProducto
+    WHERE d.idBranch=pp.idBranch AND d.idCuenta=pp.idCuenta AND d.idPedidoProveedor=pp.idPedidoProveedor
+  ) w`;
+
+function salidaEnvio(p, conCodigo = false) {
+  const o = {
+    idPedidoProveedor: p.idPedidoProveedor,
+    Folio: p.Folio,
+    Status: p.Status,
+    PesoKg: p.PesoKg != null ? Number(p.PesoKg) : null,
+    Sucursal: { Nombre: p.NombreSucursal, Direccion: p.DireccionSucursal, Latitud: p.LatSucursal, Longitud: p.LonSucursal },
+    Tienda:   { Nombre: p.NombreTienda,   Direccion: p.DireccionTienda,   Latitud: p.LatTienda,   Longitud: p.LonTienda },
+  };
+  if (conCodigo) o.CodigoRetiro = p.CodigoRetiro;  // solo en las ya aceptadas, para mostrar el QR al recoger
+  return o;
+}
+
+// GET /delivery/repartidor/envios-disponibles
+export async function enviosProveedorDisponibles(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  try {
+    const pool = await getPool();
+    const meR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`SELECT ISNULL(TipoReparto,'CLIENTES') AS TipoReparto, CapacidadKg
+              FROM VIDA_REPARTIDORES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+    const me = meR.recordset[0];
+    if (!me || !['PROVEEDORES', 'AMBOS'].includes(me.TipoReparto)) return reply.send([]);
+
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .query(`${SELECT_ENVIO}
+              WHERE pp.idBranch=@idBranch AND pp.idCuenta=@idCuenta
+                AND pm.ModoRecepcion='ENVIO_VIDA' AND pp.idRepartidor IS NULL
+                AND pp.Status IN ('CONFIRMADO','LISTO')`);
+
+    // Solo las de peso completo que aguanta su vehículo.
+    const out = r.recordset
+      .filter(p => p.SinPeso === 0 && repartidorAguanta(me.CapacidadKg, p.PesoKg != null ? Number(p.PesoKg) : 0))
+      .map(p => salidaEnvio(p));
+    return reply.send(out);
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al listar recolecciones' });
+  }
+}
+
+// GET /delivery/repartidor/envios-activos
+export async function enviosProveedorActivos(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`${SELECT_ENVIO}
+              WHERE pp.idBranch=@idBranch AND pp.idCuenta=@idCuenta
+                AND pp.idRepartidor=@idRepartidor
+                AND pp.Status IN ('CONFIRMADO','LISTO','RETIRADO')
+              ORDER BY pp.FechaAlta`);
+    return reply.send(r.recordset.map(p => salidaEnvio(p, true)));
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al listar tus recolecciones' });
+  }
+}
+
+// POST /delivery/repartidor/envios/aceptar  { idPedidoProveedor }
+export async function aceptarEnvioProveedor(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  const { idPedidoProveedor } = request.body || {};
+  if (!idPedidoProveedor) return reply.code(400).send({ error: 'Falta el envío' });
+  try {
+    const pool = await getPool();
+
+    const meR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`SELECT ISNULL(TipoReparto,'CLIENTES') AS TipoReparto, CapacidadKg
+              FROM VIDA_REPARTIDORES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor`);
+    const me = meR.recordset[0];
+    if (!me || !['PROVEEDORES', 'AMBOS'].includes(me.TipoReparto))
+      return reply.code(403).send({ error: 'No estás registrado como repartidor de proveedores' });
+
+    const pkgR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idPP', sql.BigInt, idPedidoProveedor)
+      .query(`SELECT pp.Status, pp.idRepartidor, pm.ModoRecepcion,
+                     (SELECT SUM(d.CantidadSolicitada * inv.PesoKg)
+                      FROM VIDA_PEDIDOS_MATRIZ_DETALLE d
+                      LEFT JOIN VIDA_INVENTARIO_PRODUCTOS inv
+                        ON inv.idBranch=d.idBranch AND inv.idCuenta=d.idCuenta AND inv.idProducto=d.idProducto
+                      WHERE d.idBranch=pp.idBranch AND d.idCuenta=pp.idCuenta AND d.idPedidoProveedor=pp.idPedidoProveedor) AS PesoKg,
+                     (SELECT COUNT(*) FROM VIDA_PEDIDOS_MATRIZ_DETALLE d
+                      LEFT JOIN VIDA_INVENTARIO_PRODUCTOS inv
+                        ON inv.idBranch=d.idBranch AND inv.idCuenta=d.idCuenta AND inv.idProducto=d.idProducto
+                      WHERE d.idBranch=pp.idBranch AND d.idCuenta=pp.idCuenta AND d.idPedidoProveedor=pp.idPedidoProveedor
+                        AND inv.PesoKg IS NULL) AS SinPeso
+              FROM VIDA_PEDIDOS_PROVEEDOR pp
+              JOIN VIDA_PEDIDOS_MATRIZ pm
+                ON pm.idBranch=pp.idBranch AND pm.idCuenta=pp.idCuenta AND pm.idPedidoMatriz=pp.idPedidoMatriz
+              WHERE pp.idBranch=@idBranch AND pp.idCuenta=@idCuenta AND pp.idPedidoProveedor=@idPP`);
+    const pkg = pkgR.recordset[0];
+    if (!pkg) return reply.code(404).send({ error: 'Recolección no encontrada' });
+    if (pkg.ModoRecepcion !== 'ENVIO_VIDA') return reply.code(409).send({ error: 'Esta recolección no es de envío por VIDA' });
+    if (pkg.idRepartidor != null) return reply.code(409).send({ error: 'Otro repartidor ya la tomó' });
+    if (!['CONFIRMADO', 'LISTO'].includes(pkg.Status)) return reply.code(409).send({ error: `La recolección ya no está disponible (${pkg.Status})` });
+    if (Number(pkg.SinPeso) > 0) return reply.code(409).send({ error: 'A esta recolección le falta el peso de algún producto; VIDA la asigna a mano' });
+    if (!repartidorAguanta(me.CapacidadKg, pkg.PesoKg != null ? Number(pkg.PesoKg) : 0))
+      return reply.code(409).send({ error: 'Tu vehículo no aguanta el peso de esta recolección' });
+
+    const activosR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`SELECT COUNT(*) AS n FROM VIDA_PEDIDOS_PROVEEDOR
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRepartidor
+                AND Status NOT IN ('RECIBIDO','CANCELADO')`);
+    if (activosR.recordset[0].n >= ENVIO_MAX_ACTIVOS)
+      return reply.code(409).send({ error: `Ya llevas ${ENVIO_MAX_ACTIVOS} recolecciones activas. Entrega alguna antes de tomar otra.` });
+
+    // Asignación atómica: el guard en el WHERE garantiza que solo el primero gana.
+    const upd = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idPP', sql.BigInt, idPedidoProveedor).input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`UPDATE VIDA_PEDIDOS_PROVEEDOR
+              SET idRepartidor=@idRepartidor, RetiradoPor='REPARTIDOR', FechaMod=GETUTCDATE()
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoProveedor=@idPP
+                AND idRepartidor IS NULL AND Status IN ('CONFIRMADO','LISTO')`);
+    if (upd.rowsAffected[0] === 0) return reply.code(409).send({ error: 'Otro repartidor ya la tomó' });
+
+    broadcast(idBranch, idCuenta, { tipo: 'envio_proveedor_tomado', idPedidoProveedor, idRepartidor });
+    return reply.send({ ok: true, idPedidoProveedor });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al aceptar la recolección' });
+  }
+}
+
+// POST /delivery/repartidor/envios/recoger  { idPedidoProveedor, Codigo }
+export async function recogerEnvioProveedor(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  const { idPedidoProveedor, Codigo } = request.body || {};
+  if (!idPedidoProveedor || !Codigo) return reply.code(400).send({ error: 'Falta el envío o el código' });
+  try {
+    const pool = await getPool();
+    const ppR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idPP', sql.BigInt, idPedidoProveedor).input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`SELECT Status, CodigoRetiro FROM VIDA_PEDIDOS_PROVEEDOR
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoProveedor=@idPP
+                AND idRepartidor=@idRepartidor`);
+    const pp = ppR.recordset[0];
+    if (!pp) return reply.code(404).send({ error: 'No es tu recolección o no existe' });
+    if (pp.Status === 'RETIRADO') return reply.send({ ok: true, yaRetirado: true });
+    if (!['CONFIRMADO', 'LISTO'].includes(pp.Status)) return reply.code(409).send({ error: `La recolección no se puede recoger (${pp.Status})` });
+    if (normalizarCodigo(Codigo) !== normalizarCodigo(pp.CodigoRetiro)) return reply.code(400).send({ error: 'Código de retiro incorrecto' });
+
+    await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idPP', sql.BigInt, idPedidoProveedor).input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`UPDATE VIDA_PEDIDOS_PROVEEDOR SET Status='RETIRADO', FechaRetiro=GETUTCDATE(), FechaMod=GETUTCDATE()
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoProveedor=@idPP
+                AND idRepartidor=@idRepartidor AND Status IN ('CONFIRMADO','LISTO')`);
+
+    broadcast(idBranch, idCuenta, { tipo: 'envio_proveedor_retirado', idPedidoProveedor });
+    return reply.send({ ok: true });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al recoger la recolección' });
+  }
+}
+
+// POST /delivery/repartidor/envios/entregar  { idPedidoProveedor }
+// El repartidor avisa que llegó a la tienda; la tienda confirma la recepción
+// (que ingresa el inventario) desde su panel. El paquete queda RETIRADO.
+export async function entregarEnvioProveedor(request, reply) {
+  const { idBranch, idCuenta, idRepartidor } = request.repartidor;
+  const { idPedidoProveedor } = request.body || {};
+  if (!idPedidoProveedor) return reply.code(400).send({ error: 'Falta el envío' });
+  try {
+    const pool = await getPool();
+    const ppR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idPP', sql.BigInt, idPedidoProveedor).input('idRepartidor', sql.BigInt, idRepartidor)
+      .query(`SELECT Status, idPedidoMatriz, Folio FROM VIDA_PEDIDOS_PROVEEDOR
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoProveedor=@idPP
+                AND idRepartidor=@idRepartidor`);
+    const pp = ppR.recordset[0];
+    if (!pp) return reply.code(404).send({ error: 'No es tu recolección o no existe' });
+    if (pp.Status !== 'RETIRADO') return reply.code(409).send({ error: 'Primero debes recoger la recolección en la sucursal' });
+
+    broadcast(idBranch, idCuenta, {
+      tipo: 'envio_proveedor_entregado',
+      idPedidoProveedor, idPedidoMatriz: pp.idPedidoMatriz, Folio: pp.Folio,
+    });
+    return reply.send({ ok: true });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al marcar la entrega' });
   }
 }

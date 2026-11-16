@@ -5,12 +5,12 @@ import api from '../services/api.js';
 import {
   Plus, Search, Edit2, Power, Package, ShoppingCart,
   X, Check, AlertCircle,
-  Truck, ClipboardList, Eye, ArrowRight, FileText,
+  Truck, ClipboardList, Eye, ArrowRight, FileText, Link2,
 } from 'lucide-react';
 import TablaDatos, { usePreferencia } from '../components/TablaDatos.jsx';
+import ModalProveedorReabasto from '../components/ProveedorReabasto.jsx';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
-const ROLES_RED       = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 const STATUS_ORDEN_LABEL = {
@@ -190,7 +190,7 @@ function ModalProductosProveedor({ proveedor, onClose }) {
         <div className="flex items-center justify-between p-5 border-b">
           <div>
             <h3 className="font-bold text-gray-800">Productos — {proveedor.Nombre}</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Gestiona los productos que suministra este proveedor</p>
+            <p className="text-xs text-gray-500 mt-0.5">Productos que surte y su precio de lista: es lo que paga la tienda a VIDA</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
         </div>
@@ -218,7 +218,7 @@ function ModalProductosProveedor({ proveedor, onClose }) {
               </select>
               <div className="flex gap-2">
                 <input value={precioCosto} onChange={e => setPrecioCosto(e.target.value)}
-                  placeholder="Precio costo USD" type="number" step="0.01"
+                  placeholder="Precio de lista USD" type="number" step="0.01"
                   className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm" />
                 <input value={codigoProv} onChange={e => setCodigoProv(e.target.value)}
                   placeholder="Código del proveedor"
@@ -795,6 +795,11 @@ function TabProveedores({ puedeEscribir }) {
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-vida-blue">
                 <Package size={16}/>
               </button>
+              <button onClick={() => setModal({ tipo: 'reabasto', proveedor: p })}
+                title="Reabasto VIDA: comisión, portal y sucursales" aria-label={`Reabasto VIDA de ${p.Nombre}`}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-vida-blue">
+                <Link2 size={16}/>
+              </button>
               <button onClick={() => setModal({ tipo: 'form', proveedor: p })}
                 title="Editar"
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-vida-blue">
@@ -830,6 +835,9 @@ function TabProveedores({ puedeEscribir }) {
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); cargar(page); }}
         />
+      )}
+      {modal?.tipo === 'reabasto' && (
+        <ModalProveedorReabasto proveedor={modal.proveedor} onClose={() => setModal(null)} />
       )}
       {modal?.tipo === 'productos' && (
         <ModalProductosProveedor
@@ -966,36 +974,24 @@ export default function Proveedores() {
   const puedeEscribir = ROLES_ESCRITURA.includes(usuario?.TipoUsuario);
   const [tab, setTab] = useState('proveedores');
 
-  // Regla de negocio nueva: la MATRIZ compra y dispersa. Una sucursal ya no le
-  // compra directo al proveedor, así que la pestaña de órdenes solo se muestra
-  // a quien opera la Matriz: roles de red, o el ADMIN del punto de venta
-  // marcado como Matriz. El backend sigue aceptando las órdenes existentes —
-  // esto es el corte visual, no una migración de datos.
+  // Desde el 28 oct 2026 todo el módulo es solo de VIDA (SUPER_ADMIN y la
+  // Matriz): la tienda no debe saber quién es el proveedor. Quién opera lo
+  // dice el backend (operaMatriz), no una lista de roles de esta pantalla.
   const [matriz, setMatriz] = useState(null);
+  const [operaMatriz, setOperaMatriz] = useState(false);
   const [cargandoMatriz, setCargandoMatriz] = useState(true);
 
   useEffect(() => {
     api.get('/matriz')
-      .then(r => setMatriz(r.data?.matriz || null))
+      .then(r => { setMatriz(r.data?.matriz || null); setOperaMatriz(!!r.data?.operaMatriz); })
       .catch(() => setMatriz(null))
       .finally(() => setCargandoMatriz(false));
   }, []);
 
-  const esRed = ROLES_RED.includes(usuario?.TipoUsuario);
-  const operaMatriz = esRed || (
-    usuario?.TipoUsuario === 'ADMIN' && matriz &&
-    String(usuario?.idPuntoVenta) === String(matriz.idPuntoVenta)
-  );
-
   const tabs = [
     { key: 'proveedores', label: 'Proveedores',      icon: Truck },
-    ...(operaMatriz ? [{ key: 'ordenes', label: 'Órdenes de compra', icon: ClipboardList }] : []),
+    { key: 'ordenes', label: 'Órdenes de compra', icon: ClipboardList },
   ];
-
-  // Si quedó parado en una pestaña que ya no le corresponde, se lo devuelve
-  useEffect(() => {
-    if (!cargandoMatriz && !operaMatriz && tab === 'ordenes') setTab('proveedores');
-  }, [cargandoMatriz, operaMatriz, tab]);
 
   return (
     <div className="w-full p-6 max-w-6xl mx-auto">
@@ -1005,31 +1001,36 @@ export default function Proveedores() {
         <p className="text-gray-500 text-sm mt-1">Gestiona proveedores y órdenes de compra</p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-2xl w-fit mb-6">
-        {tabs.map(t => {
-          const Icon = t.icon;
-          return (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                tab === t.key
-                  ? 'bg-white text-vida-blue shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}>
-              <Icon size={16}/> {t.label}
-            </button>
-          );
-        })}
-      </div>
+      {cargandoMatriz ? null : !operaMatriz ? (
+        <div className="text-center py-16 px-4 bg-white border border-gray-100 rounded-2xl">
+          <Truck size={40} className="mx-auto mb-3 text-gray-300"/>
+          <p className="font-semibold text-gray-700">Los proveedores los gestiona VIDA</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Para surtir tu tienda, pide en <b>Matriz y Reabasto → Pedir a VIDA</b>: VIDA se encarga del resto.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Tabs */}
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-2xl w-fit max-w-full overflow-x-auto mb-6">
+            {tabs.map(t => {
+              const Icon = t.icon;
+              return (
+                <button key={t.key} onClick={() => setTab(t.key)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
+                    tab === t.key
+                      ? 'bg-white text-vida-blue shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}>
+                  <Icon size={16}/> {t.label}
+                </button>
+              );
+            })}
+          </div>
 
-      {tab === 'proveedores' && <TabProveedores puedeEscribir={puedeEscribir}/>}
-      {tab === 'ordenes' && operaMatriz && <TabOrdenes puedeEscribir={puedeEscribir} matriz={matriz}/>}
-
-      {!cargandoMatriz && !operaMatriz && (
-        <p className="mt-6 text-sm text-gray-400 border-t border-gray-100 pt-4">
-          Las órdenes de compra las emite la Matriz para toda la red. Si necesitás
-          mercancía, pedila en <b className="text-gray-500">Matriz</b> y te llega como reabasto.
-        </p>
+          {tab === 'proveedores' && <TabProveedores puedeEscribir={puedeEscribir}/>}
+          {tab === 'ordenes' && <TabOrdenes puedeEscribir={puedeEscribir} matriz={matriz}/>}
+        </>
       )}
     </div>
   );

@@ -5,6 +5,7 @@ import { getPool, sql } from '../db/sqlserver.js';
 import { conIdUnico } from '../db/idUnico.js';
 import { emitirCuenta } from '../services/cuentas.service.js';
 import { ordenSql, limiteSeguro } from '../services/ordenLista.js';
+import { tokenPortal } from '../services/reabastoProveedor.service.js';
 
 // ── Helper ─────────────────────────────────────────────────────────────────
 async function nextId(pool, tabla, campo, idBranch, idCuenta) {
@@ -129,7 +130,8 @@ export async function obtenerProveedor(request, reply) {
       .input('idProveedor', sql.BigInt, idProveedor)
       .query(`
         SELECT idProveedor, Nombre, RIF, Contacto, Email,
-               Telefono, Direccion, Ciudad, Notas, Status, FechaAlta
+               Telefono, Direccion, Ciudad, Notas, Status, FechaAlta,
+               ComisionVidaPct, CanalPedido, ApiUrl, CAST(CASE WHEN PortalToken IS NULL THEN 0 ELSE 1 END AS BIT) AS TienePortal
         FROM VIDA_PROVEEDORES
         WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idProveedor = @idProveedor
       `);
@@ -851,5 +853,182 @@ export async function cambiarEstadoOrden(request, reply) {
     if (enTx) { try { await tx.rollback(); } catch { /* la tx ya murió */ } }
     request.log.error(err);
     return reply.code(err.statusCode || 500).send({ error: 'Error al cambiar estado: ' + err.message });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// REABASTO CON VIDA COMO INTERMEDIARIO (tarea 24, sql/59) — solo VIDA
+// ══════════════════════════════════════════════════════════════════════════
+
+// PUT /api/proveedores/:idProveedor/reabasto { ComisionVidaPct, CanalPedido, ApiUrl }
+// ComisionVidaPct vacío = la comisión general de la cuenta.
+export async function configurarReabastoProveedor(request, reply) {
+  const { idBranch, idCuenta, idUsuario } = request.user;
+  const { idProveedor } = request.params;
+  const { ComisionVidaPct, CanalPedido, ApiUrl } = request.body || {};
+  const comision = ComisionVidaPct === '' || ComisionVidaPct == null ? null : Number(ComisionVidaPct);
+  if (comision != null && !(comision >= 0 && comision < 100))
+    return reply.code(400).send({ error: 'La comisión de VIDA debe estar entre 0 y 100 %' });
+  if (!['PORTAL', 'API'].includes(CanalPedido)) return reply.code(400).send({ error: 'El canal debe ser Portal o API' });
+  const url = String(ApiUrl || '').trim() || null;
+  if (CanalPedido === 'API') {
+    try { if (!['https:', 'http:'].includes(new URL(url).protocol)) throw new Error(); }
+    catch { return reply.code(400).send({ error: 'Escribe la URL de la API del proveedor (https://…)' }); }
+  }
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idProveedor', sql.BigInt, idProveedor)
+      .input('Comision', sql.Decimal(9, 4), comision)
+      .input('Canal', sql.VarChar(10), CanalPedido)
+      .input('ApiUrl', sql.VarChar(500), url)
+      .input('UsuMod', sql.VarChar(20), String(idUsuario))
+      .query(`UPDATE VIDA_PROVEEDORES SET ComisionVidaPct=@Comision, CanalPedido=@Canal, ApiUrl=@ApiUrl,
+                FechaMod=GETUTCDATE(), UsuMod=@UsuMod
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProveedor=@idProveedor`);
+    if (!r.rowsAffected[0]) return reply.code(404).send({ error: 'Proveedor no encontrado' });
+    return reply.send({ message: 'Datos de reabasto guardados' });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al guardar los datos de reabasto' });
+  }
+}
+
+// POST /api/proveedores/:idProveedor/portal → enlace nuevo del Portal de
+// proveedores. Generar otro invalida el anterior (si se filtró, se corta).
+export async function generarPortalProveedor(request, reply) {
+  const { idBranch, idCuenta, idUsuario } = request.user;
+  const { idProveedor } = request.params;
+  try {
+    const pool = await getPool();
+    const token = tokenPortal();
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idProveedor', sql.BigInt, idProveedor).input('token', sql.VarChar(64), token)
+      .input('UsuMod', sql.VarChar(20), String(idUsuario))
+      .query(`UPDATE VIDA_PROVEEDORES SET PortalToken=@token, FechaMod=GETUTCDATE(), UsuMod=@UsuMod
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProveedor=@idProveedor`);
+    if (!r.rowsAffected[0]) return reply.code(404).send({ error: 'Proveedor no encontrado' });
+    return reply.send({ ruta: `/proveedor/${token}` });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al generar el enlace del portal' });
+  }
+}
+
+// GET /api/proveedores/:idProveedor/portal → el enlace vigente (si hay)
+export async function verPortalProveedor(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idProveedor', sql.BigInt, request.params.idProveedor)
+      .query(`SELECT PortalToken FROM VIDA_PROVEEDORES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProveedor=@idProveedor`);
+    if (!r.recordset.length) return reply.code(404).send({ error: 'Proveedor no encontrado' });
+    const t = r.recordset[0].PortalToken;
+    return reply.send({ ruta: t ? `/proveedor/${t}` : null });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al leer el enlace del portal' });
+  }
+}
+
+// Sucursales del proveedor: los puntos de retiro
+// GET  /api/proveedores/:idProveedor/sucursales
+// POST /api/proveedores/:idProveedor/sucursales { Nombre, Direccion, Horario, Latitud, Longitud }
+// PUT  /api/proveedores/:idProveedor/sucursales/:idSucursal { ...mismo, Status }
+export async function listarSucursalesProveedor(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idProveedor', sql.BigInt, request.params.idProveedor)
+      .query(`SELECT idSucursal, Nombre, Direccion, Horario, Latitud, Longitud, Status
+              FROM VIDA_PROVEEDORES_SUCURSALES
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProveedor=@idProveedor
+              ORDER BY Status, Nombre`);
+    return reply.send(r.recordset);
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al obtener las sucursales' });
+  }
+}
+
+function datosSucursal(body = {}) {
+  const Nombre = String(body.Nombre || '').trim();
+  const Direccion = String(body.Direccion || '').trim();
+  if (!Nombre || !Direccion) return { error: 'Nombre y dirección son requeridos' };
+  const coord = (v, max) => {
+    if (v === '' || v == null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) && Math.abs(n) <= max ? n : NaN;
+  };
+  const Latitud = coord(body.Latitud, 90), Longitud = coord(body.Longitud, 180);
+  if (Number.isNaN(Latitud) || Number.isNaN(Longitud)) return { error: 'Latitud o longitud no válidas' };
+  if ((Latitud == null) !== (Longitud == null)) return { error: 'Escribe latitud y longitud, o ninguna' };
+  return { Nombre: Nombre.slice(0, 150), Direccion: Direccion.slice(0, 500), Horario: String(body.Horario || '').trim().slice(0, 200) || null, Latitud, Longitud };
+}
+
+export async function crearSucursalProveedor(request, reply) {
+  const { idBranch, idCuenta, idUsuario } = request.user;
+  const { idProveedor } = request.params;
+  const d = datosSucursal(request.body);
+  if (d.error) return reply.code(400).send({ error: d.error });
+  try {
+    const pool = await getPool();
+    const idSucursal = await conIdUnico(async () => {
+      const id = (await pool.request()
+        .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+        .input('idProveedor', sql.BigInt, idProveedor)
+        .query(`SELECT ISNULL(MAX(idSucursal),0)+1 AS id FROM VIDA_PROVEEDORES_SUCURSALES
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProveedor=@idProveedor`)).recordset[0].id;
+      const ins = await pool.request()
+        .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+        .input('idProveedor', sql.BigInt, idProveedor).input('idSucursal', sql.BigInt, id)
+        .input('Nombre', sql.VarChar(150), d.Nombre).input('Direccion', sql.VarChar(500), d.Direccion)
+        .input('Horario', sql.VarChar(200), d.Horario)
+        .input('Latitud', sql.Decimal(10, 7), d.Latitud).input('Longitud', sql.Decimal(10, 7), d.Longitud)
+        .input('UsuAlta', sql.VarChar(30), String(idUsuario))
+        .query(`INSERT INTO VIDA_PROVEEDORES_SUCURSALES
+                  (idBranch,idCuenta,idProveedor,idSucursal,Nombre,Direccion,Horario,Latitud,Longitud,UsuAlta)
+                SELECT @idBranch,@idCuenta,@idProveedor,@idSucursal,@Nombre,@Direccion,@Horario,@Latitud,@Longitud,@UsuAlta
+                WHERE EXISTS (SELECT 1 FROM VIDA_PROVEEDORES WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProveedor=@idProveedor)`);
+      return ins.rowsAffected[0] ? id : null;
+    });
+    if (!idSucursal) return reply.code(404).send({ error: 'Proveedor no encontrado' });
+    return reply.code(201).send({ idSucursal });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al crear la sucursal' });
+  }
+}
+
+export async function editarSucursalProveedor(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const { idProveedor, idSucursal } = request.params;
+  const d = datosSucursal(request.body);
+  if (d.error) return reply.code(400).send({ error: d.error });
+  const Status = request.body?.Status === 'INACTIVO' ? 'INACTIVO' : 'ACTIVO';
+  try {
+    const pool = await getPool();
+    const r = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idProveedor', sql.BigInt, idProveedor).input('idSucursal', sql.BigInt, idSucursal)
+      .input('Nombre', sql.VarChar(150), d.Nombre).input('Direccion', sql.VarChar(500), d.Direccion)
+      .input('Horario', sql.VarChar(200), d.Horario)
+      .input('Latitud', sql.Decimal(10, 7), d.Latitud).input('Longitud', sql.Decimal(10, 7), d.Longitud)
+      .input('Status', sql.VarChar(20), Status)
+      .query(`UPDATE VIDA_PROVEEDORES_SUCURSALES SET Nombre=@Nombre, Direccion=@Direccion, Horario=@Horario,
+                Latitud=@Latitud, Longitud=@Longitud, Status=@Status
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProveedor=@idProveedor AND idSucursal=@idSucursal`);
+    if (!r.rowsAffected[0]) return reply.code(404).send({ error: 'Sucursal no encontrada' });
+    return reply.send({ message: 'Sucursal actualizada' });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al editar la sucursal' });
   }
 }

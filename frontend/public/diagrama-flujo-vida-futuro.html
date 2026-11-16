@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cómo funcionará VIDA</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&family=Nunito+Sans:wght@400;600;700;800&display=swap">
+<style>
+/* Layout: póster de diagramas, uno por área, cada uno en su lienzo con scroll propio.
+   Una sola apariencia clara (como el ejemplo de referencia) con colores fijos. */
+:root {
+  --bg: #F6F3EE; --surface: #FFFFFF; --ink: #1F3550; --ink-2: #4A5B73; --muted: #6B7B90; --line: #E3DDD3;
+  --verde: #2E9E78; --verde-s: #D3F2E4; --azul: #3B6E9C; --azul-s: #E7F0FA; --rosa: #D6247F; --rosa-s: #FCE7F2;
+  --gris: #7A8597; --gris-s: #F2F4F7; --naranja: #D97706; --naranja-s: #FFF1E6; --amarillo: #E5A823; --amarillo-s: #FFFBEA;
+  --display: "Poppins", "Segoe UI", system-ui, sans-serif;
+  --body: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+/* Mermaid mide el texto con las cajas por defecto; con border-box le faltaba espacio y cortaba la última letra. */
+.mermaid, .mermaid * { box-sizing: content-box; }
+.mermaid foreignObject { overflow: visible; }
+.mermaid .nodeLabel, .mermaid .edgeLabel { white-space: nowrap; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header .wrap { padding-block: 36px 18px; display: grid; grid-template-columns: 1fr auto; gap: 16px 32px; align-items: end; }
+h1 { font-family: var(--display); font-weight: 600; font-size: clamp(34px, 6vw, 58px); line-height: 1.02; margin: 0; color: var(--ink); text-wrap: balance; }
+.sub { font-family: var(--display); font-size: 17px; letter-spacing: .08em; text-transform: uppercase; color: var(--azul); margin-top: 8px; }
+.marca { text-align: right; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); line-height: 1.4; }
+.lead { grid-column: 1 / -1; max-width: 75ch; color: var(--ink-2); }
+@media (max-width: 640px) { header .wrap { grid-template-columns: 1fr; } .marca { text-align: left; } }
+.leyenda { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding-block: 6px 4px; font-size: 14px; color: var(--ink-2); }
+.leyenda span { display: inline-flex; align-items: center; gap: 8px; }
+.f { display: inline-block; width: 30px; height: 18px; border: 2px solid; }
+.f.ini { border-radius: 999px; background: var(--verde-s); border-color: var(--verde); }
+.f.dec { width: 18px; height: 18px; transform: rotate(45deg); background: #E9F8F1; border-color: var(--verde); margin-inline: 6px; }
+.f.acc { background: var(--azul-s); border-color: var(--azul); }
+.f.auto { background: var(--gris-s); border-color: var(--gris); border-style: dashed; }
+.f.fin { border-radius: 999px; background: var(--rosa-s); border-color: var(--rosa); }
+.f.mal { border-radius: 999px; background: var(--naranja-s); border-color: var(--naranja); }
+.f.nota { background: var(--amarillo-s); border-color: var(--amarillo); border-style: dashed; }
+.f.nuevo { background: #F1E9FB; border-color: #7C3AED; }
+.f.nauto { background: #F8F4FD; border-color: #7C3AED; border-style: dashed; }
+.otra { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; font-weight: 800; color: #5B21B6; text-decoration: none; border: 1.5px solid #C4B5FD; background: #F5F0FF; border-radius: 999px; padding: 8px 14px; }
+.otra:hover, .otra:focus-visible { border-color: #7C3AED; outline: none; }
+nav.indice { display: flex; flex-wrap: wrap; gap: 8px; padding-block: 14px 6px; }
+nav.indice a { text-decoration: none; font-size: 14px; font-weight: 700; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px; padding: 6px 12px; }
+nav.indice a:hover, nav.indice a:focus-visible { border-color: var(--azul); outline: none; }
+nav.indice b { color: var(--muted); font-weight: 700; margin-right: 4px; }
+.grupo { padding-block: 26px 4px; display: grid; gap: 18px; }
+.grupo > h2 { font-family: var(--display); font-weight: 600; font-size: clamp(24px, 3.4vw, 34px); margin: 0; display: flex; align-items: center; gap: 12px; }
+.grupo > h2::before { content: ""; width: 14px; height: 14px; border-radius: 4px; background: var(--c); }
+.g-compras { --c: var(--verde); } .g-repartidor { --c: var(--rosa); } .g-panel { --c: var(--azul); } .g-servidor { --c: var(--gris); } .g-mapa { --c: var(--amarillo); } .g-proveedores { --c: #0E7490; }
+.lienzo { background: var(--surface); border: 1.5px solid var(--line); border-radius: 22px; padding: 18px 18px 8px; display: grid; gap: 6px; scroll-margin-top: 12px; }
+.lienzo h3 { font-family: var(--display); font-weight: 600; font-size: 20px; margin: 0; color: var(--ink); }
+.lienzo > p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.scroll { overflow: auto; padding-block: 10px; -webkit-overflow-scrolling: touch; }
+.scroll pre.mermaid { margin: 0 auto; background: transparent; font-family: Arial, Helvetica, sans-serif; width: max-content; min-width: 100%; display: flex; justify-content: center; }
+.hint { font-size: 13px; color: var(--muted); }
+footer { padding-block: 30px 44px; color: var(--muted); font-size: 13.5px; }
+a:focus-visible { outline: 3px solid var(--azul); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div><h1>Cómo va a<br>funcionar</h1><div class="sub">Apps y panel de VIDA · propuesta</div></div>
+  <div class="marca">Comercializadora VIDA<br>Plataforma de desarrollo<br>empresarial</div>
+  <p class="lead">Los mismos procesos del diagrama de hoy, con todo lo que el equipo aprobó hasta el 28 de octubre de 2026. Lo morado es nuevo o cambia; lo amarillo todavía falta definirlo. Esto es lo que se va a programar: hoy el sistema todavía funciona como en el otro diagrama.</p><div><a class="otra" href="diagrama-flujo-vida.html">← Ver cómo funciona hoy</a></div>
+</div></header>
+<main class="wrap">
+  <div class="leyenda" aria-label="Leyenda">
+    <span><i class="f ini"></i>Inicio</span><span><i class="f dec"></i>Pregunta</span><span><i class="f acc"></i>Acción de una persona (igual que hoy)</span>
+    <span><i class="f auto"></i>Lo hace el sistema (igual que hoy)</span><span><i class="f nuevo"></i>Nuevo o cambia</span><span><i class="f nauto"></i>Nuevo que hace el sistema</span>
+    <span><i class="f fin"></i>Final</span><span><i class="f mal"></i>Cancelado o error</span><span><i class="f nota"></i>Por definir</span>
+  </div>
+  <nav class="indice" aria-label="Diagramas">
+    <a href="#mapa">¿Quién usa qué?</a>
+    <a href="#compras-pedido">1 · Entrar y hacer un pedido</a>
+    <a href="#compras-beneficios">2 · Beneficios y mi cuenta</a>
+    <a href="#repartidor">3 · Registrarse, tomar y entregar pedidos</a>
+    <a href="#panel-entrar">4 · Entrar al panel</a>
+    <a href="#panel-caja">5 · Un día de venta: caja y punto de venta</a>
+    <a href="#panel-ventas">6 · Pedidos a domicilio, facturas y devoluciones</a>
+    <a href="#panel-productos">7 · Productos, precios y promociones</a>
+    <a href="#panel-compras">8 · Reabasto de las tiendas (cómo va a funcionar)</a>
+    <a href="#panel-red">9 · Red, usuarios, Academia y Club</a>
+    <a href="#panel-reportes">10 · Reportes, metas y rentabilidad</a>
+    <a href="#servidor">11 · Lo que el sistema hace solo</a>
+    <a href="#proveedor">12 · El proveedor recibe y entrega pedidos</a>
+  </nav>
+  <section class="grupo g-mapa"><h2>Mapa general</h2>
+    <article class="lienzo" id="mapa">
+      <h3>¿Quién usa qué?</h3><p>Llega una cuarta herramienta, para los proveedores, y el repartidor elige qué pedidos lleva.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;¿Quién eres?&quot;]):::ini --&gt; Q{&quot;¿Qué necesitas&lt;br/&gt;hacer?&quot;}:::dec
+Q --&gt;|Comprar a domicilio| C[&quot;App VIDA Compras&lt;br/&gt;(Android)&quot;]:::acc
+Q --&gt;|Repartir| R[&quot;App VIDA Repartidor&lt;br/&gt;(Android)&quot;]:::acc
+Q --&gt;|Trabajo en una tienda o en VIDA| P[&quot;Panel web&lt;br/&gt;app.comercializadoravida.com&quot;]:::acc
+Q --&gt;|Soy proveedor de VIDA| PV[&quot;Portal de proveedores&lt;br/&gt;o conexión por API&quot;]:::nuevo
+C --&gt; C1([&quot;Ver secciones 1 y 2&quot;]):::fin
+R --&gt; RT{&quot;¿Qué pedidos&lt;br/&gt;llevo?&quot;}:::nuevo
+RT --&gt;|De tiendas a clientes| R1([&quot;Ver sección 3&quot;]):::fin
+RT --&gt;|De proveedores a tiendas| R2([&quot;Ver secciones 3 y 8&quot;]):::fin
+PV --&gt; PV1([&quot;Ver sección 12&quot;]):::fin
+P --&gt; L[&quot;Entrar al panel&quot;]:::acc --&gt; ROL{&quot;¿Qué rol&lt;br/&gt;tengo?&quot;}:::dec
+ROL --&gt;|Cajero| RC([&quot;Caja y punto de venta · secciones 5 y 6&quot;]):::fin
+ROL --&gt;|Empresario o administrador de tienda| RE([&quot;Tienda, pedidos, productos, reabasto y reportes · secciones 5 a 8 y 10&quot;]):::fin
+ROL --&gt;|VIDA: compras y proveedores| RM([&quot;Reabasto de las tiendas y pago a proveedores · sección 8&quot;]):::nuevo
+ROL --&gt;|Corporativo o Super Admin| RR([&quot;Afiliación, mensualidades, red y metas · secciones 9 y 10&quot;]):::fin
+SV[&quot;El servidor trabaja solo&lt;br/&gt;cada minuto, cada día y cada mes&quot;]:::auto --&gt; SV1([&quot;Ver sección 11&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+classDef nuevo fill:#F1E9FB,stroke:#7C3AED,stroke-width:2px,color:#3B1A73
+classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5 4,color:#3B1A73
+</pre></div>
+    </article>
+  </section>
+  <section class="grupo g-compras"><h2>App VIDA Compras</h2>
+    <article class="lienzo" id="compras-pedido">
+      <h3>1 · Entrar y hacer un pedido</h3><p>Cambia: productos PLUS a la vista, Crédito VIDA como forma de pago y Pago Móvil como la forma normal. Falta decidir si se queda el pago al recibir.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Abro VIDA Compras&quot;]):::ini --&gt; Q1{&quot;¿Tengo&lt;br/&gt;cuenta?&quot;}:::dec
+Q1 --&gt;|No| Q2{&quot;¿La creo&lt;br/&gt;ahora?&quot;}:::dec
+Q2 --&gt;|No| EX[&quot;Explorar la tienda sin cuenta&quot;]:::acc
+Q2 --&gt;|Sí| REG[&quot;Crear cuenta: nombre, teléfono,&lt;br/&gt;correo y contraseña&quot;]:::acc
+Q1 --&gt;|Sí| LOG[&quot;Entrar con teléfono y contraseña&lt;br/&gt;(o recuperarla con código al correo)&quot;]:::acc
+REG --&gt; HOME
+LOG --&gt; HOME
+EX --&gt; HOME[&quot;Inicio: hidratación del día,&lt;br/&gt;repetir último pedido, categorías&quot;]:::acc
+HOME --&gt; TIE[&quot;Tiendas: la más cercana primero&quot;]:::acc --&gt; CAT[&quot;Catálogo de la tienda:&lt;br/&gt;buscar, categorías y promociones&quot;]:::acc
+CAT -.- PLUS[&quot;El producto PLUS de la tienda&lt;br/&gt;sale destacado&quot;]:::nuevo
+HOME --&gt; CLUB[&quot;Sección «Productos Club VIDA»:&lt;br/&gt;todos los productos PLUS&quot;]:::nuevo --&gt; CAR
+CAT --&gt; CAR[&quot;Agrego productos al carrito&quot;]:::acc --&gt; Q4{&quot;¿Inicié&lt;br/&gt;sesión?&quot;}:::dec
+Q4 --&gt;|No| LOG2[&quot;La app pide entrar&lt;br/&gt;o crear cuenta&quot;]:::acc --&gt; Q4
+Q4 --&gt;|Sí| DESC[&quot;Cupón y puntos como&lt;br/&gt;descuento (opcional)&quot;]:::acc --&gt; DIR[&quot;Dirección en el mapa&lt;br/&gt;y notas para el repartidor&quot;]:::acc --&gt; PAGO{&quot;¿Cómo voy&lt;br/&gt;a pagar?&quot;}:::dec
+PAGO --&gt;|Pago Móvil| PM[&quot;Pago Móvil antes del despacho:&lt;br/&gt;la forma normal de pagar&quot;]:::nuevo --&gt; COMP[&quot;Envío referencia y captura&quot;]:::acc --&gt; Q7{&quot;¿La tienda&lt;br/&gt;lo aprobó?&quot;}:::dec
+Q7 --&gt;|No coincide| COMP
+PM -.-&gt;|Se venció el plazo| CANP([&quot;Pedido cancelado y&lt;br/&gt;puntos devueltos&quot;]):::mal
+Q7 --&gt;|Sí| SEG
+PAGO --&gt;|Crédito VIDA| CR[&quot;Pago con mi línea de crédito:&lt;br/&gt;el sistema revisa mi saldo disponible&quot;]:::nuevo --&gt; SEG
+PAGO --&gt;|Al recibir| PD[&quot;Por definir: el equipo no quiere que el repartidor&lt;br/&gt;cargue dinero. ¿Se quita el efectivo?&lt;br/&gt;¿Lleva punto de venta?&quot;]:::nota --&gt; SEG
+SEG[&quot;Seguimiento:&lt;br/&gt;Recibido → Preparando&quot;]:::acc --&gt; Q8{&quot;¿Ya hay&lt;br/&gt;repartidor?&quot;}:::dec
+Q8 --&gt;|Todavía no| Q9{&quot;¿Sigo&lt;br/&gt;esperando?&quot;}:::dec
+Q9 --&gt;|Sí| Q8
+Q9 --&gt;|No| CAN([&quot;Cancelo sin costo&quot;]):::mal
+Q8 --&gt;|Sí| CAM[&quot;En camino: veo al repartidor en el mapa,&lt;br/&gt;la ruta por las calles y el tiempo estimado&quot;]:::acc
+CAM --&gt; ENT[&quot;Recibo mi pedido&quot;]:::acc --&gt; FIN([&quot;¡Listo! Entregado&lt;br/&gt;y gano puntos&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+classDef nuevo fill:#F1E9FB,stroke:#7C3AED,stroke-width:2px,color:#3B1A73
+classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5 4,color:#3B1A73
+</pre></div>
+    </article>
+    <article class="lienzo" id="compras-beneficios">
+      <h3>2 · Beneficios y mi cuenta</h3><p>Cambia: «Mis tarjetas» deja de ser «Próximamente» y muestra la tarjeta de crédito VIDA.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Menú de la app&quot;]):::ini --&gt; Q{&quot;¿Qué quiero&lt;br/&gt;hacer?&quot;}:::dec
+Q --&gt;|Puntos| P1[&quot;Puntos y premios:&lt;br/&gt;saldo e historial&quot;]:::acc --&gt; P2{&quot;¿Me alcanzan para&lt;br/&gt;un premio?&quot;}:::dec
+P2 --&gt;|Sí| P3[&quot;Canjeo y recibo un código&quot;]:::acc --&gt; P4([&quot;Lo reclamo en la tienda&quot;]):::fin
+P2 --&gt;|No| P5[&quot;Sigo sumando: pedidos, recargas,&lt;br/&gt;hidratación y cursos&quot;]:::acc
+Q --&gt;|Club VIDA| C1[&quot;Tarjeta digital con QR y mi nivel&quot;]:::acc --&gt; C2{&quot;¿Hay un evento&lt;br/&gt;del Club?&quot;}:::dec
+C2 --&gt;|Sí| C3([&quot;Asistiré: reservo mi lugar&quot;]):::fin
+C2 --&gt;|No| C4([&quot;Veo los beneficios de mi nivel&quot;]):::fin
+Q --&gt;|Hidratación| H1{&quot;¿Mi programa&lt;br/&gt;está activo?&quot;}:::dec
+H1 --&gt;|No| H2[&quot;Lo activo y fijo mi meta diaria&quot;]:::acc --&gt; H3
+H1 --&gt;|Sí| H3[&quot;Toco «Tomé un vaso»&quot;]:::acc --&gt; H4{&quot;¿Cumplí la meta&lt;br/&gt;7 días seguidos?&quot;}:::dec
+H4 --&gt;|Sí| H5([&quot;Bono de puntos&quot;]):::fin
+H4 --&gt;|No| H6[&quot;Recordatorio cada 2 horas,&lt;br/&gt;de 8 a. m. a 8 p. m.&quot;]:::auto
+Q --&gt;|Recargas| R1[&quot;Operadora, número y monto&quot;]:::acc --&gt; R2[&quot;Pago con Pago Móvil&quot;]:::acc --&gt; R3[&quot;VIDA la procesa&quot;]:::auto --&gt; R4([&quot;Recarga hecha y puntos&quot;]):::fin
+Q --&gt;|Academia| A1[&quot;Cursos para clientes&quot;]:::acc --&gt; A2[&quot;Video, PDF, texto y cuestionario&quot;]:::acc --&gt; A3{&quot;¿Terminé&lt;br/&gt;el curso?&quot;}:::dec
+A3 --&gt;|No| A2
+A3 --&gt;|Sí| A4([&quot;Constancia con QR y puntos&quot;]):::fin
+Q --&gt;|Mi cuenta| M1[&quot;Editar datos, contraseña, direcciones,&lt;br/&gt;ayuda por WhatsApp, privacidad&quot;]:::acc --&gt; M2{&quot;¿Quiero&lt;br/&gt;salir?&quot;}:::dec
+M2 --&gt;|Cerrar sesión| M3([&quot;Sesión cerrada&quot;]):::fin
+M2 --&gt;|Eliminar cuenta| M4([&quot;Cuenta eliminada&quot;]):::mal
+Q --&gt;|Mis tarjetas| T1[&quot;Tarjeta de crédito VIDA: límite,&lt;br/&gt;saldo disponible, corte y fecha de pago&quot;]:::nuevo --&gt; T2{&quot;¿Tengo saldo&lt;br/&gt;por pagar?&quot;}:::nuevo
+T2 --&gt;|Sí| T3[&quot;Abono desde la app&quot;]:::nuevo --&gt; T4([&quot;Estado de cuenta al día&quot;]):::fin
+T2 --&gt;|No| T4
+T1 -.-&gt; T5[&quot;Por definir: quién la emite, quién aprueba&lt;br/&gt;el crédito, intereses y si suma puntos&quot;]:::nota
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+classDef nuevo fill:#F1E9FB,stroke:#7C3AED,stroke-width:2px,color:#3B1A73
+classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5 4,color:#3B1A73
+</pre></div>
+    </article>
+  </section>
+  <section class="grupo g-repartidor"><h2>App VIDA Repartidor</h2>
+    <article class="lienzo" id="repartidor">
+      <h3>3 · Registrarse, tomar y entregar pedidos</h3><p>Cambia: un tipo nuevo de repartidor para llevar mercancía de proveedores a tiendas, el repartidor propio de cada tienda y el pago del día sin cargar efectivo.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Abro VIDA Repartidor&quot;]):::ini --&gt; Q1{&quot;¿Tengo&lt;br/&gt;cuenta?&quot;}:::dec
+Q1 --&gt;|No| R1[&quot;Quiero ser repartidor: datos,&lt;br/&gt;vehículo, placa y contraseña&quot;]:::acc --&gt; TIPO{&quot;¿Qué pedidos&lt;br/&gt;quiero llevar?&quot;}:::nuevo
+TIPO --&gt;|De tiendas a clientes| R2[&quot;Revisión normal&quot;]:::auto
+TIPO --&gt;|De proveedores a tiendas, o los dos| RP[&quot;Declaro mi vehículo y cuánto carga:&lt;br/&gt;moto, carro, camioneta o camión,&lt;br/&gt;en kilos o bultos, y subo documentos&quot;]:::nuevo --&gt; R2B[&quot;Revisión más estricta: placa,&lt;br/&gt;documentos y posible garantía&quot;]:::nauto
+R2 --&gt; Q2{&quot;¿VIDA me&lt;br/&gt;aprobó?&quot;}:::dec
+R2B --&gt; Q2
+Q2 --&gt;|No| R3([&quot;Solicitud rechazada&quot;]):::mal
+Q2 --&gt;|Sí| LOG
+Q1 --&gt;|Sí| LOG[&quot;Entrar con teléfono y contraseña&quot;]:::acc
+LOG --&gt; ON{&quot;¿Me pongo&lt;br/&gt;en línea?&quot;}:::dec
+ON --&gt;|No| OFF([&quot;Desconectado:&lt;br/&gt;no recibo pedidos&quot;]):::fin
+ON --&gt;|Sí| GPS[&quot;Comparto mi ubicación&quot;]:::auto --&gt; ESP[&quot;Esperando ofertas&quot;]:::acc --&gt; OF{&quot;¿Qué me&lt;br/&gt;ofrecen?&quot;}:::nuevo
+OF --&gt;|Pedido de un cliente| OC[&quot;Ruta, lo que gano y distancia.&lt;br/&gt;Si soy repartidor propio de una tienda,&lt;br/&gt;sus pedidos me llegan primero&quot;]:::nuevo --&gt; Q3{&quot;¿Acepto en&lt;br/&gt;60 segundos?&quot;}:::dec
+Q3 --&gt;|No, paso| ESP
+Q3 --&gt;|Sí| RUTA[&quot;Recojo en la tienda y llevo al cliente&lt;br/&gt;(hasta 3 pedidos en ruta)&quot;]:::acc --&gt; PR{&quot;¿Tengo algún&lt;br/&gt;problema?&quot;}:::dec
+PR --&gt;|Sí| LIB[&quot;Lo libero para otro repartidor&lt;br/&gt;o lo cancelo&quot;]:::acc
+PR --&gt;|No| ENT[&quot;Entrego, con foto si me la piden&quot;]:::acc
+OF --&gt;|Viaje de proveedor a tienda| OP[&quot;Solo me llegan los que caben&lt;br/&gt;en mi vehículo, con su tarifa&quot;]:::nauto --&gt; Q4{&quot;¿Lo&lt;br/&gt;acepto?&quot;}:::nuevo
+Q4 --&gt;|No| ESP
+Q4 --&gt;|Sí| JUN[&quot;Puedo juntar recolecciones de varias&lt;br/&gt;tiendas en una sola ruta&quot;]:::nauto --&gt; PROV[&quot;En el proveedor muestro el QR del pedido.&lt;br/&gt;El proveedor no ve a qué tienda va&quot;]:::nuevo
+PROV --&gt; VIA[&quot;Llevo la mercancía con GPS&lt;br/&gt;hasta la tienda&quot;]:::nuevo --&gt; RECT[&quot;La tienda revisa y marca «Recibido»&quot;]:::nuevo
+ENT --&gt; CIE
+RECT --&gt; CIE[&quot;Cierre del día: «tus repartos de hoy&lt;br/&gt;fueron estos, tu dinero es este»&quot;]:::nuevo --&gt; PG[&quot;Me pagan por medio electrónico,&lt;br/&gt;sin cargar efectivo de clientes&quot;]:::nuevo --&gt; FIN([&quot;Pagado&quot;]):::fin
+PG -.-&gt; PD[&quot;Por definir: quién me paga&lt;br/&gt;(la tienda o VIDA) y cada cuánto&quot;]:::nota
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+classDef nuevo fill:#F1E9FB,stroke:#7C3AED,stroke-width:2px,color:#3B1A73
+classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5 4,color:#3B1A73
+</pre></div>
+    </article>
+  </section>
+  <section class="grupo g-panel"><h2>Panel web</h2>
+    <article class="lienzo" id="panel-entrar">
+      <h3>4 · Entrar al panel</h3><p>Cambia: si la tienda no pagó su mensualidad, el panel se bloquea solo y se reactiva al pagar.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Abro el panel&quot;]):::ini --&gt; L[&quot;Usuario o correo y contraseña&quot;]:::acc --&gt; Q{&quot;¿Los datos son&lt;br/&gt;correctos?&quot;}:::dec
+Q --&gt;|No| E[&quot;Credenciales incorrectas&quot;]:::mal --&gt; L
+E -.-&gt; OLV[&quot;«¿Olvidaste tu contraseña?» del panel:&lt;br/&gt;sigue pendiente&quot;]:::nota
+Q --&gt;|Sí| T{&quot;¿Es una contraseña&lt;br/&gt;temporal?&quot;}:::dec
+T --&gt;|Sí| C[&quot;Cambio mi contraseña&lt;br/&gt;(puedo pedir que me reenvíen la temporal)&quot;]:::acc --&gt; SUS
+T --&gt;|No| SUS{&quot;¿Mi tienda pagó&lt;br/&gt;su mensualidad?&quot;}:::nuevo
+SUS --&gt;|Sí| M[&quot;Menú con mis módulos,&lt;br/&gt;según mi rol y mi tienda&quot;]:::acc --&gt; FIN([&quot;Listo para trabajar&quot;]):::fin
+SUS --&gt;|Vence pronto| AV[&quot;Aviso: «tu mensualidad vence pronto»&quot;]:::nauto --&gt; M
+SUS --&gt;|No, y pasó la tolerancia| BL[&quot;Tienda suspendida: no puedo vender;&lt;br/&gt;el aviso dice por qué y cómo pagar&quot;]:::nauto
+BL --&gt; PG[&quot;Pago la mensualidad&lt;br/&gt;más la multa de reconexión&quot;]:::nuevo --&gt; RA[&quot;Se reactiva sola al registrar el pago&quot;]:::nauto --&gt; M
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+classDef nuevo fill:#F1E9FB,stroke:#7C3AED,stroke-width:2px,color:#3B1A73
+classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5 4,color:#3B1A73
+</pre></div>
+    </article>
+    <article class="lienzo" id="panel-caja">
+      <h3>5 · Un día de venta: caja y punto de venta</h3><p>Cambia: Pago Móvil, transferencia y Zelle en la caja, el número de control fiscal llega solo y el producto estrella a la vista.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Llego a la tienda&quot;]):::ini --&gt; Q{&quot;¿La caja está&lt;br/&gt;abierta?&quot;}:::dec
+Q --&gt;|No| AB[&quot;Abrir caja: cuento el fondo&lt;br/&gt;en $ y en Bs&quot;]:::acc --&gt; V
+Q --&gt;|Sí| V[&quot;Tienda: punto de venta&quot;]:::acc
+V -.- EST[&quot;Mi producto estrella aparece&lt;br/&gt;destacado para ofrecerlo&quot;]:::nuevo
+V --&gt; ESC[&quot;Escaneo o busco los productos&quot;]:::acc --&gt; PROMO[&quot;Promociones solas y cupón&quot;]:::auto --&gt; MET{&quot;¿Con qué&lt;br/&gt;paga?&quot;}:::dec
+MET --&gt;|Efectivo o tarjeta| CAMB[&quot;En $, Bs o combinado;&lt;br/&gt;el sistema calcula el cambio&quot;]:::acc --&gt; IG
+MET --&gt;|Pago Móvil o transferencia| PMV[&quot;Anoto la referencia y verifico&lt;br/&gt;que llegó antes de entregar&quot;]:::nuevo --&gt; IG
+MET --&gt;|Zelle| ZE[&quot;Anoto la referencia del Zelle&quot;]:::nuevo --&gt; ZD[&quot;Por definir: cómo verifica&lt;br/&gt;la tienda un Zelle&quot;]:::nota --&gt; IG
+MET --&gt;|Combinado| MIX[&quot;Divido el cobro entre&lt;br/&gt;varias formas de pago&quot;]:::nuevo --&gt; IG
+IG{&quot;¿Pagó en $ y la tienda es&lt;br/&gt;contribuyente especial?&quot;}:::dec
+IG --&gt;|Sí| IGTF[&quot;Se suma el IGTF de 3 %&quot;]:::auto --&gt; OK
+IG --&gt;|No| OK[&quot;Venta registrada con la tasa BCV del día&lt;br/&gt;(sin internet se guarda y se envía después)&quot;]:::auto
+OK --&gt; FAC{&quot;¿Pide&lt;br/&gt;factura?&quot;}:::dec
+FAC --&gt;|Sí| F1[&quot;Facturar: RIF y razón social&quot;]:::acc --&gt; F2[&quot;El número de control llega solo de la&lt;br/&gt;imprenta digital o la máquina fiscal&quot;]:::nauto --&gt; MAS
+FAC --&gt;|No| TK[&quot;Ticket&quot;]:::acc --&gt; MAS{&quot;¿Hay más&lt;br/&gt;clientes?&quot;}:::dec
+MAS --&gt;|Sí| V
+MAS --&gt;|No| CIE[&quot;Cerrar caja: cuento por moneda&lt;br/&gt;y por forma de pago&quot;]:::nuevo --&gt; DIF{&quot;¿Cuadra con&lt;br/&gt;lo esperado?&quot;}:::dec
+DIF --&gt;|Sí| FIN([&quot;Turno cerrado&quot;]):::fin
+DIF --&gt;|No| NOTA[&quot;Explico la diferencia en la nota&quot;]:::acc --&gt; FIN
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+classDef nuevo fill:#F1E9FB,stroke:#7C3AED,stroke-width:2px,color:#3B1A73
+classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5 4,color:#3B1A73
+</pre></div>
+    </article>
+    <article class="lienzo" id="panel-ventas">
+      <h3>6 · Pedidos a domicilio, facturas y devoluciones</h3><p>Cambia: el repartidor propio de la tienda va primero y la liquidación en efectivo se reemplaza por un cierre del día con pago electrónico.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Llega un pedido de la app, en vivo&quot;]):::ini --&gt; PM{&quot;¿Cómo&lt;br/&gt;pagó?&quot;}:::dec
+PM --&gt;|Pago Móvil| VAL[&quot;Valido el comprobante&lt;br/&gt;contra mi banco&quot;]:::acc --&gt; OKP{&quot;¿Llegó el&lt;br/&gt;monto exacto?&quot;}:::dec
+OKP --&gt;|No| REJ[&quot;Rechazar: el cliente envía otro&quot;]:::mal --&gt; VAL
+OKP --&gt;|Sí| NUE
+PM --&gt;|Crédito VIDA| CRV[&quot;Se carga a la línea de crédito&lt;br/&gt;del cliente&quot;]:::nauto --&gt; NUE
+PM --&gt;|Al recibir| PD[&quot;Por definir: tarjeta o efectivo&lt;br/&gt;al recibir&quot;]:::nota --&gt; NUE
+NUE[&quot;Nuevo → Preparando → Listo&quot;]:::acc --&gt; PRO{&quot;¿Mi tienda tiene&lt;br/&gt;repartidor propio?&quot;}:::nuevo
+PRO --&gt;|Sí| OFP[&quot;Se le ofrece primero a él&quot;]:::nauto --&gt; ACP{&quot;¿Lo aceptó&lt;br/&gt;a tiempo?&quot;}:::nuevo
+ACP --&gt;|Sí| CAM
+ACP --&gt;|No| BUS
+PRO --&gt;|No| BUS[&quot;El sistema avisa a los repartidores&lt;br/&gt;cercanos y amplía el radio&quot;]:::auto
+BUS --&gt; Q{&quot;¿Alguien&lt;br/&gt;aceptó?&quot;}:::dec
+Q --&gt;|No| MAN{&quot;¿Lo asigno&lt;br/&gt;a mano?&quot;}:::dec
+MAN --&gt;|Sí| CAM
+MAN --&gt;|No| CANC([&quot;Al acabarse el tiempo:&lt;br/&gt;cancelado y puntos devueltos&quot;]):::mal
+Q --&gt;|Sí| CAM[&quot;En camino: lo sigo en el Mapa en vivo&quot;]:::acc --&gt; ENT[&quot;Entregado, con foto&quot;]:::acc
+ENT --&gt; CIE[&quot;Cierre del día por repartidor:&lt;br/&gt;sus repartos y lo que se le debe&quot;]:::nuevo --&gt; PAGR[&quot;Se le paga por medio electrónico&quot;]:::nuevo --&gt; FIN([&quot;Pedido cerrado&quot;]):::fin
+PAGR -.-&gt; PD2[&quot;Por definir: lo paga la tienda o VIDA&quot;]:::nota
+H([&quot;Historial de Ventas&quot;]):::ini --&gt; HQ{&quot;¿Qué necesito?&quot;}:::dec
+HQ --&gt;|Copia| H1[&quot;Reimprimir ticket&quot;]:::acc
+HQ --&gt;|Factura| H2[&quot;Facturar: el número de control llega solo&quot;]:::nuevo
+HQ --&gt;|Devolución| H3[&quot;Elijo productos y cantidades&quot;]:::acc --&gt; H4{&quot;¿La venta estaba&lt;br/&gt;facturada?&quot;}:::dec
+H4 --&gt;|Sí| H5([&quot;Nota de crédito&quot;]):::fin
+H4 --&gt;|No| H6([&quot;Reembolso&quot;]):::fin
+HQ --&gt;|Contador| H7([&quot;Libro de ventas en Excel&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+classDef nuevo fill:#F1E9FB,stroke:#7C3AED,stroke-width:2px,color:#3B1A73
+classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5 4,color:#3B1A73
+</pre></div>
+    </article>
+    <article class="lienzo" id="panel-productos">
+      <h3>7 · Productos, precios y promociones</h3><p>Cambia: carga del inventario desde Excel, peso o bultos por producto, y el stock bajo alimenta la lista de faltantes que VIDA negocia.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Gestionar mi catálogo&quot;]):::ini --&gt; Q{&quot;¿Qué&lt;br/&gt;necesito?&quot;}:::dec
+Q --&gt;|Cargar muchos productos| X1[&quot;Descargo la plantilla de Excel&lt;br/&gt;y la lleno&quot;]:::nuevo --&gt; X2[&quot;Subo el archivo: vista previa&lt;br/&gt;con los errores marcados&quot;]:::nauto --&gt; X3{&quot;¿Hay&lt;br/&gt;errores?&quot;}:::nuevo
+X3 --&gt;|Sí| X1
+X3 --&gt;|No| X4[&quot;Confirmo: crea o actualiza los productos&lt;br/&gt;y carga el stock de mi tienda&quot;]:::nauto --&gt; P2
+Q --&gt;|Producto nuevo| P1[&quot;Inventarios: nombre, SKU, código de barras,&lt;br/&gt;categoría, precio, foto, IVA, peso o bultos&quot;]:::nuevo --&gt; P2([&quot;Disponible en la tienda y en la app&quot;]):::fin
+Q --&gt;|Mover stock| S1{&quot;¿Qué pasó&lt;br/&gt;con el stock?&quot;}:::dec
+S1 --&gt;|Llegó mercancía por fuera| S2[&quot;Entrada&quot;]:::acc --&gt; S5
+S1 --&gt;|Merma o consumo| S3[&quot;Salida con motivo&quot;]:::acc --&gt; S5
+S1 --&gt;|El conteo no cuadra| S4[&quot;Ajuste&quot;]:::acc --&gt; S5([&quot;Stock actualizado&quot;]):::fin
+S5 -.-&gt; BAJO{&quot;¿Quedó bajo&lt;br/&gt;su mínimo?&quot;}:::dec
+BAJO --&gt;|Sí| AL[&quot;Entra a mi lista de faltantes,&lt;br/&gt;que VIDA revisa conmigo&quot;]:::nauto --&gt; RE([&quot;Reabasto · sección 8&quot;]):::fin
+Q --&gt;|Cambiar precio| PR[&quot;Precios: cambio en $;&lt;br/&gt;el precio en Bs sale de la tasa del día&quot;]:::acc --&gt; PR2([&quot;Precio nuevo en tienda y app&quot;]):::fin
+Q --&gt;|Promoción| PO[&quot;Descuento o «lleva N, paga M»,&lt;br/&gt;con fechas&quot;]:::acc --&gt; D3([&quot;Se aplica sola al cobrar&quot;]):::fin
+Q --&gt;|Cupón| CU[&quot;Código, % o $, compra mínima, tope,&lt;br/&gt;canal, usos y vigencia&quot;]:::acc --&gt; CU2([&quot;Lo usan en tienda o en la app&quot;]):::fin
+Q --&gt;|Publicidad| FL[&quot;Flyer con el QR de la tienda&quot;]:::acc --&gt; FL3([&quot;Compartir por WhatsApp&quot;]):::fin
+Q --&gt;|Producto PLUS y estrella| PS[&quot;Los define VIDA para cada tienda:&lt;br/&gt;el de mayor margen&quot;]:::nuevo --&gt; PS2([&quot;Destacado en el punto de venta,&lt;br/&gt;el Dashboard y la app&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+classDef nuevo fill:#F1E9FB,stroke:#7C3AED,stroke-width:2px,color:#3B1A73
+classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5 4,color:#3B1A73
+</pre></div>
+    </article>
+    <article class="lienzo" id="panel-compras">
+      <h3>8 · Reabasto de las tiendas (cómo va a funcionar)</h3><p>Reemplaza el flujo de hoy. La Matriz ya no guarda mercancía: VIDA es el intermediario y la tienda nunca sabe quién es el proveedor. La tienda le paga a VIDA y VIDA al proveedor.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+F([&quot;Cada día&quot;]):::ini --&gt; F1[&quot;El sistema arma por tienda la lista de productos&lt;br/&gt;bajo su mínimo, con cantidad sugerida&quot;]:::nauto --&gt; F2[&quot;VIDA la revisa con el empresario:&lt;br/&gt;espacio, dinero y que el faltante sea real&quot;]:::nuevo --&gt; F3{&quot;¿El empresario&lt;br/&gt;la acepta?&quot;}:::nuevo
+F3 --&gt;|No| F4([&quot;No se pide nada&quot;]):::mal
+F3 --&gt;|Con cambios| F5[&quot;Ajusto productos y cantidades&quot;]:::nuevo --&gt; CAR
+F3 --&gt;|Sí| CAR
+T([&quot;La tienda necesita mercancía&quot;]):::ini --&gt; CAR[&quot;Le pido a VIDA desde el panel: elijo productos,&lt;br/&gt;nunca proveedores, a precio de VIDA&quot;]:::nuevo
+CAR --&gt; MODO{&quot;¿Cómo lo&lt;br/&gt;recibo?&quot;}:::nuevo
+MODO --&gt;|Envío VIDA| ENV[&quot;Lo trae un repartidor de proveedores&quot;]:::nuevo --&gt; PAG
+MODO --&gt;|Recojo yo| REC[&quot;Lo recojo yo o mi repartidor propio&quot;]:::nuevo --&gt; PAG
+PAG[&quot;Le pago a VIDA en línea&quot;]:::nuevo
+PAG -.-&gt; PAGD[&quot;Por definir: Pago Móvil, tarjeta,&lt;br/&gt;pasarela o crédito con VIDA&quot;]:::nota
+PAG --&gt; ASG[&quot;El sistema asigna el proveedor de cada producto&lt;br/&gt;y la sucursal más cercana que lo tenga&quot;]:::nauto --&gt; API{&quot;¿El proveedor&lt;br/&gt;tiene API?&quot;}:::nuevo
+API --&gt;|Sí| AP1[&quot;Se le manda el pedido por su API&quot;]:::nauto --&gt; CONF
+API --&gt;|No| AP2[&quot;Lo ve en el Portal de proveedores&quot;]:::nauto --&gt; CONF
+CONF[&quot;Pedido con folio de VIDA y sin datos de la tienda:&lt;br/&gt;el proveedor confirma y prepara&quot;]:::nuevo --&gt; SAL{&quot;¿Envío VIDA&lt;br/&gt;o recojo yo?&quot;}:::nuevo
+SAL --&gt;|Envío VIDA| V1[&quot;Se ofrece solo a repartidores con&lt;br/&gt;un vehículo donde quepa el pedido&quot;]:::nauto --&gt; V2{&quot;¿Alguien&lt;br/&gt;lo tomó?&quot;}:::nuevo
+V2 --&gt;|No| V3[&quot;VIDA lo asigna a mano&lt;br/&gt;o lo divide en varios viajes&quot;]:::nuevo --&gt; V4
+V2 --&gt;|Sí| V4[&quot;Recoge en el proveedor con el QR&lt;br/&gt;y viaja con GPS hasta la tienda&quot;]:::nuevo
+V4 -.-&gt; V5[&quot;La tienda lo sigue en el mapa&lt;br/&gt;sin saber de dónde viene&quot;]:::nauto
+SAL --&gt;|Recojo yo| R1[&quot;La tienda ve solo el punto de retiro:&lt;br/&gt;dirección, horario y QR del pedido&quot;]:::nuevo --&gt; R2[&quot;Llego, muestro el QR y me entregan&quot;]:::nuevo
+V4 --&gt; LLE
+R2 --&gt; LLE[&quot;La tienda revisa y marca «Recibido»&quot;]:::acc
+LLE --&gt; INV[&quot;Sube el inventario de la tienda&quot;]:::auto --&gt; FAC[&quot;VIDA le factura a la tienda;&lt;br/&gt;el proveedor le factura a VIDA&quot;]:::nauto
+FAC --&gt; PP[&quot;VIDA le paga al proveedor el precio de lista&lt;br/&gt;menos su comisión (ejemplo: $10 − 8 % = $9,20)&quot;]:::nuevo --&gt; FIN([&quot;VIDA se queda su comisión ($0,80)&lt;br/&gt;y la tienda nunca supo del proveedor&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+classDef nuevo fill:#F1E9FB,stroke:#7C3AED,stroke-width:2px,color:#3B1A73
+classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5 4,color:#3B1A73
+</pre></div>
+    </article>
+    <article class="lienzo" id="panel-red">
+      <h3>9 · Red, usuarios, Academia y Club</h3><p>Cambia: afiliación con paquete, kit y tarjeta digital; mensualidad con corte automático; alta de proveedores solo para VIDA; dos tipos de repartidor.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Afiliar una tienda nueva&quot;]):::ini --&gt; T1[&quot;Portal Corporativo: datos de la tienda&lt;br/&gt;y del empresario&quot;]:::acc --&gt; PQ[&quot;Elijo el paquete según su nivel&lt;br/&gt;(3 tipos de tienda por número de productos)&quot;]:::nuevo
+PQ --&gt; T2[&quot;Pago de inscripción y entrega del kit,&lt;br/&gt;completo o en parte&quot;]:::nuevo --&gt; T2B[&quot;Se define su producto PLUS&quot;]:::nuevo --&gt; T3[&quot;Le llegan su usuario por correo y su&lt;br/&gt;tarjeta digital de afiliado&quot;]:::nauto
+T3 --&gt; T4[&quot;Configura su tienda: ubicación, datos fiscales,&lt;br/&gt;cajeros y su inventario por Excel&quot;]:::acc --&gt; T6([&quot;Tienda Activa&quot;]):::fin
+T6 --&gt; MEN[&quot;Cada mes: mantenimiento de 25, 30 o 75&lt;br/&gt;según el nivel&quot;]:::nauto --&gt; MQ{&quot;¿Pagó a&lt;br/&gt;tiempo?&quot;}:::nuevo
+MQ --&gt;|Sí| T6
+MQ --&gt;|No| SUS([&quot;Suspendida sola; al pagar se reactiva&lt;br/&gt;con multa de reconexión&quot;]):::mal
+PV([&quot;Sumar un proveedor&quot;]):::ini --&gt; PV1[&quot;Solo VIDA ve el módulo Proveedores:&lt;br/&gt;las tiendas ya no ven RIF ni contactos&quot;]:::nuevo --&gt; PV2[&quot;Alta: datos, sucursales con dirección,&lt;br/&gt;horario y ubicación, y % de comisión&quot;]:::nuevo --&gt; PV3{&quot;¿Tiene&lt;br/&gt;API?&quot;}:::nuevo
+PV3 --&gt;|Sí| PV4([&quot;Se conecta su API de pedidos y cobro&quot;]):::fin
+PV3 --&gt;|No| PV5([&quot;Le damos acceso al Portal de proveedores&quot;]):::fin
+U([&quot;Dar acceso a alguien&quot;]):::ini --&gt; U1[&quot;Nuevo usuario: rol, ámbito y módulos&quot;]:::acc --&gt; U3{&quot;¿Hay correo&lt;br/&gt;configurado?&quot;}:::dec
+U3 --&gt;|Sí| U4([&quot;Le llega la invitación&quot;]):::fin
+U3 --&gt;|No| U5([&quot;El panel muestra la contraseña&lt;br/&gt;temporal para entregarla&quot;]):::fin
+A([&quot;Capacitar al equipo&quot;]):::ini --&gt; A1[&quot;Academia: publicar curso&lt;br/&gt;(algunos obligatorios, con fecha)&quot;]:::acc --&gt; A2{&quot;¿Lo terminó&lt;br/&gt;a tiempo?&quot;}:::dec
+A2 --&gt;|Sí| A3([&quot;Puntos y constancia con QR&quot;]):::fin
+A2 --&gt;|No| A4([&quot;Fuera de tiempo&quot;]):::mal
+O([&quot;Operaciones del Club&quot;]):::ini --&gt; O1{&quot;¿Qué llegó?&quot;}:::dec
+O1 --&gt;|Recarga, canje o evento| O2[&quot;Lo atiendo y lo marco&quot;]:::acc
+O1 --&gt;|Repartidor nuevo| O5{&quot;¿De qué&lt;br/&gt;tipo?&quot;}:::nuevo
+O5 --&gt;|De clientes| O6{&quot;¿Lo apruebo?&quot;}:::dec
+O5 --&gt;|De proveedores| O8[&quot;Reviso placa, documentos,&lt;br/&gt;capacidad y garantía&quot;]:::nuevo --&gt; O6
+O6 --&gt;|Sí| O9[&quot;Si es repartidor propio de una tienda,&lt;br/&gt;lo vinculo a ella&quot;]:::nuevo --&gt; O10([&quot;Ya puede entrar a la app&quot;]):::fin
+O6 --&gt;|No| O7([&quot;Rechazado&quot;]):::mal
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+classDef nuevo fill:#F1E9FB,stroke:#7C3AED,stroke-width:2px,color:#3B1A73
+classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5 4,color:#3B1A73
+</pre></div>
+    </article>
+    <article class="lienzo" id="panel-reportes">
+      <h3>10 · Reportes, metas y rentabilidad</h3><p>Cambia: cuadro de arranque del mes, unidades PLUS, punto de equilibrio con datos reales, metas de VIDA con pago al personal e ingresos de VIDA.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Quiero ver cómo vamos&quot;]):::ini --&gt; Q{&quot;¿Qué quiero&lt;br/&gt;saber?&quot;}:::dec
+Q --&gt;|Cómo arranco el mes| AM[&quot;Cuadro de arranque: meses anteriores,&lt;br/&gt;meta contra resultado y lo más vendido&quot;]:::nuevo
+AM -.- AM2[&quot;Incluye mi producto estrella y cuántas&lt;br/&gt;unidades PLUS vendí&quot;]:::nuevo
+Q --&gt;|Cuánto vendí| V[&quot;Ventas por día, tienda, forma de pago y moneda&quot;]:::acc
+Q --&gt;|Cómo cerró la caja| C[&quot;Turnos y diferencias de arqueo&quot;]:::acc
+Q --&gt;|Qué se vende| P[&quot;Productos más y menos vendidos&lt;br/&gt;y unidades PLUS por tienda&quot;]:::nuevo
+Q --&gt;|Cómo va el delivery| D[&quot;Pedidos, tiempos y repartidores&lt;br/&gt;propios contra independientes&quot;]:::nuevo
+Q --&gt;|Cuánto debo vender| RE[&quot;Punto de equilibrio con un clic,&lt;br/&gt;con las ventas reales&quot;]:::nuevo --&gt; RE2{&quot;¿Quién lo&lt;br/&gt;consulta?&quot;}:::nuevo
+RE2 --&gt;|Empresario| RE3[&quot;Para su tienda&quot;]:::nauto
+RE2 --&gt;|VIDA| RE4[&quot;Para todas las tiendas o un grupo&quot;]:::nauto
+RE -.-&gt; RED[&quot;Pendiente: comparar con la&lt;br/&gt;fórmula que ya usa el equipo&quot;]:::nota
+Q --&gt;|Mi meta| ME[&quot;Metas diaria, semanal y mensual&quot;]:::acc --&gt; ME2{&quot;¿La cumplí?&quot;}:::dec
+ME2 --&gt;|Sí| ME3([&quot;Insignia de meta cumplida&quot;]):::fin
+ME2 --&gt;|No| ME4([&quot;Barra de avance&quot;]):::fin
+Q --&gt;|Metas de VIDA| MV[&quot;Ventas de la red y tiendas nuevas afiliadas&quot;]:::nuevo --&gt; MV2[&quot;Finanzas: lo que se le paga a cada persona&lt;br/&gt;por tiendas afiliadas o por ventas&quot;]:::nuevo
+Q --&gt;|Cuánto gana VIDA| CV[&quot;Comisiones de proveedores,&lt;br/&gt;inscripciones y mensualidades&quot;]:::nuevo
+AM --&gt; X
+V --&gt; X
+C --&gt; X
+P --&gt; X
+D --&gt; X
+RE3 --&gt; X
+RE4 --&gt; X
+MV2 --&gt; X
+CV --&gt; X([&quot;Exportar a Excel o PDF&quot;]):::fin
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+classDef nuevo fill:#F1E9FB,stroke:#7C3AED,stroke-width:2px,color:#3B1A73
+classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5 4,color:#3B1A73
+</pre></div>
+    </article>
+  </section>
+  <section class="grupo g-servidor"><h2>Servidor</h2>
+    <article class="lienzo" id="servidor">
+      <h3>11 · Lo que el sistema hace solo</h3><p>Cambia: lista diaria de faltantes, cierre diario de repartidores, mensualidades con corte automático y envío de pedidos a proveedores.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Cada minuto&quot;]):::ini --&gt; B{&quot;¿Hay pedidos&lt;br/&gt;buscando repartidor?&quot;}:::dec
+B --&gt;|Sí| B0[&quot;Primero al repartidor propio de la tienda,&lt;br/&gt;después a los cercanos ampliando el radio&quot;]:::nauto --&gt; B2{&quot;¿Pasó mucho&lt;br/&gt;tiempo?&quot;}:::dec
+B2 --&gt;|Sí| B3([&quot;Aviso al cliente o cancelo&quot;]):::mal
+B2 --&gt;|No| B4([&quot;Sigo buscando&quot;]):::fin
+I --&gt; VP{&quot;¿Hay viajes de proveedor&lt;br/&gt;sin repartidor?&quot;}:::nuevo
+VP --&gt;|Sí| VP1([&quot;Los ofrezco a vehículos donde quepan;&lt;br/&gt;si nadie puede, aviso a VIDA&quot;]):::nauto
+I --&gt; P{&quot;¿Hay Pago Móvil&lt;br/&gt;sin comprobante?&quot;}:::dec
+P --&gt;|Sí, vencido| P1([&quot;Cancelo y devuelvo los puntos&quot;]):::mal
+I --&gt; T{&quot;¿Alguna tienda dejó&lt;br/&gt;de dar señal?&quot;}:::dec
+T --&gt;|Sí| T1([&quot;La marco desconectada&quot;]):::auto
+D([&quot;Cada día&quot;]):::ini --&gt; FL([&quot;Armo la lista de faltantes de cada tienda&quot;]):::nauto
+D --&gt; CR([&quot;Cierre del día de cada repartidor&quot;]):::nauto
+D --&gt; C{&quot;¿Hay clientes sin comprar&lt;br/&gt;hace varios días?&quot;}:::dec
+C --&gt;|Sí| C2([&quot;Cupón personal «te extrañamos»&quot;]):::fin
+D --&gt; V{&quot;¿Hay puntos sin movimiento&lt;br/&gt;por varios meses?&quot;}:::dec
+V --&gt;|Sí| V1([&quot;Los vencen&quot;]):::mal
+M([&quot;Cada mes&quot;]):::ini --&gt; M1[&quot;Genero el cargo de mantenimiento&lt;br/&gt;de cada tienda&quot;]:::nauto --&gt; M2{&quot;¿Venció sin pago?&quot;}:::nuevo
+M2 --&gt;|Vence pronto| M4([&quot;Aviso antes del corte&quot;]):::nauto
+M2 --&gt;|Pasó la tolerancia| M3([&quot;Suspendo la tienda y aviso&quot;]):::mal
+M --&gt; M5([&quot;Corte de las tarjetas de crédito VIDA&quot;]):::nauto
+K([&quot;En cada cobro&quot;]):::ini --&gt; K1[&quot;Consulto la tasa BCV del día&quot;]:::auto --&gt; K2([&quot;Cada venta guarda su tasa&quot;]):::fin
+R([&quot;En cada reabasto pagado&quot;]):::ini --&gt; R1([&quot;Mando el pedido al proveedor por API o portal&lt;br/&gt;y registro la comisión de VIDA&quot;]):::nauto
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+classDef nuevo fill:#F1E9FB,stroke:#7C3AED,stroke-width:2px,color:#3B1A73
+classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5 4,color:#3B1A73
+</pre></div>
+    </article>
+  </section>
+  <section class="grupo g-proveedores"><h2>Proveedores</h2>
+    <article class="lienzo" id="proveedor">
+      <h3>12 · El proveedor recibe y entrega pedidos</h3><p>Nuevo: lo que ve y hace el proveedor. Nunca sabe a qué tienda va su mercancía.</p>
+      <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
+flowchart TD
+I([&quot;Llega un pedido de VIDA&quot;]):::ini --&gt; C{&quot;¿Cómo me&lt;br/&gt;llega?&quot;}:::nuevo
+C --&gt;|Tengo API| A[&quot;Entra solo a mi sistema&quot;]:::nauto --&gt; PED
+C --&gt;|No tengo API| B[&quot;Lo veo en el Portal de proveedores&quot;]:::nuevo --&gt; PED
+PED[&quot;Pedido con folio de VIDA, productos y cantidades,&lt;br/&gt;ya pagado. No dice a qué tienda va&quot;]:::nuevo --&gt; Q{&quot;¿Tengo todo&lt;br/&gt;en existencia?&quot;}:::nuevo
+Q --&gt;|No| Q2[&quot;Aviso lo que falta; VIDA ajusta&lt;br/&gt;el pedido o lo pide a otro proveedor&quot;]:::nuevo --&gt; PREP
+Q --&gt;|Sí| PREP[&quot;Preparo el pedido en mi sucursal&quot;]:::nuevo --&gt; LLEGA[&quot;Llega el repartidor de VIDA o quien&lt;br/&gt;recoge, con el QR del pedido&quot;]:::nuevo
+LLEGA --&gt; QR{&quot;¿El QR es&lt;br/&gt;válido?&quot;}:::nuevo
+QR --&gt;|No| NO([&quot;No entrego&quot;]):::mal
+QR --&gt;|Sí| ENT[&quot;Entrego: queda «Retirado»&lt;br/&gt;en mi sistema y en VIDA&quot;]:::nuevo --&gt; FAC[&quot;Le facturo a VIDA&quot;]:::nuevo --&gt; PAG([&quot;VIDA me paga el precio de lista&lt;br/&gt;menos su comisión&quot;]):::fin
+Q2 -.-&gt; PD[&quot;Por definir: proveedores sin API (portal,&lt;br/&gt;correo o WhatsApp) y acuerdo de no venderle&lt;br/&gt;por fuera a tiendas de la red&quot;]:::nota
+
+classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
+classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
+classDef acc fill:#E7F0FA,stroke:#3B6E9C,stroke-width:1.5px,color:#123A5E
+classDef fin fill:#FCE7F2,stroke:#D6247F,stroke-width:2.5px,color:#7A0E47,font-weight:bold
+classDef auto fill:#F2F4F7,stroke:#7A8597,stroke-width:1.5px,stroke-dasharray:5 4,color:#2B3445
+classDef mal fill:#FFF1E6,stroke:#D97706,stroke-width:2px,color:#7A3E00,font-weight:bold
+classDef nota fill:#FFFBEA,stroke:#E5A823,stroke-width:1.5px,stroke-dasharray:4 3,color:#7A5200
+classDef nuevo fill:#F1E9FB,stroke:#7C3AED,stroke-width:2px,color:#3B1A73
+classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5 4,color:#3B1A73
+</pre></div>
+    </article>
+  </section>
+</main>
+<footer class="wrap">Comercializadora VIDA · Cómo va a funcionar, propuesta del 28 de octubre de 2026. Reúne las decisiones del equipo, de Lila y de Israel; lo amarillo se define antes de programarlo.</footer>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: false, securityLevel: "loose" });
+(document.fonts ? document.fonts.ready : Promise.resolve()).then(function () { mermaid.run(); });</script>
+</body>
+</html>

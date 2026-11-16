@@ -36,6 +36,13 @@ const APROBACION = {
 
 const aprobacionDe = (r) => r.StatusAprobacion || 'APROBADO';
 
+// Qué reparte: CLIENTES (pedidos a domicilio), PROVEEDORES (reabasto a tiendas) o AMBOS.
+const REPARTO = {
+  PROVEEDORES: { label: 'Proveedores', bg: 'bg-amber-50', text: 'text-amber-700' },
+  AMBOS:       { label: 'Clientes y proveedores', bg: 'bg-amber-50', text: 'text-amber-700' },
+};
+const repartoDe = (r) => REPARTO[r.TipoReparto];
+
 function estadoRepartidor(r) {
   const aprob = aprobacionDe(r);
   if (APROBACION[aprob]) return APROBACION[aprob];
@@ -325,6 +332,16 @@ function TabRepartidores({ puedeEscribir }) {
                         <IconVehiculo vehiculo={r.Vehiculo} />
                         {r.Vehiculo || '—'} {r.PlacaVehiculo ? `· ${r.PlacaVehiculo}` : ''}
                       </span>
+                      {repartoDe(r) && (
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-semibold ${repartoDe(r).bg} ${repartoDe(r).text}`}>
+                            {repartoDe(r).label}
+                          </span>
+                          {r.CapacidadKg != null && (
+                            <span className="text-[11px] text-gray-500">{Number(r.CapacidadKg)} kg</span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {r.ComisionPct != null ? `${Number(r.ComisionPct)}%` : <span className="text-gray-300">global</span>}

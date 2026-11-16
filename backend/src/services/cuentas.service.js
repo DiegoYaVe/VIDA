@@ -15,7 +15,7 @@ import { convertirImporte, leerMoneda, prepararMoneda } from './moneda.service.j
 import { sql } from '../db/sqlserver.js';
 
 export const TIPOS   = ['CXP', 'CXC'];
-export const ORIGENES = ['RECEPCION_OC', 'TRASPASO_MATRIZ'];
+export const ORIGENES = ['RECEPCION_OC', 'TRASPASO_MATRIZ', 'PEDIDO_PROVEEDOR'];
 export const METODOS = ['EFECTIVO', 'TRANSFERENCIA', 'PAGO_MOVIL', 'TARJETA', 'OTRO'];
 
 const dec = (v) => Math.round((Number(v) || 0) * 10000) / 10000;

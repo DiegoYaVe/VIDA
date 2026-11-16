@@ -9,7 +9,12 @@ import { ID_BRANCH, ID_CUENTA } from '../constants/config';
 import { colores, fuentes, logos } from '../constants/tema';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const VEHICULOS = ['Moto', 'Bicicleta', 'Carro'];
+const VEHICULOS = ['Moto', 'Bicicleta', 'Carro', 'Camioneta', 'Camión'];
+const TIPOS = [
+  { k: 'CLIENTES',    t: 'Clientes',    d: 'Pedidos a domicilio' },
+  { k: 'PROVEEDORES', t: 'Proveedores', d: 'Reabasto a las tiendas' },
+  { k: 'AMBOS',       t: 'Ambos',       d: 'Los dos tipos' },
+];
 
 function Campo({ etiqueta, ...props }) {
   return (
@@ -30,9 +35,13 @@ export default function LoginScreen() {
 
   const [nombre, setNombre] = useState('');
   const [telefonoReg, setTelefonoReg] = useState('');
+  const [tipoReparto, setTipoReparto] = useState('CLIENTES');
   const [vehiculo, setVehiculo] = useState('Moto');
   const [placa, setPlaca] = useState('');
+  const [capacidadKg, setCapacidadKg] = useState('');
   const [passwordReg, setPasswordReg] = useState('');
+
+  const reparteProveedores = tipoReparto === 'PROVEEDORES' || tipoReparto === 'AMBOS';
 
   const login = useAuthStore((s) => s.login);
 
@@ -62,13 +71,18 @@ export default function LoginScreen() {
 
   const handleRegistro = async () => {
     if (!nombre.trim() || !telefonoReg.trim()) return setError('Nombre y teléfono son obligatorios');
+    if (reparteProveedores) {
+      if (vehiculo === 'Bicicleta') return setError('Para repartir a tiendas necesitas un vehículo con capacidad de carga');
+      if (!(Number(capacidadKg) > 0)) return setError('Indica cuántos kilos carga tu vehículo');
+    }
     if (!passwordReg || passwordReg.length < 6) return setError('La contraseña debe tener al menos 6 caracteres');
     setError('');
     setLoading(true);
     try {
       await api.post('/delivery/repartidor/registro', {
         idBranch: ID_BRANCH, idCuenta: ID_CUENTA, Nombre: nombre.trim(), Telefono: telefonoReg.trim(),
-        Vehiculo: vehiculo, PlacaVehiculo: placa.trim() || undefined, Contrasena: passwordReg,
+        TipoReparto: tipoReparto, Vehiculo: vehiculo, PlacaVehiculo: placa.trim() || undefined,
+        CapacidadKg: reparteProveedores ? Number(capacidadKg) : undefined, Contrasena: passwordReg,
       });
       cambiar('pendiente');
     } catch (e) {
@@ -110,6 +124,18 @@ export default function LoginScreen() {
               <Campo etiqueta="Nombre completo" placeholder="Carlos Rodríguez" value={nombre} onChangeText={setNombre} />
               <Campo etiqueta="Teléfono" placeholder="0414-0000000" keyboardType="phone-pad" value={telefonoReg} onChangeText={setTelefonoReg} />
               <View style={styles.campo}>
+                <Text style={styles.etiqueta}>¿Qué quieres repartir?</Text>
+                <View style={styles.tipos}>
+                  {TIPOS.map(({ k, t, d }) => (
+                    <TouchableOpacity key={k} onPress={() => setTipoReparto(k)} style={[styles.tipo, tipoReparto === k && styles.vehiculoOn]}
+                      accessibilityRole="radio" accessibilityState={{ selected: tipoReparto === k }}>
+                      <Text style={[styles.tipoTitulo, tipoReparto === k && { color: colores.marino }]}>{t}</Text>
+                      <Text style={[styles.tipoTexto, tipoReparto === k && { color: colores.marino }]}>{d}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              <View style={styles.campo}>
                 <Text style={styles.etiqueta}>Vehículo</Text>
                 <View style={styles.vehiculos}>
                   {VEHICULOS.map(v => (
@@ -122,6 +148,10 @@ export default function LoginScreen() {
               </View>
               {vehiculo !== 'Bicicleta' && (
                 <Campo etiqueta="Placa" placeholder="AB123CD" autoCapitalize="characters" value={placa} onChangeText={setPlaca} />
+              )}
+              {reparteProveedores && (
+                <Campo etiqueta="Capacidad de carga (kg)" placeholder="Ej. 300" keyboardType="numeric"
+                  value={capacidadKg} onChangeText={(t) => setCapacidadKg(t.replace(/[^0-9]/g, ''))} />
               )}
               <Campo etiqueta="Contraseña" placeholder="Mínimo 6 caracteres" secureTextEntry value={passwordReg} onChangeText={setPasswordReg} />
               {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -178,8 +208,13 @@ const styles = StyleSheet.create({
   boton: { marginTop: 6, height: 58, borderRadius: 18, backgroundColor: colores.celeste, alignItems: 'center', justifyContent: 'center' },
   botonTexto: { color: colores.marino, fontWeight: '800', fontSize: 17 },
 
-  vehiculos: { flexDirection: 'row', gap: 8 },
-  vehiculo: { flex: 1, height: 48, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)', alignItems: 'center', justifyContent: 'center' },
+  tipos: { flexDirection: 'row', gap: 8 },
+  tipo: { flex: 1, minHeight: 60, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 4 },
+  tipoTitulo: { color: colores.blanco, fontWeight: '800', fontSize: 15 },
+  tipoTexto: { color: colores.celesteClaro, fontSize: 11, textAlign: 'center', marginTop: 2 },
+
+  vehiculos: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  vehiculo: { flexGrow: 1, flexBasis: '30%', minWidth: 90, height: 48, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)', alignItems: 'center', justifyContent: 'center' },
   vehiculoOn: { backgroundColor: colores.celeste, borderColor: colores.celeste },
   vehiculoTexto: { color: colores.blanco, fontWeight: '800', fontSize: 15 },
 

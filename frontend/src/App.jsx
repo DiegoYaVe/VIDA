@@ -28,6 +28,7 @@ import AcademiaCurso from './pages/AcademiaCurso.jsx';
 import Operaciones   from './pages/Operaciones.jsx';
 import Cuentas from './pages/Cuentas';
 import Cupones       from './pages/Cupones.jsx';
+import PortalProveedor from './pages/PortalProveedor.jsx';
 import Constancia    from './pages/Constancia.jsx';
 import Tienda        from './pages/Tienda.jsx';
 import { ToastContainer } from './components/Toast.jsx';
@@ -108,6 +109,10 @@ export default function App() {
             No va dentro de PublicRoute porque un empresario logueado tambien
             tiene que poder abrir el enlace para revisar como se ve. */}
         <Route path="/t/:idPuntoVenta" element={<Tienda />} />
+
+        {/* Portal de proveedores: público, el enlace secreto es la credencial.
+            Lo abre el proveedor, que no tiene usuario en el panel. */}
+        <Route path="/proveedor/:token" element={<PortalProveedor />} />
 
         <Route path="/dashboard" element={
           <ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>

@@ -1,69 +1,44 @@
 // src/routes/proveedores.routes.js
-import { authenticate, requireRole } from '../middlewares/auth.js';
+// Todo el módulo es solo de VIDA (SUPER_ADMIN y la Matriz): desde la decisión
+// del 28 oct 2026 la tienda no debe saber quién es el proveedor, así que ya no
+// ve la lista, ni el RIF, ni los contactos (antes la veían ADMIN y SUPERVISOR).
+import { authenticate } from '../middlewares/auth.js';
 import { requireMatriz } from '../services/alcance.service.js';
 import {
   listarProveedores, obtenerProveedor, crearProveedor, editarProveedor, toggleProveedor,
   listarProductosProveedor, agregarProductoProveedor, quitarProductoProveedor,
   listarOrdenes, obtenerOrden, siguienteFolioOrden, crearOrden, cambiarEstadoOrden,
+  configurarReabastoProveedor, generarPortalProveedor, verPortalProveedor,
+  listarSucursalesProveedor, crearSucursalProveedor, editarSucursalProveedor,
 } from '../controllers/proveedores.controller.js';
 
-const ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
-const LECTURA   = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN', 'SUPERVISOR'];
-
 export async function proveedoresRoutes(fastify) {
+  const vida = { preHandler: [authenticate, requireMatriz] };
 
   // ── Proveedores ───────────────────────────────────────────────────────
-  fastify.get('/proveedores',
-    { preHandler: [authenticate, requireRole(...LECTURA)] },
-    listarProveedores);
+  fastify.get('/proveedores', vida, listarProveedores);
+  fastify.get('/proveedores/:idProveedor', vida, obtenerProveedor);
+  fastify.post('/proveedores', vida, crearProveedor);
+  fastify.put('/proveedores/:idProveedor', vida, editarProveedor);
+  fastify.patch('/proveedores/:idProveedor/status', vida, toggleProveedor);
 
-  fastify.get('/proveedores/:idProveedor',
-    { preHandler: [authenticate, requireRole(...LECTURA)] },
-    obtenerProveedor);
+  // ── Productos por proveedor (PrecioCosto = precio de lista) ──────────
+  fastify.get('/proveedores/:idProveedor/productos', vida, listarProductosProveedor);
+  fastify.post('/proveedores/:idProveedor/productos', vida, agregarProductoProveedor);
+  fastify.delete('/proveedores/:idProveedor/productos/:idProducto', vida, quitarProductoProveedor);
 
-  fastify.post('/proveedores',
-    { preHandler: [authenticate, requireRole(...ESCRITURA)] },
-    crearProveedor);
-
-  fastify.put('/proveedores/:idProveedor',
-    { preHandler: [authenticate, requireRole(...ESCRITURA)] },
-    editarProveedor);
-
-  fastify.patch('/proveedores/:idProveedor/status',
-    { preHandler: [authenticate, requireRole(...ESCRITURA)] },
-    toggleProveedor);
-
-  // ── Productos por proveedor ───────────────────────────────────────────
-  fastify.get('/proveedores/:idProveedor/productos',
-    { preHandler: [authenticate, requireRole(...LECTURA)] },
-    listarProductosProveedor);
-
-  fastify.post('/proveedores/:idProveedor/productos',
-    { preHandler: [authenticate, requireRole(...ESCRITURA)] },
-    agregarProductoProveedor);
-
-  fastify.delete('/proveedores/:idProveedor/productos/:idProducto',
-    { preHandler: [authenticate, requireRole(...ESCRITURA)] },
-    quitarProductoProveedor);
+  // ── Reabasto con VIDA como intermediario ──────────────────────────────
+  fastify.put('/proveedores/:idProveedor/reabasto', vida, configurarReabastoProveedor);
+  fastify.get('/proveedores/:idProveedor/portal', vida, verPortalProveedor);
+  fastify.post('/proveedores/:idProveedor/portal', vida, generarPortalProveedor);
+  fastify.get('/proveedores/:idProveedor/sucursales', vida, listarSucursalesProveedor);
+  fastify.post('/proveedores/:idProveedor/sucursales', vida, crearSucursalProveedor);
+  fastify.put('/proveedores/:idProveedor/sucursales/:idSucursal', vida, editarSucursalProveedor);
 
   // ── Órdenes de compra ─────────────────────────────────────────────────
-  fastify.get('/ordenes-compra',
-    { preHandler: [authenticate, requireMatriz] },
-    listarOrdenes);
-
-  fastify.get('/ordenes-compra/siguiente-folio',
-    { preHandler: [authenticate, requireMatriz] },
-    siguienteFolioOrden);
-
-  fastify.get('/ordenes-compra/:idOrden',
-    { preHandler: [authenticate, requireMatriz] },
-    obtenerOrden);
-
-  fastify.post('/ordenes-compra',
-    { preHandler: [authenticate, requireMatriz] },
-    crearOrden);
-
-  fastify.post('/ordenes-compra/:idOrden/estado',
-    { preHandler: [authenticate, requireMatriz] },
-    cambiarEstadoOrden);
+  fastify.get('/ordenes-compra', vida, listarOrdenes);
+  fastify.get('/ordenes-compra/siguiente-folio', vida, siguienteFolioOrden);
+  fastify.get('/ordenes-compra/:idOrden', vida, obtenerOrden);
+  fastify.post('/ordenes-compra', vida, crearOrden);
+  fastify.post('/ordenes-compra/:idOrden/estado', vida, cambiarEstadoOrden);
 }

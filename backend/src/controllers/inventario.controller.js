@@ -188,7 +188,7 @@ export async function listarProductos(request, reply) {
         SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
                p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.PrecioSuministroUSD, p.StockMinimo,
-               p.ImagenProducto, p.Notas, p.EsProductoPlus, p.AlicuotaIVA, p.Status, p.FechaAlta,
+               p.ImagenProducto, p.Notas, p.EsProductoPlus, p.AlicuotaIVA, p.PesoKg, p.Status, p.FechaAlta,
                ISNULL(s.Cantidad, 0) AS StockDisponible
         FROM VIDA_INVENTARIO_PRODUCTOS p
         LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
@@ -298,7 +298,7 @@ export async function obtenerProducto(request, reply) {
         SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
                p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.PrecioSuministroUSD, p.StockMinimo,
-               p.ImagenProducto, p.Notas, p.EsProductoPlus, p.AlicuotaIVA, p.Status, p.FechaAlta
+               p.ImagenProducto, p.Notas, p.EsProductoPlus, p.AlicuotaIVA, p.PesoKg, p.Status, p.FechaAlta
         FROM VIDA_INVENTARIO_PRODUCTOS p
         LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
           ON c.idBranch = p.idBranch AND c.idCuenta = p.idCuenta AND c.idCategoria = p.idCategoria
@@ -317,9 +317,11 @@ export async function obtenerProducto(request, reply) {
 export async function crearProducto(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const { idCategoria, Nombre, Descripcion, SKU, CodigoBarras, UnidadMedida,
-          PrecioUSD, CostoUSD, PrecioSuministroUSD, StockMinimo, Notas, EsProductoPlus, AlicuotaIVA } = request.body;
+          PrecioUSD, CostoUSD, PrecioSuministroUSD, StockMinimo, Notas, EsProductoPlus, AlicuotaIVA, PesoKg } = request.body;
   if (AlicuotaIVA !== undefined && !ALICUOTAS.includes(AlicuotaIVA))
     return reply.code(400).send({ error: 'Alícuota de IVA inválida (GENERAL, REDUCIDA o EXENTO)' });
+  if (PesoKg != null && (typeof PesoKg !== 'number' || !Number.isFinite(PesoKg) || PesoKg < 0))
+    return reply.code(400).send({ error: 'El peso (kg) debe ser un número mayor o igual a cero' });
 
   if (!Nombre || !UnidadMedida || !idCategoria)
     return reply.code(400).send({ error: 'Nombre, UnidadMedida e idCategoria son requeridos' });
@@ -363,13 +365,14 @@ export async function crearProducto(request, reply) {
       .input('Notas',        sql.VarChar(500), Notas || null)
       .input('EsProductoPlus', sql.Bit,        EsProductoPlus ? 1 : 0)
       .input('AlicuotaIVA',  sql.VarChar(10),  AlicuotaIVA || 'GENERAL')
+      .input('PesoKg',       sql.Decimal(10,3), PesoKg ?? null)
       .input('UsuAlta',      sql.VarChar(20),  String(idUsuario));
     const nuevoId = await insertarConId(req, {
       tabla: 'VIDA_INVENTARIO_PRODUCTOS', idCol: 'idProducto',
       columnas: ['idCategoria', 'Nombre', 'Descripcion', 'SKU', 'CodigoBarras', 'UnidadMedida',
-                 'PrecioUSD', 'CostoUSD', 'PrecioSuministroUSD', 'StockMinimo', 'Notas', 'EsProductoPlus', 'AlicuotaIVA', 'UsuAlta'],
+                 'PrecioUSD', 'CostoUSD', 'PrecioSuministroUSD', 'StockMinimo', 'Notas', 'EsProductoPlus', 'AlicuotaIVA', 'PesoKg', 'UsuAlta'],
       valores:  ['@idCategoria', '@Nombre', '@Descripcion', '@SKU', '@CodigoBarras', '@UnidadMedida',
-                 '@PrecioUSD', '@CostoUSD', '@PrecioSuministroUSD', '@StockMinimo', '@Notas', '@EsProductoPlus', '@AlicuotaIVA', '@UsuAlta'],
+                 '@PrecioUSD', '@CostoUSD', '@PrecioSuministroUSD', '@StockMinimo', '@Notas', '@EsProductoPlus', '@AlicuotaIVA', '@PesoKg', '@UsuAlta'],
     });
 
     return reply.code(201).send({ message: 'Producto creado', idProducto: nuevoId });
@@ -384,9 +387,11 @@ export async function editarProducto(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const { idProducto } = request.params;
   const { idCategoria, Nombre, Descripcion, SKU, CodigoBarras, UnidadMedida,
-          PrecioUSD, CostoUSD, PrecioSuministroUSD, StockMinimo, Notas, EsProductoPlus, AlicuotaIVA } = request.body;
+          PrecioUSD, CostoUSD, PrecioSuministroUSD, StockMinimo, Notas, EsProductoPlus, AlicuotaIVA, PesoKg } = request.body;
   if (AlicuotaIVA !== undefined && !ALICUOTAS.includes(AlicuotaIVA))
     return reply.code(400).send({ error: 'Alícuota de IVA inválida (GENERAL, REDUCIDA o EXENTO)' });
+  if (PesoKg != null && (typeof PesoKg !== 'number' || !Number.isFinite(PesoKg) || PesoKg < 0))
+    return reply.code(400).send({ error: 'El peso (kg) debe ser un número mayor o igual a cero' });
 
   if (!Nombre || !UnidadMedida || !idCategoria)
     return reply.code(400).send({ error: 'Nombre, UnidadMedida e idCategoria son requeridos' });
@@ -433,12 +438,13 @@ export async function editarProducto(request, reply) {
       .input('Notas',        sql.VarChar(500),  Notas || null)
       .input('EsProductoPlus', sql.Bit,         EsProductoPlus ? 1 : 0)
       .input('AlicuotaIVA',  sql.VarChar(10),   AlicuotaIVA ?? null)
+      .input('PesoKg',       sql.Decimal(10,3), PesoKg ?? null)
       .input('UsuMod',       sql.VarChar(20),   String(idUsuario))
       .query(`UPDATE VIDA_INVENTARIO_PRODUCTOS SET
                 idCategoria = @idCategoria, Nombre = @Nombre, Descripcion = @Descripcion,
                 SKU = @SKU, CodigoBarras = @CodigoBarras, UnidadMedida = @UnidadMedida,
                 PrecioUSD = @PrecioUSD, CostoUSD = @CostoUSD, PrecioSuministroUSD = CASE WHEN @CambiarSuministro=1 THEN @PrecioSuministroUSD ELSE PrecioSuministroUSD END, StockMinimo = @StockMinimo,
-                Notas = @Notas, EsProductoPlus = @EsProductoPlus, AlicuotaIVA = ISNULL(@AlicuotaIVA, AlicuotaIVA), FechaMod = GETUTCDATE(), UsuMod = @UsuMod
+                Notas = @Notas, EsProductoPlus = @EsProductoPlus, AlicuotaIVA = ISNULL(@AlicuotaIVA, AlicuotaIVA), PesoKg = @PesoKg, FechaMod = GETUTCDATE(), UsuMod = @UsuMod
               WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idProducto = @idProducto`);
 
     return reply.send({ message: 'Producto actualizado' });

@@ -168,6 +168,7 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
     CostoUSD:        data?.CostoUSD        ?? '',
     PrecioSuministroUSD: data?.PrecioSuministroUSD ?? '',
     StockMinimo:     data?.StockMinimo     ?? 0,
+    PesoKg:          data?.PesoKg          ?? '',
     Notas:           data?.Notas           || '',
     EsProductoPlus:  !!data?.EsProductoPlus,
     AlicuotaIVA:     data?.AlicuotaIVA     || 'GENERAL',
@@ -194,6 +195,7 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
         ...form,
         PrecioUSD:       parseFloat(form.PrecioUSD),
         CostoUSD:        form.CostoUSD !== '' ? parseFloat(form.CostoUSD) : null,
+        PesoKg:          form.PesoKg !== '' && form.PesoKg != null ? parseFloat(form.PesoKg) : null,
         ...(String(form.PrecioSuministroUSD) !== String(data?.PrecioSuministroUSD ?? '') ? { PrecioSuministroUSD: form.PrecioSuministroUSD === '' ? null : Number(form.PrecioSuministroUSD) } : {}),
         UnidadesPorCaja: form.UnidadMedida === 'Caja' && form.UnidadesPorCaja !== ''
                            ? parseInt(form.UnidadesPorCaja) : null,
@@ -293,6 +295,13 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
           </SelectField>
           <InputField label="Stock Mínimo (alerta)" type="number" step="0.01"
             value={form.StockMinimo} onChange={e => f('StockMinimo', e.target.value)} />
+        </div>
+
+        <div>
+          <InputField label="Peso por unidad (kg)" type="number" min="0" step="0.001"
+            value={form.PesoKg} placeholder="Ej: 1.5"
+            onChange={e => f('PesoKg', e.target.value)} />
+          <p className="text-xs text-gray-400 mt-1">Para el reabasto: se usa para saber en qué vehículo cabe el pedido del repartidor. Opcional.</p>
         </div>
 
         {form.UnidadMedida === 'Caja' && (

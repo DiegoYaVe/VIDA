@@ -15,7 +15,7 @@ const STATUS_LABELS = {
 };
 
 // Tabs distintas de Inicio: son las que muestran el banner del pedido activo
-const TABS_SECUNDARIAS = ['ganancias', 'historial', 'perfil'];
+const TABS_SECUNDARIAS = ['recolecciones', 'ganancias', 'historial', 'perfil'];
 
 const STATUS_COLORS = {
   IR_A_SUCURSAL: '#001034',
@@ -96,6 +96,15 @@ export default function MainLayout() {
                   <View style={styles.badge} />
                 )}
               </View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="recolecciones"
+          options={{
+            title: 'Recolecciones',
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'cube' : 'cube-outline'} size={24} color={color} />
             ),
           }}
         />

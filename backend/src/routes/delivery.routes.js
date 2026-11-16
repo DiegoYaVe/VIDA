@@ -47,6 +47,11 @@ import {
   liberarPedido,
   pedidosActivos,
   pedidosDisponibles,
+  enviosProveedorDisponibles,
+  enviosProveedorActivos,
+  aceptarEnvioProveedor,
+  recogerEnvioProveedor,
+  entregarEnvioProveedor,
   historialRepartidor, gananciasRepartidor, cambiarPasswordRepartidor,
   rutaRepartidor,
   resumenRepartidores,
@@ -220,6 +225,27 @@ export async function deliveryRoutes(fastify) {
   fastify.get('/delivery/repartidor/pedidos-disponibles',
     { preHandler: [authenticateRepartidor] },
     pedidosDisponibles);
+
+  // ── Repartidor — envíos proveedor → tienda (reabasto, tarea 24) ──────────
+  fastify.get('/delivery/repartidor/envios-disponibles',
+    { preHandler: [authenticateRepartidor] },
+    enviosProveedorDisponibles);
+
+  fastify.get('/delivery/repartidor/envios-activos',
+    { preHandler: [authenticateRepartidor] },
+    enviosProveedorActivos);
+
+  fastify.post('/delivery/repartidor/envios/aceptar',
+    { preHandler: [authenticateRepartidor] },
+    aceptarEnvioProveedor);
+
+  fastify.post('/delivery/repartidor/envios/recoger',
+    { preHandler: [authenticateRepartidor] },
+    recogerEnvioProveedor);
+
+  fastify.post('/delivery/repartidor/envios/entregar',
+    { preHandler: [authenticateRepartidor] },
+    entregarEnvioProveedor);
 
   fastify.put('/delivery/repartidor/password',
     { preHandler: [authenticateRepartidor] },

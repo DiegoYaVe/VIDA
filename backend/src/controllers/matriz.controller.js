@@ -286,7 +286,7 @@ export async function listarPedidosMatriz(request, reply) {
 
     const r = await req.query(`
       SELECT pm.idPedidoMatriz, pm.Status, pm.TotalCostoUSD, pm.TotalSuministroUSD, pm.Notas,
-             pm.FechaAlta, pm.FechaMod, pm.idPuntoVentaSolicita,
+             pm.FechaAlta, pm.FechaMod, pm.idPuntoVentaSolicita, pm.Modalidad, pm.ModoRecepcion,
              pvs.NomComercial AS NombreTienda,
              (SELECT COUNT(*) FROM VIDA_PEDIDOS_MATRIZ_DETALLE d
               WHERE d.idBranch=pm.idBranch AND d.idCuenta=pm.idCuenta AND d.idPedidoMatriz=pm.idPedidoMatriz) AS TotalItems
@@ -320,6 +320,8 @@ export async function obtenerPedidoMatriz(request, reply) {
                 ON pvm.idBranch=pm.idBranch AND pvm.idCuenta=pm.idCuenta AND pvm.idPuntoVenta=pm.idPuntoVentaMatriz
               WHERE pm.idBranch=@idBranch AND pm.idCuenta=@idCuenta AND pm.idPedidoMatriz=@idPedidoMatriz`);
     if (!cab.recordset.length) return reply.code(404).send({ error: 'Pedido no encontrado' });
+    if (cab.recordset[0].Modalidad === 'PROVEEDOR')
+      return reply.code(409).send({ error: 'Este pedido es de reabasto por proveedor', codigo: 'MODALIDAD_PROVEEDOR' });
 
     // Quien opera la Matriz ve cualquier pedido; una tienda, solo el suyo.
     if (!esPropia(request.user, cab.recordset[0].idPuntoVentaSolicita) && !(await operaMatriz(request.user, pool)))
@@ -380,12 +382,16 @@ export async function cambiarEstadoPedidoMatriz(request, reply) {
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
       .input('idPedidoMatriz', sql.BigInt, idPedidoMatriz)
-      .query(`SELECT Status, idPuntoVentaSolicita, idPuntoVentaMatriz
+      .query(`SELECT Status, idPuntoVentaSolicita, idPuntoVentaMatriz, Modalidad
               FROM VIDA_PEDIDOS_MATRIZ
               WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoMatriz=@idPedidoMatriz`);
     if (!cabR.recordset.length) return reply.code(404).send({ error: 'Pedido no encontrado' });
 
     const ped = cabR.recordset[0];
+    // Los pedidos a VIDA por proveedor tienen su propio flujo (pago, paquetes,
+    // recepción sin pasar por la Matriz): ver reabastoVida.controller.js.
+    if (ped.Modalidad === 'PROVEEDOR')
+      return reply.code(409).send({ error: 'Este pedido es de reabasto por proveedor; gestiónalo desde su detalle' });
     // Quien opera la Matriz gestiona cualquier pedido; una tienda, solo el suyo.
     const opera = await operaMatriz(request.user, pool);
     if (!opera && !esPropia(request.user, ped.idPuntoVentaSolicita)) {
