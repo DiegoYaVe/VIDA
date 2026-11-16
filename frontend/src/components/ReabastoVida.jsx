@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import QRCode from 'qrcode';
 import {
   ShoppingCart, Plus, Minus, Search, X, Send, Check, Truck, Trash2, Package,
-  MapPin, Clock, Store, CreditCard, ShieldCheck, Ban, Star,
+  MapPin, Clock, Store, CreditCard, ShieldCheck, Ban, Star, UserPlus, UserCheck, AlertTriangle,
 } from 'lucide-react';
 import api from '../services/api.js';
 
@@ -220,13 +220,89 @@ function QrRetiro({ codigo }) {
   );
 }
 
+// ─── Asignar a mano el repartidor de un envío (solo VIDA) ───────────────────────
+function AsignarRepartidor({ paq, onAsignado }) {
+  const [abierto, setAbierto] = useState(false);
+  const [data, setData] = useState(null);     // { PesoKg, SinPeso, repartidores }
+  const [cargando, setCarg] = useState(false);
+  const [asignando, setAsig] = useState(null); // idRepartidor en curso
+  const [error, setError] = useState('');
+
+  const cargar = useCallback(async () => {
+    setCarg(true); setError('');
+    try { setData((await api.get(`/reabasto-vida/paquetes/${paq.idPedidoProveedor}/repartidores`)).data); }
+    catch (e) { setError(e.response?.data?.error || 'No se pudieron cargar los repartidores'); }
+    finally { setCarg(false); }
+  }, [paq.idPedidoProveedor]);
+
+  const abrir = () => { setAbierto(true); if (!data) cargar(); };
+
+  async function asignar(r) {
+    if (r.aguanta === false && !window.confirm(`${r.Nombre} declara ${r.CapacidadKg} kg y el pedido pesa ${data.PesoKg} kg. ¿Asignarlo igual?`)) return;
+    setAsig(r.idRepartidor); setError('');
+    try {
+      await api.post(`/reabasto-vida/paquetes/${paq.idPedidoProveedor}/asignar`, { idRepartidor: r.idRepartidor });
+      onAsignado?.();
+    } catch (e) { setError(e.response?.data?.error || 'No se pudo asignar'); }
+    finally { setAsig(null); }
+  }
+
+  if (!abierto) {
+    return (
+      <button onClick={abrir}
+        className="w-full flex items-center justify-center gap-2 border border-vida-blue/40 text-vida-blue rounded-xl px-4 py-2 text-sm font-semibold hover:bg-vida-blue-light">
+        <UserPlus size={15} /> Asignar repartidor a mano
+      </button>
+    );
+  }
+  return (
+    <div className="border border-gray-200 rounded-xl p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-bold text-gray-800">Asignar repartidor</p>
+        {data?.SinPeso > 0
+          ? <span className="text-xs text-amber-700 flex items-center gap-1"><AlertTriangle size={12} /> Falta peso de productos</span>
+          : data?.PesoKg != null ? <span className="text-xs font-semibold text-gray-500">Pedido: {data.PesoKg} kg</span> : null}
+      </div>
+      {error && <p className="text-red-600 text-xs bg-red-50 px-2 py-1.5 rounded-lg">{error}</p>}
+      {cargando ? (
+        <p className="text-sm text-gray-400 py-3 text-center">Cargando…</p>
+      ) : !data?.repartidores?.length ? (
+        <p className="text-sm text-gray-400 py-3 text-center">No hay repartidores de proveedores aprobados.</p>
+      ) : (
+        <div className="space-y-1.5 max-h-56 overflow-y-auto">
+          {data.repartidores.map(r => (
+            <div key={r.idRepartidor} className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
+              <Truck size={14} className="text-gray-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-800 truncate">{r.Nombre}</p>
+                <p className="text-xs text-gray-400">
+                  {r.Vehiculo || '—'}{r.CapacidadKg != null ? ` · ${r.CapacidadKg} kg` : ' · sin capacidad'}{r.Activas ? ` · ${r.Activas} activas` : ''}
+                </p>
+              </div>
+              {r.aguanta === false && <span className="text-[11px] text-amber-700 font-semibold">No aguanta</span>}
+              <button onClick={() => asignar(r)} disabled={asignando === r.idRepartidor}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 ${r.aguanta === false ? 'border border-amber-300 text-amber-700 hover:bg-amber-50' : 'bg-vida-blue text-white hover:opacity-90'}`}>
+                {asignando === r.idRepartidor ? '…' : 'Asignar'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button onClick={() => setAbierto(false)} className="text-xs text-gray-400 hover:text-gray-600">Cerrar</button>
+    </div>
+  );
+}
+
 // ─── Un paquete del pedido ─────────────────────────────────────────────────────
-function Paquete({ paq, pedido, onRecibido }) {
+function Paquete({ paq, pedido, onRecibido, onCambiado }) {
   const [cant, setCant] = useState(() => Object.fromEntries(paq.lineas.map(l => [l.idDetalle, l.CantidadSolicitada])));
   const [proc, setProc] = useState(false);
   const [error, setError] = useState('');
   const vida = pedido.operaVida;
   const puedeRecibir = pedido.puedeRecibir && paq.Status === 'RETIRADO';
+  // VIDA asigna a mano cuando el envío está listo y aún no tiene repartidor.
+  const envioVida = vida && pedido.ModoRecepcion === 'ENVIO_VIDA';
+  const puedeAsignar = envioVida && !paq.idRepartidor && ['CONFIRMADO', 'LISTO'].includes(paq.Status);
 
   async function recibir() {
     setProc(true); setError('');
@@ -255,6 +331,12 @@ function Paquete({ paq, pedido, onRecibido }) {
           {paq.NotasProveedor && <p>Nota del proveedor: {paq.NotasProveedor}</p>}
         </div>
       )}
+      {envioVida && paq.idRepartidor && (
+        <p className="text-xs text-gray-600 flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2">
+          <UserCheck size={14} className="text-vida-green shrink-0" /> Repartidor: <b className="text-gray-800">{paq.NombreRepartidor || `#${paq.idRepartidor}`}</b>
+        </p>
+      )}
+      {puedeAsignar && <AsignarRepartidor paq={paq} onAsignado={onCambiado} />}
       {paq.retiro && paq.Status !== 'RECIBIDO' && (
         <div className="bg-gray-50 rounded-xl p-3 space-y-2">
           {pedido.ModoRecepcion === 'RECOJO' ? (
@@ -406,6 +488,7 @@ export function ModalPedidoVida({ idPedidoMatriz, onClose, onCambiado, recargarS
               )}
               {ped.paquetes.map(p => (
                 <Paquete key={p.idPedidoProveedor} paq={p} pedido={ped}
+                  onCambiado={() => { onCambiado?.(); cargar(); }}
                   onRecibido={(r) => { setAviso(r.faltanteUSD > 0 ? `Recibido. Faltó mercancía por ${USD(r.faltanteUSD)}: VIDA te debe ese saldo.` : 'Recibido: ya está en tu inventario.'); onCambiado?.(); cargar(); }} />
               ))}
             </div>

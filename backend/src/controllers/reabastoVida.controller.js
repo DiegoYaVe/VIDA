@@ -18,9 +18,11 @@ import { prepararMoneda } from '../services/moneda.service.js';
 import { operadorMatriz } from '../services/alcance.service.js';
 import {
   elegirProveedores, repartoComision, sucursalMasCercana, codigoRetiro, normalizarCodigo,
-  folioReabasto, estadoTrasPaquetes,
+  folioReabasto, estadoTrasPaquetes, repartidorAguanta,
 } from '../services/reabastoProveedor.service.js';
 import { enviarPedidoApi } from '../services/envioProveedor.service.js';
+import { broadcast } from '../ws/ws.manager.js';
+import { enviarPush } from '../services/push.service.js';
 
 const operaVida = async (user, pool) => (await operadorMatriz(user, pool)).permitido;
 const esPropia = (user, idPuntoVenta) =>
@@ -284,11 +286,21 @@ export async function obtenerPedidoVida(request, reply) {
                     WHERE pm.idBranch=@idBranch AND pm.idCuenta=@idCuenta AND pm.idPedidoMatriz=@idPedidoMatriz`),
       base().query(`SELECT pp.idPedidoProveedor, pp.Folio, pp.Status, pp.CodigoRetiro, pp.TotalListaUSD, pp.ComisionPct,
                            pp.TotalPagarUSD, pp.CanalEnvio, pp.EnvioApiResultado, pp.NotasProveedor, pp.RetiradoPor, pp.FechaRetiro,
-                           pr.Nombre AS NombreProveedor, s.Direccion, s.Horario, s.Latitud, s.Longitud
+                           pp.idRepartidor, rep.Nombre AS NombreRepartidor,
+                           pr.Nombre AS NombreProveedor, s.Direccion, s.Horario, s.Latitud, s.Longitud,
+                           w.PesoKg, w.SinPeso
                     FROM VIDA_PEDIDOS_PROVEEDOR pp
                     JOIN VIDA_PROVEEDORES pr ON pr.idBranch=pp.idBranch AND pr.idCuenta=pp.idCuenta AND pr.idProveedor=pp.idProveedor
                     LEFT JOIN VIDA_PROVEEDORES_SUCURSALES s ON s.idBranch=pp.idBranch AND s.idCuenta=pp.idCuenta
                       AND s.idProveedor=pp.idProveedor AND s.idSucursal=pp.idSucursal
+                    LEFT JOIN VIDA_REPARTIDORES rep ON rep.idBranch=pp.idBranch AND rep.idCuenta=pp.idCuenta AND rep.idRepartidor=pp.idRepartidor
+                    OUTER APPLY (
+                      SELECT SUM(d.CantidadSolicitada * inv.PesoKg) AS PesoKg,
+                             SUM(CASE WHEN inv.PesoKg IS NULL THEN 1 ELSE 0 END) AS SinPeso
+                      FROM VIDA_PEDIDOS_MATRIZ_DETALLE d
+                      LEFT JOIN VIDA_INVENTARIO_PRODUCTOS inv ON inv.idBranch=d.idBranch AND inv.idCuenta=d.idCuenta AND inv.idProducto=d.idProducto
+                      WHERE d.idBranch=pp.idBranch AND d.idCuenta=pp.idCuenta AND d.idPedidoProveedor=pp.idPedidoProveedor
+                    ) w
                     WHERE pp.idBranch=@idBranch AND pp.idCuenta=@idCuenta AND pp.idPedidoMatriz=@idPedidoMatriz
                     ORDER BY pp.idPedidoProveedor`),
       base().query(`SELECT d.idDetalle, d.idPedidoProveedor, d.idProducto, d.CantidadSolicitada, d.CantidadRecibida,
@@ -318,6 +330,8 @@ export async function obtenerPedidoVida(request, reply) {
         ...comun, retiro, Folio: p.Folio, NombreProveedor: p.NombreProveedor, ComisionPct: p.ComisionPct,
         TotalPagarUSD: p.TotalPagarUSD, CanalEnvio: p.CanalEnvio, EnvioApiResultado: p.EnvioApiResultado,
         NotasProveedor: p.NotasProveedor,
+        idRepartidor: p.idRepartidor, NombreRepartidor: p.NombreRepartidor,
+        PesoKg: p.SinPeso > 0 ? null : (p.PesoKg != null ? Number(p.PesoKg) : null), SinPeso: Number(p.SinPeso) || 0,
       };
     });
     return reply.send({
@@ -638,5 +652,115 @@ export async function recibirPaquete(request, reply) {
     if (tx) { try { await tx.rollback(); } catch {} }
     request.log.error(err);
     return reply.code(err.statusCode || 500).send({ error: err.statusCode ? err.message : 'Error al recibir el paquete' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ASIGNACIÓN MANUAL DE UN ENVÍO (tarea 24): cuando ningún repartidor aguanta el
+// peso (o falta el peso de algún producto), VIDA asigna a mano el repartidor.
+// ══════════════════════════════════════════════════════════════════════════
+
+// GET /reabasto-vida/paquetes/:idPedidoProveedor/repartidores
+// VIDA ve los repartidores de proveedores y si aguantan el peso del paquete.
+export async function repartidoresEnvioProveedor(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const idPP = parseInt(request.params.idPedidoProveedor);
+  try {
+    const pool = await getPool();
+    if (!(await operaVida(request.user, pool))) return reply.code(403).send({ error: 'Solo VIDA asigna repartidores' });
+
+    const pesoR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('pp', sql.BigInt, idPP)
+      .query(`SELECT SUM(d.CantidadSolicitada * inv.PesoKg) AS PesoKg,
+                     SUM(CASE WHEN inv.PesoKg IS NULL THEN 1 ELSE 0 END) AS SinPeso
+              FROM VIDA_PEDIDOS_MATRIZ_DETALLE d
+              LEFT JOIN VIDA_INVENTARIO_PRODUCTOS inv ON inv.idBranch=d.idBranch AND inv.idCuenta=d.idCuenta AND inv.idProducto=d.idProducto
+              WHERE d.idBranch=@idBranch AND d.idCuenta=@idCuenta AND d.idPedidoProveedor=@pp`);
+    const sinPeso = Number(pesoR.recordset[0]?.SinPeso) || 0;
+    const peso = Number(pesoR.recordset[0]?.PesoKg) || 0;
+
+    const repR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .query(`SELECT idRepartidor, Nombre, Vehiculo, CapacidadKg,
+                     (SELECT COUNT(*) FROM VIDA_PEDIDOS_PROVEEDOR pa
+                      WHERE pa.idBranch=r.idBranch AND pa.idCuenta=r.idCuenta AND pa.idRepartidor=r.idRepartidor
+                        AND pa.Status NOT IN ('RECIBIDO','CANCELADO')) AS Activas
+              FROM VIDA_REPARTIDORES r
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'
+                AND ISNULL(StatusAprobacion,'APROBADO') NOT IN ('PENDIENTE','RECHAZADO')
+                AND ISNULL(TipoReparto,'CLIENTES') IN ('PROVEEDORES','AMBOS')
+              ORDER BY Nombre`);
+    return reply.send({
+      PesoKg: sinPeso > 0 ? null : peso,
+      SinPeso: sinPeso,
+      repartidores: repR.recordset.map(r => ({
+        idRepartidor: r.idRepartidor, Nombre: r.Nombre, Vehiculo: r.Vehiculo,
+        CapacidadKg: r.CapacidadKg != null ? Number(r.CapacidadKg) : null,
+        Activas: Number(r.Activas) || 0,
+        aguanta: sinPeso > 0 ? null : repartidorAguanta(r.CapacidadKg, peso),
+      })),
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'No se pudieron cargar los repartidores' });
+  }
+}
+
+// POST /reabasto-vida/paquetes/:idPedidoProveedor/asignar  { idRepartidor }
+// VIDA asigna a mano. Permite exceder la capacidad declarada (VIDA decide, p.ej.
+// dos viajes o dividir el pedido); el panel avisa si no aguanta.
+export async function asignarRepartidorEnvio(request, reply) {
+  const { idBranch, idCuenta, idUsuario } = request.user;
+  const idPP = parseInt(request.params.idPedidoProveedor);
+  const idRepartidor = parseInt(request.body?.idRepartidor);
+  if (!idRepartidor) return reply.code(400).send({ error: 'Elige un repartidor' });
+  try {
+    const pool = await getPool();
+    if (!(await operaVida(request.user, pool))) return reply.code(403).send({ error: 'Solo VIDA asigna repartidores' });
+
+    const repR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('idRep', sql.BigInt, idRepartidor)
+      .query(`SELECT Nombre, FcmToken, ISNULL(TipoReparto,'CLIENTES') AS TipoReparto,
+                     Status, ISNULL(StatusAprobacion,'APROBADO') AS StatusAprobacion
+              FROM VIDA_REPARTIDORES WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idRepartidor=@idRep`);
+    const rep = repR.recordset[0];
+    if (!rep || rep.Status !== 'ACTIVO' || ['PENDIENTE', 'RECHAZADO'].includes(rep.StatusAprobacion)
+        || !['PROVEEDORES', 'AMBOS'].includes(rep.TipoReparto))
+      return reply.code(400).send({ error: 'Ese repartidor no está disponible para recolecciones' });
+
+    const pkgR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('pp', sql.BigInt, idPP)
+      .query(`SELECT pp.Status, pp.idRepartidor, pp.Folio, pm.ModoRecepcion
+              FROM VIDA_PEDIDOS_PROVEEDOR pp
+              JOIN VIDA_PEDIDOS_MATRIZ pm ON pm.idBranch=pp.idBranch AND pm.idCuenta=pp.idCuenta AND pm.idPedidoMatriz=pp.idPedidoMatriz
+              WHERE pp.idBranch=@idBranch AND pp.idCuenta=@idCuenta AND pp.idPedidoProveedor=@pp`);
+    const pkg = pkgR.recordset[0];
+    if (!pkg) return reply.code(404).send({ error: 'Paquete no encontrado' });
+    if (pkg.ModoRecepcion !== 'ENVIO_VIDA') return reply.code(409).send({ error: 'Este paquete no es de envío por VIDA' });
+    if (pkg.idRepartidor != null) return reply.code(409).send({ error: 'El paquete ya tiene repartidor asignado' });
+    if (!['CONFIRMADO', 'LISTO'].includes(pkg.Status)) return reply.code(409).send({ error: 'El paquete todavía no está listo para recoger' });
+
+    const upd = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('pp', sql.BigInt, idPP).input('idRep', sql.BigInt, idRepartidor)
+      .query(`UPDATE VIDA_PEDIDOS_PROVEEDOR SET idRepartidor=@idRep, RetiradoPor='REPARTIDOR', FechaMod=GETUTCDATE()
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoProveedor=@pp
+                AND idRepartidor IS NULL AND Status IN ('CONFIRMADO','LISTO')`);
+    if (!upd.rowsAffected[0]) return reply.code(409).send({ error: 'El paquete cambió mientras tanto; vuelve a leerlo' });
+
+    registrarAuditoria(pool, {
+      idBranch, idCuenta, entityType: 'PEDIDO_PROVEEDOR', entityId: idPP,
+      accion: 'ENVIO_ASIGNADO_MANUAL', actor: `U:${idUsuario}`, data: { idRepartidor, Folio: pkg.Folio },
+    }, request.log).catch(() => {});
+    broadcast(idBranch, idCuenta, { tipo: 'envio_proveedor_tomado', idPedidoProveedor: idPP, idRepartidor, manual: true });
+    if (rep.FcmToken) enviarPush([rep.FcmToken], {
+      title: '📦 Te asignaron una recolección',
+      body: `VIDA te asignó la recolección ${pkg.Folio}.`,
+      data: { tipo: 'envio_proveedor_disponible', idPedidoProveedor: idPP },
+    }, request.log);
+    return reply.send({ ok: true, idRepartidor, Nombre: rep.Nombre });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'No se pudo asignar el repartidor' });
   }
 }

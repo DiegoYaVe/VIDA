@@ -4,7 +4,7 @@
 import { authenticate, requireRole } from '../middlewares/auth.js';
 import {
   catalogoVida, crearPedidoVida, obtenerPedidoVida, reportarPago, validarPago,
-  cancelarPedidoVida, recibirPaquete,
+  cancelarPedidoVida, recibirPaquete, repartidoresEnvioProveedor, asignarRepartidorEnvio,
 } from '../controllers/reabastoVida.controller.js';
 import { verPortal, avanzarPedidoPortal, avanzarPedidoApi } from '../controllers/portalProveedor.controller.js';
 
@@ -21,6 +21,9 @@ export async function reabastoVidaRoutes(fastify) {
   fastify.post('/reabasto-vida/pedidos/:idPedidoMatriz/validar-pago', auth, validarPago);
   fastify.post('/reabasto-vida/pedidos/:idPedidoMatriz/cancelar', auth, cancelarPedidoVida);
   fastify.post('/reabasto-vida/paquetes/:idPedidoProveedor/recibir', auth, recibirPaquete);
+  // Asignación manual del repartidor de un envío (solo VIDA; el controlador lo valida)
+  fastify.get('/reabasto-vida/paquetes/:idPedidoProveedor/repartidores', auth, repartidoresEnvioProveedor);
+  fastify.post('/reabasto-vida/paquetes/:idPedidoProveedor/asignar', auth, asignarRepartidorEnvio);
 
   // Público: el enlace es la credencial. Límite estricto para que no se pueda
   // adivinar un código de retiro a fuerza de intentos.
