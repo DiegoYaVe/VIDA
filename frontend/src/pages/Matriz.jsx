@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import api from '../services/api.js';
 import { useAuthStore } from '../store/authStore.js';
+import { useWebSocket } from '../hooks/useWebSocket.js';
+import { useToast } from '../components/Toast.jsx';
 import { TabPedirVida, ModalPedidoVida, BadgeVida } from '../components/ReabastoVida.jsx';
 
 const USD = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -351,14 +353,44 @@ function TabPedidos({ operaMatriz, puedeRecibir, refresh }) {
   const [pedidos, setPedidos] = useState(null);
   const [cargando, setCarg] = useState(true);
   const [abierto, setAbierto] = useState(null);
+  const [senal, setSenal] = useState(0);   // sube con cada evento: recarga el modal abierto
+  const toast = useToast();
 
-  const cargar = useCallback(async () => {
-    setCarg(true);
+  const cargar = useCallback(async (silencioso = false) => {
+    if (!silencioso) setCarg(true);
     try { setPedidos((await api.get('/matriz/pedidos')).data); }
-    catch { setPedidos([]); }
-    finally { setCarg(false); }
+    catch { if (!silencioso) setPedidos([]); }
+    finally { if (!silencioso) setCarg(false); }
   }, []);
   useEffect(() => { cargar(); }, [cargar, refresh]);
+
+  // Eventos del despacho de envíos proveedor → tienda (reabasto, tarea 24).
+  const onEvento = useCallback((msg) => {
+    switch (msg?.tipo) {
+      case 'envio_proveedor_asignar_manual':
+        if (operaMatriz) {
+          const motivo = msg.Motivo === 'faltan pesos de productos'
+            ? 'Falta el peso de algún producto'
+            : 'Ningún repartidor con capacidad';
+          toast.warning('Recolección sin repartidor', `${msg.Folio || 'Un paquete'}: ${motivo}. Asígnala a mano.`);
+        }
+        cargar(true);
+        break;
+      case 'envio_proveedor_entregado':
+        toast.info('Llegó una recolección', 'El repartidor llegó a la tienda. Confirma lo que llegó para ingresarlo al inventario.');
+        setSenal(s => s + 1);
+        cargar(true);
+        break;
+      case 'envio_proveedor_tomado':
+      case 'envio_proveedor_retirado':
+        setSenal(s => s + 1);
+        cargar(true);
+        break;
+      default:
+        break;
+    }
+  }, [operaMatriz, toast, cargar]);
+  useWebSocket(onEvento);
 
   if (cargando) return <Spinner />;
 
@@ -405,7 +437,7 @@ function TabPedidos({ operaMatriz, puedeRecibir, refresh }) {
         </div>
       )}
       {abierto && (abierto.Modalidad === 'PROVEEDOR'
-        ? <ModalPedidoVida idPedidoMatriz={abierto.idPedidoMatriz} onClose={() => setAbierto(null)} onCambiado={cargar} />
+        ? <ModalPedidoVida idPedidoMatriz={abierto.idPedidoMatriz} recargarSenal={senal} onClose={() => setAbierto(null)} onCambiado={cargar} />
         : <ModalPedido idPedidoMatriz={abierto.idPedidoMatriz} operaMatriz={operaMatriz} puedeRecibir={puedeRecibir} onClose={() => setAbierto(null)} onCambiado={cargar} />)}
     </div>
   );

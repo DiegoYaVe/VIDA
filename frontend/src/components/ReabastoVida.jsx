@@ -300,7 +300,7 @@ function Paquete({ paq, pedido, onRecibido }) {
 }
 
 // ─── Detalle de un pedido a VIDA ──────────────────────────────────────────────
-export function ModalPedidoVida({ idPedidoMatriz, onClose, onCambiado }) {
+export function ModalPedidoVida({ idPedidoMatriz, onClose, onCambiado, recargarSenal }) {
   const [ped, setPed] = useState(null);
   const [cargando, setCarg] = useState(true);
   const [proc, setProc] = useState(false);
@@ -317,6 +317,8 @@ export function ModalPedidoVida({ idPedidoMatriz, onClose, onCambiado }) {
     finally { setCarg(false); }
   }, [idPedidoMatriz]);
   useEffect(() => { cargar(); }, [cargar]);
+  // Recarga en vivo cuando llega un evento del despacho (envío recogido/entregado).
+  useEffect(() => { if (recargarSenal) cargar(); }, [recargarSenal, cargar]);
 
   async function accion(ruta, body, okMsg) {
     setProc(true); setError(''); setAviso('');
