@@ -1,7 +1,7 @@
 // Inicio de la app cliente (estilo apps de delivery): "Entregar en" con la
 // tienda, buscador, categorías con icono, hidratación del día, repetir el
-// último pedido, tiendas cercanas en carrusel y productos de la tienda con
-// su control de cantidad (+ → − n +) en cada uno.
+// último pedido, tiendas cercanas en carrusel, Productos Club VIDA (los PLUS
+// de la red) y productos de la tienda con su control de cantidad (+ → − n +).
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, FlatList, TouchableOpacity, StyleSheet, Image, Alert, ActivityIndicator, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +20,7 @@ import Anillo from '../../components/Anillo';
 import { Icono, ControlCantidad, Buscador, TituloSeccion, PortadaTienda, useCantidades } from '../../components/ui';
 import { useTasaReferencial, precioMonedas } from '../../services/moneda';
 import { agregarConTienda } from '../../services/carrito';
+import { plusDestacados } from '../../services/productosClub';
 
 function saludo() {
   const h = new Date().getHours();
@@ -150,6 +151,8 @@ export default function HomeScreen() {
   }, [deTienda]);
   const lista = useMemo(() => (categoria ? deTienda.filter((p) => p.idCategoria === categoria) : deTienda), [deTienda, categoria]);
   const promos = useMemo(() => deTienda.filter((p) => p.PromoNombre || p.PromoBadge).slice(0, 10), [deTienda]);
+  // Productos Club VIDA: los PLUS de la red, desde tu tienda o la más cercana que los tenga
+  const club = useMemo(() => plusDestacados(productos, sucursales, idTienda), [productos, sucursales, idTienda]);
 
   const repetir = () => {
     if (!ultimo) return;
@@ -245,6 +248,32 @@ export default function HomeScreen() {
                   <Text style={styles.tiendaSub} numberOfLines={1}>
                     {[textoDistancia(s.DistanciaKm), 'Envío a domicilio'].filter(Boolean).join(' · ')}
                   </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Productos Club VIDA */}
+      {club.length > 0 && !categoria && (
+        <View style={{ gap: 12 }}>
+          <TituloSeccion sello="PLUS" titulo="Productos Club VIDA" sub="Los PLUS de las tiendas VIDA" accion="Ver todos" onAccion={() => router.push('/productos-club')} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tiendas}>
+            {club.map((p) => {
+              const img = absImg(p.ImagenProducto);
+              const precio = precioMonedas(parseFloat(p.PrecioPromo ?? p.PrecioUSD ?? 0), tasa).principal;
+              return (
+                <TouchableOpacity key={`${p.idProducto}-${p.idPuntoVenta}`} style={styles.oferta} activeOpacity={0.9} onPress={() => setProductoAbierto(p)}>
+                  <View style={[styles.ofertaFoto, styles.clubFoto]}>
+                    {img ? <Image source={{ uri: img }} style={styles.filaImg} /> : <Icono nombre="star" tam={30} color={colores.textoTenue} />}
+                    <View style={styles.ofertaControl}>
+                      <ControlCantidad cantidad={cantidadDe(p)} onMas={() => mas(p)} onMenos={() => menos(p)} flotante nombre={p.Nombre} />
+                    </View>
+                  </View>
+                  <Text style={styles.ofertaPrecio}>{precio}</Text>
+                  <Text style={styles.ofertaNombre} numberOfLines={2}>{p.Nombre}</Text>
+                  {p.EnOtraTienda ? <Text style={styles.clubTienda} numberOfLines={1}>en {p.NombreSucursal}</Text> : null}
                 </TouchableOpacity>
               );
             })}
@@ -382,6 +411,9 @@ const styles = StyleSheet.create({
   ofertaControl: { position: 'absolute', right: 8, bottom: 8 },
   ofertaPrecio: { fontFamily: fuentes.titulo, fontSize: 15, color: colores.marino },
   ofertaNombre: { fontSize: 13, color: colores.textoSuave, lineHeight: 17 },
+
+  clubFoto: { borderWidth: 2, borderColor: '#F2B70555' },
+  clubTienda: { fontSize: 11, fontWeight: '700', color: colores.verdeTexto },
 
   fila: { marginHorizontal: 20, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', gap: 14 },
   filaBorde: { borderBottomWidth: 1, borderBottomColor: colores.separador },

@@ -112,11 +112,17 @@ export function Invitado({ icono, titulo, texto }) {
   );
 }
 
-export function TituloSeccion({ titulo, sub, accion, onAccion }) {
+// sello: etiqueta corta antes del título (p. ej. "PLUS")
+export function TituloSeccion({ titulo, sub, accion, onAccion, sello }) {
   return (
     <View style={ui.seccion}>
       <View style={{ flex: 1 }}>
-        <Text style={ui.seccionTitulo}>{titulo}</Text>
+        {sello ? (
+          <View style={ui.seccionSelloFila}>
+            <View style={ui.seccionSello}><Text style={ui.seccionSelloTexto}>{sello}</Text></View>
+            <Text style={[ui.seccionTitulo, { flexShrink: 1 }]}>{titulo}</Text>
+          </View>
+        ) : <Text style={ui.seccionTitulo}>{titulo}</Text>}
         {sub ? <Text style={ui.seccionSub}>{sub}</Text> : null}
       </View>
       {accion ? (
@@ -177,6 +183,9 @@ const ui = StyleSheet.create({
 
   seccion: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingHorizontal: 20 },
   seccionTitulo: { fontFamily: fuentes.tituloFuerte, fontSize: 20, color: colores.marino },
+  seccionSelloFila: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  seccionSello: { backgroundColor: '#F2B705', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  seccionSelloTexto: { color: '#FFFFFF', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
   seccionSub: { fontSize: 13, color: colores.textoSuave },
   seccionAccion: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 32, backgroundColor: colores.superficie, borderRadius: 99, paddingHorizontal: 12 },
   seccionAccionTexto: { fontWeight: '800', fontSize: 13, color: colores.marino },
