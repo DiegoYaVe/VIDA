@@ -7,6 +7,9 @@ import { registrarAuditoria } from '../services/audit.service.js';
 import { ALICUOTAS } from '../domain/fiscal.mjs';
 import { promocionesVigentes, mejorPromoUnitaria } from './promociones.controller.js';
 import { ordenSql, limiteSeguro } from '../services/ordenLista.js';
+import {
+  alcanceProductos, filtroProductosVisibles, productoVisible, puedeEditarProducto, duenoAlCrear, esRolRed,
+} from '../services/productosTienda.service.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -27,6 +30,24 @@ async function insertarConId(req, { tabla, idCol, columnas, valores }) {
     FROM ${tabla} WITH (UPDLOCK, HOLDLOCK)
     WHERE idBranch = @idBranch AND idCuenta = @idCuenta`);
   return r.recordset[0].nuevoId;
+}
+
+// Lee el dueño de un producto (sql/60) y decide si este usuario lo puede
+// cambiar. Devuelve { error, code } listo para responder, o { dueno }.
+async function permisoProducto(pool, user, idProducto) {
+  const r = await pool.request()
+    .input('idBranch', sql.BigInt, user.idBranch)
+    .input('idCuenta', sql.BigInt, user.idCuenta)
+    .input('idProducto', sql.BigInt, idProducto)
+    .query(`SELECT idPuntoVentaDueno FROM VIDA_INVENTARIO_PRODUCTOS
+            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProducto=@idProducto`);
+  const prod = r.recordset[0];
+  if (!prod || !productoVisible(alcanceProductos(user), prod.idPuntoVentaDueno) && !esRolRed(user))
+    return { code: 404, error: 'Producto no encontrado' };
+  const opera = (await operadorMatriz(user, pool)).permitido;
+  if (!puedeEditarProducto(user, opera, prod.idPuntoVentaDueno))
+    return { code: 403, error: 'Este producto es del catálogo de VIDA: solo VIDA lo cambia. Tu tienda puede dar de alta sus propios productos.' };
+  return { dueno: prod.idPuntoVentaDueno, opera };
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -148,7 +169,7 @@ export async function toggleCategoria(request, reply) {
 // GET /api/inventario/productos
 export async function listarProductos(request, reply) {
   const { idBranch, idCuenta, TipoUsuario, idPuntoVenta: pvUsuario } = request.user;
-  const { page = 1, search = '', idCategoria = '', status = 'ACTIVO', idPuntoVenta = '' } = request.query;
+  const { page = 1, search = '', idCategoria = '', status = 'ACTIVO', idPuntoVenta = '', propios = '' } = request.query;
   const limit = limiteSeguro(request.query.limit, 20);
   const orden = ordenSql(request.query, {
     Nombre: 'p.Nombre', SKU: 'p.SKU', NombreCategoria: 'c.Nombre', UnidadMedida: 'p.UnidadMedida',
@@ -169,6 +190,11 @@ export async function listarProductos(request, reply) {
     if (search)      whereExtra += ` AND (p.Nombre LIKE @search OR p.SKU LIKE @search OR p.CodigoBarras LIKE @search)`;
     if (idCategoria) whereExtra += ` AND p.idCategoria = @idCategoria`;
     if (status)      whereExtra += ` AND p.Status = @status`;
+    // propios=1: solo los productos propios de la tienda (no el catálogo de VIDA)
+    if (propios === '1') whereExtra += ` AND p.idPuntoVentaDueno IS NOT NULL`;
+    // Catálogo de VIDA + los productos propios de la tienda (sql/60)
+    const alcance = alcanceProductos(request.user, esRed ? idPuntoVenta : null);
+    const opera = (await operadorMatriz(request.user, pool)).permitido;
 
     const req = pool.request()
       .input('idBranch', sql.BigInt, idBranch)
@@ -179,6 +205,7 @@ export async function listarProductos(request, reply) {
     if (search)      req.input('search',      sql.VarChar(200), `%${search}%`);
     if (idCategoria) req.input('idCategoria', sql.BigInt,       idCategoria);
     if (status)      req.input('status',      sql.VarChar(20),  status);
+    const filtroDueno = filtroProductosVisibles(alcance, 'p', req, sql);
 
     let query;
     if (esCajero && pvUsuario) {
@@ -189,7 +216,7 @@ export async function listarProductos(request, reply) {
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
                p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.PrecioSuministroUSD, p.StockMinimo,
                p.ImagenProducto, p.Notas, p.EsProductoPlus, p.AlicuotaIVA, p.PesoKg, p.Status, p.FechaAlta,
-               ISNULL(s.Cantidad, 0) AS StockDisponible
+               p.idPuntoVentaDueno, ISNULL(s.Cantidad, 0) AS StockDisponible
         FROM VIDA_INVENTARIO_PRODUCTOS p
         LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
           ON c.idBranch = p.idBranch AND c.idCuenta = p.idCuenta AND c.idCategoria = p.idCategoria
@@ -198,7 +225,7 @@ export async function listarProductos(request, reply) {
          AND s.idProducto = p.idProducto AND s.idPuntoVenta = @idPuntoVenta
         WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
           AND s.Cantidad > 0
-        ${whereExtra}
+        ${whereExtra}${filtroDueno}
         ORDER BY ${orden}
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
       `;
@@ -225,6 +252,7 @@ export async function listarProductos(request, reply) {
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
                p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.PrecioSuministroUSD, p.StockMinimo,
                p.ImagenProducto, p.Notas, p.EsProductoPlus, p.AlicuotaIVA, p.Status, p.FechaAlta,
+               p.idPuntoVentaDueno,
                ISNULL((SELECT SUM(s2.Cantidad) FROM VIDA_INVENTARIO_STOCK s2
                        WHERE s2.idBranch=p.idBranch AND s2.idCuenta=p.idCuenta
                          AND s2.idProducto=p.idProducto${filtroStockPv}), 0) AS StockDisponible
@@ -232,7 +260,7 @@ export async function listarProductos(request, reply) {
         LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
           ON c.idBranch = p.idBranch AND c.idCuenta = p.idCuenta AND c.idCategoria = p.idCategoria
         WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
-        ${whereExtra}
+        ${whereExtra}${filtroDueno}
         ORDER BY ${orden}
         OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
       `;
@@ -246,6 +274,7 @@ export async function listarProductos(request, reply) {
     if (search)      totalReq.input('search',      sql.VarChar(200), `%${search}%`);
     if (idCategoria) totalReq.input('idCategoria', sql.BigInt,       idCategoria);
     if (status)      totalReq.input('status',      sql.VarChar(20),  status);
+    const filtroDuenoTotal = filtroProductosVisibles(alcance, 'p', totalReq, sql);
 
     let totalQuery;
     if (esCajero && pvUsuario) {
@@ -258,21 +287,26 @@ export async function listarProductos(request, reply) {
          AND s.idProducto = p.idProducto AND s.idPuntoVenta = @idPuntoVenta
         WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
           AND s.Cantidad > 0
-        ${whereExtra}
+        ${whereExtra}${filtroDuenoTotal}
       `;
     } else {
       totalQuery = `
         SELECT COUNT(*) AS total
         FROM VIDA_INVENTARIO_PRODUCTOS p
         WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta
-        ${whereExtra}
+        ${whereExtra}${filtroDuenoTotal}
       `;
     }
 
     const totalR = await totalReq.query(totalQuery);
 
     return reply.send({
-      data:  r.recordset,
+      // Propio = de la tienda; Editable = este usuario lo puede cambiar
+      data:  r.recordset.map(p => ({
+        ...p, Propio: p.idPuntoVentaDueno != null,
+        Editable: puedeEditarProducto(request.user, opera, p.idPuntoVentaDueno),
+      })),
+      puedeFijarSuministro: opera,
       total: totalR.recordset[0].total,
       page:  parseInt(page),
       pages: Math.ceil(totalR.recordset[0].total / parseInt(limit)),
@@ -298,15 +332,18 @@ export async function obtenerProducto(request, reply) {
         SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
                p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.PrecioSuministroUSD, p.StockMinimo,
-               p.ImagenProducto, p.Notas, p.EsProductoPlus, p.AlicuotaIVA, p.PesoKg, p.Status, p.FechaAlta
+               p.ImagenProducto, p.Notas, p.EsProductoPlus, p.AlicuotaIVA, p.PesoKg, p.Status, p.FechaAlta,
+               p.idPuntoVentaDueno
         FROM VIDA_INVENTARIO_PRODUCTOS p
         LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
           ON c.idBranch = p.idBranch AND c.idCuenta = p.idCuenta AND c.idCategoria = p.idCategoria
         WHERE p.idBranch = @idBranch AND p.idCuenta = @idCuenta AND p.idProducto = @idProducto
       `);
 
-    if (!r.recordset[0]) return reply.code(404).send({ error: 'Producto no encontrado' });
-    return reply.send(r.recordset[0]);
+    const prod = r.recordset[0];
+    if (!prod || !productoVisible(alcanceProductos(request.user), prod.idPuntoVentaDueno) && !esRolRed(request.user))
+      return reply.code(404).send({ error: 'Producto no encontrado' });
+    return reply.send(prod);
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al obtener producto' });
@@ -328,22 +365,29 @@ export async function crearProducto(request, reply) {
 
   try {
     const pool = await getPool();
-    if (PrecioSuministroUSD !== undefined) {
-      if (!(await operadorMatriz(request.user, pool)).permitido)
-        return reply.code(403).send({ error: 'Solo la Matriz puede fijar el precio de suministro' });
-      if (PrecioSuministroUSD !== null && (typeof PrecioSuministroUSD !== 'number' || !Number.isFinite(PrecioSuministroUSD) || PrecioSuministroUSD < 0))
-        return reply.code(400).send({ error: 'Precio de suministro inválido' });
-    }
+    const opera = (await operadorMatriz(request.user, pool)).permitido;
+    // El precio de suministro (lo que la Matriz le cobra a la tienda) solo lo
+    // fija la Matriz. Si una tienda lo manda (vacío, desde el formulario), se
+    // ignora en vez de rechazar el alta.
+    const suministro = opera ? PrecioSuministroUSD : undefined;
+    if (suministro != null && (typeof suministro !== 'number' || !Number.isFinite(suministro) || suministro < 0))
+      return reply.code(400).send({ error: 'Precio de suministro inválido' });
+    // La tienda da de alta productos suyos; VIDA y la red, del catálogo (sql/60)
+    const dueno = duenoAlCrear(request.user, opera);
+    if (!opera && !esRolRed(request.user) && dueno == null)
+      return reply.code(403).send({ error: 'Tu usuario no tiene una tienda asignada' });
 
-
-    // SKU único por cuenta
+    // SKU único entre lo que ve esa tienda (catálogo + sus productos); en el
+    // catálogo de VIDA, único en toda la cuenta.
     if (SKU) {
       const existe = await pool.request()
         .input('idBranch', sql.BigInt,      idBranch)
         .input('idCuenta', sql.BigInt,      idCuenta)
         .input('SKU',      sql.VarChar(100), SKU)
+        .input('dueno',    sql.BigInt,      dueno)
         .query(`SELECT idProducto FROM VIDA_INVENTARIO_PRODUCTOS
-                WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND SKU = @SKU`);
+                WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND SKU = @SKU
+                  AND (@dueno IS NULL OR idPuntoVentaDueno IS NULL OR idPuntoVentaDueno = @dueno)`);
       if (existe.recordset.length > 0)
         return reply.code(409).send({ error: 'El SKU ya está en uso' });
     }
@@ -359,23 +403,23 @@ export async function crearProducto(request, reply) {
       .input('UnidadMedida', sql.VarChar(50),  UnidadMedida)
       .input('PrecioUSD',    sql.Decimal(18,4), PrecioUSD ?? 0)
       .input('CostoUSD',     sql.Decimal(18,4), CostoUSD || null)
-      .input('PrecioSuministroUSD', sql.Decimal(18,4), PrecioSuministroUSD ?? null)
-      .input('CambiarSuministro', sql.Bit, PrecioSuministroUSD !== undefined ? 1 : 0)
+      .input('PrecioSuministroUSD', sql.Decimal(18,4), suministro ?? null)
       .input('StockMinimo',  sql.Decimal(18,4), StockMinimo ?? 0)
       .input('Notas',        sql.VarChar(500), Notas || null)
       .input('EsProductoPlus', sql.Bit,        EsProductoPlus ? 1 : 0)
       .input('AlicuotaIVA',  sql.VarChar(10),  AlicuotaIVA || 'GENERAL')
       .input('PesoKg',       sql.Decimal(10,3), PesoKg ?? null)
+      .input('Dueno',        sql.BigInt,       dueno)
       .input('UsuAlta',      sql.VarChar(20),  String(idUsuario));
     const nuevoId = await insertarConId(req, {
       tabla: 'VIDA_INVENTARIO_PRODUCTOS', idCol: 'idProducto',
       columnas: ['idCategoria', 'Nombre', 'Descripcion', 'SKU', 'CodigoBarras', 'UnidadMedida',
-                 'PrecioUSD', 'CostoUSD', 'PrecioSuministroUSD', 'StockMinimo', 'Notas', 'EsProductoPlus', 'AlicuotaIVA', 'PesoKg', 'UsuAlta'],
+                 'PrecioUSD', 'CostoUSD', 'PrecioSuministroUSD', 'StockMinimo', 'Notas', 'EsProductoPlus', 'AlicuotaIVA', 'PesoKg', 'idPuntoVentaDueno', 'UsuAlta'],
       valores:  ['@idCategoria', '@Nombre', '@Descripcion', '@SKU', '@CodigoBarras', '@UnidadMedida',
-                 '@PrecioUSD', '@CostoUSD', '@PrecioSuministroUSD', '@StockMinimo', '@Notas', '@EsProductoPlus', '@AlicuotaIVA', '@PesoKg', '@UsuAlta'],
+                 '@PrecioUSD', '@CostoUSD', '@PrecioSuministroUSD', '@StockMinimo', '@Notas', '@EsProductoPlus', '@AlicuotaIVA', '@PesoKg', '@Dueno', '@UsuAlta'],
     });
 
-    return reply.code(201).send({ message: 'Producto creado', idProducto: nuevoId });
+    return reply.code(201).send({ message: 'Producto creado', idProducto: nuevoId, Propio: dueno != null });
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al crear producto: ' + err.message });
@@ -398,24 +442,25 @@ export async function editarProducto(request, reply) {
 
   try {
     const pool = await getPool();
-    if (PrecioSuministroUSD !== undefined) {
-      if (!(await operadorMatriz(request.user, pool)).permitido)
-        return reply.code(403).send({ error: 'Solo la Matriz puede fijar el precio de suministro' });
-      if (PrecioSuministroUSD !== null && (typeof PrecioSuministroUSD !== 'number' || !Number.isFinite(PrecioSuministroUSD) || PrecioSuministroUSD < 0))
-        return reply.code(400).send({ error: 'Precio de suministro inválido' });
-    }
+    const permiso = await permisoProducto(pool, request.user, idProducto);
+    if (permiso.error) return reply.code(permiso.code).send({ error: permiso.error });
+    // Solo la Matriz cambia el precio de suministro; de los demás se ignora.
+    const suministro = permiso.opera ? PrecioSuministroUSD : undefined;
+    if (suministro != null && (typeof suministro !== 'number' || !Number.isFinite(suministro) || suministro < 0))
+      return reply.code(400).send({ error: 'Precio de suministro inválido' });
 
-
-    // SKU único (excluyendo el producto actual)
+    // SKU único (excluyendo el producto actual), con el mismo alcance que al crear
     if (SKU) {
       const existe = await pool.request()
         .input('idBranch',   sql.BigInt,       idBranch)
         .input('idCuenta',   sql.BigInt,       idCuenta)
         .input('SKU',        sql.VarChar(100), SKU)
         .input('idProducto', sql.BigInt,       idProducto)
+        .input('dueno',      sql.BigInt,       permiso.dueno ?? null)
         .query(`SELECT idProducto FROM VIDA_INVENTARIO_PRODUCTOS
                 WHERE idBranch = @idBranch AND idCuenta = @idCuenta
-                  AND SKU = @SKU AND idProducto <> @idProducto`);
+                  AND SKU = @SKU AND idProducto <> @idProducto
+                  AND (@dueno IS NULL OR idPuntoVentaDueno IS NULL OR idPuntoVentaDueno = @dueno)`);
       if (existe.recordset.length > 0)
         return reply.code(409).send({ error: 'El SKU ya está en uso por otro producto' });
     }
@@ -432,8 +477,8 @@ export async function editarProducto(request, reply) {
       .input('UnidadMedida', sql.VarChar(50),   UnidadMedida)
       .input('PrecioUSD',    sql.Decimal(18,4), PrecioUSD ?? 0)
       .input('CostoUSD',     sql.Decimal(18,4), CostoUSD || null)
-      .input('PrecioSuministroUSD', sql.Decimal(18,4), PrecioSuministroUSD ?? null)
-      .input('CambiarSuministro', sql.Bit, PrecioSuministroUSD !== undefined ? 1 : 0)
+      .input('PrecioSuministroUSD', sql.Decimal(18,4), suministro ?? null)
+      .input('CambiarSuministro', sql.Bit, suministro !== undefined ? 1 : 0)
       .input('StockMinimo',  sql.Decimal(18,4), StockMinimo ?? 0)
       .input('Notas',        sql.VarChar(500),  Notas || null)
       .input('EsProductoPlus', sql.Bit,         EsProductoPlus ? 1 : 0)
@@ -463,6 +508,9 @@ export async function actualizarPreciosLote(request, reply) {
 
   try {
     const pool = await getPool();
+    const opera = (await operadorMatriz(request.user, pool)).permitido;
+    // VIDA y la red cambian cualquier precio; una tienda, solo los de sus productos.
+    const soloPropios = !opera && !esRolRed(request.user);
     let actualizados = 0;
     for (const it of items) {
       const precio = parseFloat(it.PrecioUSD);
@@ -473,12 +521,14 @@ export async function actualizarPreciosLote(request, reply) {
         .input('idProducto', sql.BigInt,       it.idProducto)
         .input('PrecioUSD',  sql.Decimal(18,4), precio)
         .input('UsuMod',     sql.VarChar(30),  `U:${idUsuario}`)
+        .input('pvDueno',    sql.BigInt,       soloPropios ? (request.user.idPuntoVenta ?? -1) : null)
         .query(`UPDATE VIDA_INVENTARIO_PRODUCTOS
                 SET PrecioUSD=@PrecioUSD, FechaMod=GETUTCDATE(), UsuMod=@UsuMod
-                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProducto=@idProducto`);
+                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProducto=@idProducto
+                  AND (@pvDueno IS NULL OR idPuntoVentaDueno = @pvDueno)`);
       actualizados += r.rowsAffected[0];
     }
-    return reply.send({ ok: true, actualizados });
+    return reply.send({ ok: true, actualizados, omitidos: items.length - actualizados });
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al actualizar precios' });
@@ -496,6 +546,8 @@ export async function toggleProducto(request, reply) {
 
   try {
     const pool = await getPool();
+    const permiso = await permisoProducto(pool, request.user, idProducto);
+    if (permiso.error) return reply.code(permiso.code).send({ error: permiso.error });
     await pool.request()
       .input('idBranch',   sql.BigInt,     idBranch)
       .input('idCuenta',   sql.BigInt,     idCuenta)
@@ -539,13 +591,15 @@ export async function verStock(request, reply) {
       ? 'AND ISNULL(s.Cantidad, 0) <= p.StockMinimo'
       : '';
 
-    const r = await pool.request()
+    const req = pool.request()
       .input('idBranch',    sql.BigInt, idBranch)
       .input('idCuenta',    sql.BigInt, idCuenta)
-      .input('idPuntoVenta',sql.BigInt, idPuntoVenta)
+      .input('idPuntoVenta',sql.BigInt, idPuntoVenta);
+    filtroStock += filtroProductosVisibles({ pv: String(idPuntoVenta) }, 'p', req, sql);
+    const r = await req
       .query(`
         SELECT p.idProducto, p.Nombre, p.SKU, p.CodigoBarras,
-               p.UnidadMedida, p.PrecioUSD, p.StockMinimo,
+               p.UnidadMedida, p.PrecioUSD, p.StockMinimo, p.idPuntoVentaDueno,
                c.Nombre AS NombreCategoria,
                ISNULL(s.Cantidad, 0) AS Cantidad,
                CASE WHEN ISNULL(s.Cantidad, 0) <= p.StockMinimo THEN 1 ELSE 0 END AS StockBajo
@@ -587,6 +641,18 @@ export async function registrarMovimiento(request, reply) {
 
   try {
     const pool = await getPool();
+    // Antes cualquier rol de escritura podía mover el stock de otra tienda.
+    if (!esRolRed(request.user) && String(idPuntoVenta) !== String(request.user.idPuntoVenta ?? ''))
+      return reply.code(403).send({ error: 'Solo puedes mover el inventario de tu tienda' });
+    if (!(await tiendaEnAlcance(request.user, idPuntoVenta, pool)))
+      return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
+    const prodR = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('idProducto', sql.BigInt, idProducto)
+      .query(`SELECT idPuntoVentaDueno FROM VIDA_INVENTARIO_PRODUCTOS
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idProducto=@idProducto`);
+    if (!prodR.recordset.length || !productoVisible({ pv: String(idPuntoVenta) }, prodR.recordset[0].idPuntoVentaDueno))
+      return reply.code(404).send({ error: 'Producto no encontrado en esa tienda' });
 
     // Stock actual
     const stockActual = await pool.request()
@@ -728,6 +794,8 @@ export async function subirImagenProducto(request, reply) {
   const { idProducto } = request.params;
 
   try {
+    const permiso = await permisoProducto(await getPool(), request.user, idProducto);
+    if (permiso.error) return reply.code(permiso.code).send({ error: permiso.error });
     const data = await request.file();
     if (!data) return reply.code(400).send({ error: 'No se recibió ningún archivo' });
 
@@ -800,6 +868,7 @@ export async function catalogoCentral(request, reply) {
       LEFT JOIN VIDA_INVENTARIO_CATEGORIAS cat
         ON cat.idBranch=p.idBranch AND cat.idCuenta=p.idCuenta AND cat.idCategoria=p.idCategoria
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.Status='ACTIVO'
+        AND p.idPuntoVentaDueno IS NULL   -- los productos propios de cada tienda no son del catálogo de VIDA
         ${filtro}
       GROUP BY p.idProducto, p.Nombre, p.SKU, p.UnidadMedida, p.ImagenProducto, p.Descripcion,
                p.CostoUSD, p.PrecioUSD, p.EsProductoPlus, p.idCategoria, cat.Nombre

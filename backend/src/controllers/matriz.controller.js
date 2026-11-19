@@ -145,6 +145,7 @@ export async function catalogoMatriz(request, reply) {
       LEFT JOIN VIDA_INVENTARIO_CATEGORIAS cat
         ON cat.idBranch=p.idBranch AND cat.idCuenta=p.idCuenta AND cat.idCategoria=p.idCategoria
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.Status='ACTIVO'
+        AND p.idPuntoVentaDueno IS NULL   -- solo el catálogo de VIDA, no los productos propios de las tiendas
         ${filtro}
       ORDER BY p.Nombre`);
 

@@ -112,7 +112,7 @@ export async function catalogoVida(request, reply) {
         ON pr.idBranch=pp.idBranch AND pr.idCuenta=pp.idCuenta AND pr.idProveedor=pp.idProveedor AND pr.Status='ACTIVO'
       LEFT JOIN VIDA_INVENTARIO_CATEGORIAS cat
         ON cat.idBranch=p.idBranch AND cat.idCuenta=p.idCuenta AND cat.idCategoria=p.idCategoria
-      WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.Status='ACTIVO' ${filtro}
+      WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.Status='ACTIVO' AND p.idPuntoVentaDueno IS NULL ${filtro}
       GROUP BY p.idProducto, p.Nombre, p.SKU, p.UnidadMedida, p.ImagenProducto, p.EsProductoPlus, cat.Nombre
       ORDER BY p.Nombre`);
     const datosPago = await getConfigVal(pool, idBranch, idCuenta, 'DatosPagoVida', null);

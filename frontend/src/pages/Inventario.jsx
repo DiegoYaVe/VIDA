@@ -150,7 +150,7 @@ function ModalCategoria({ data, onClose, onSaved }) {
 // ══════════════════════════════════════════════════════════════════════════
 // MODAL — PRODUCTO
 // ══════════════════════════════════════════════════════════════════════════
-function ModalProducto({ data, categorias, onClose, onSaved }) {
+function ModalProducto({ data, categorias, puedeFijarSuministro, idPuntoVenta, onClose, onSaved }) {
   const toast = useToast();
   const [imagenFile, setImagenFile] = useState(null);
   const [preview, setPreview] = useState(
@@ -172,7 +172,10 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
     Notas:           data?.Notas           || '',
     EsProductoPlus:  !!data?.EsProductoPlus,
     AlicuotaIVA:     data?.AlicuotaIVA     || 'GENERAL',
+    StockInicial:    '',
   });
+  // Producto nuevo creado por una tienda: queda como propio de esa tienda (sql/60)
+  const nuevoDeTienda = !data?.idProducto && !puedeFijarSuministro && !!idPuntoVenta;
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -191,12 +194,14 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
     if (Object.keys(e2).length) { setErrors(e2); return; }
     setSaving(true);
     try {
+      const { StockInicial, PrecioSuministroUSD: _ps, ...resto } = form;
       const body = {
-        ...form,
+        ...resto,
         PrecioUSD:       parseFloat(form.PrecioUSD),
         CostoUSD:        form.CostoUSD !== '' ? parseFloat(form.CostoUSD) : null,
         PesoKg:          form.PesoKg !== '' && form.PesoKg != null ? parseFloat(form.PesoKg) : null,
-        ...(String(form.PrecioSuministroUSD) !== String(data?.PrecioSuministroUSD ?? '') ? { PrecioSuministroUSD: form.PrecioSuministroUSD === '' ? null : Number(form.PrecioSuministroUSD) } : {}),
+        // El precio de suministro solo lo manda la Matriz, y solo si lo cambió
+        ...(puedeFijarSuministro && String(form.PrecioSuministroUSD) !== String(data?.PrecioSuministroUSD ?? '') ? { PrecioSuministroUSD: form.PrecioSuministroUSD === '' ? null : Number(form.PrecioSuministroUSD) } : {}),
         UnidadesPorCaja: form.UnidadMedida === 'Caja' && form.UnidadesPorCaja !== ''
                            ? parseInt(form.UnidadesPorCaja) : null,
       };
@@ -208,6 +213,17 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
         const res = await api.post('/inventario/productos', body);
         idProducto = res.data?.idProducto;
         toast.success('Producto creado', form.Nombre);
+        // Existencia inicial en la tienda: una entrada de inventario en el mismo paso
+        const inicial = parseFloat(StockInicial);
+        if (idProducto && idPuntoVenta && inicial > 0) {
+          try {
+            await api.post('/inventario/movimientos', {
+              idPuntoVenta, idProducto, TipoMovimiento: 'ENTRADA', Cantidad: inicial, Motivo: 'Inventario inicial',
+            });
+          } catch {
+            toast.error('Producto creado, pero no se pudo cargar la existencia inicial. Cárgala en la pestaña Stock.');
+          }
+        }
       }
 
       // Subir la foto si se seleccionó una nueva
@@ -238,6 +254,11 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
         {errors.general && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3">
             {errors.general}
+          </div>
+        )}
+        {nuevoDeTienda && (
+          <div className="bg-blue-50 border border-blue-100 text-blue-800 text-sm rounded-xl px-4 py-3">
+            Este producto será <b>solo de tu tienda</b>: no lo ven las demás tiendas de la red.
           </div>
         )}
 
@@ -281,14 +302,14 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
         <InputField label="Nombre *" value={form.Nombre} error={errors.Nombre}
           onChange={e => { f('Nombre', e.target.value); setErrors(p => ({ ...p, Nombre: '' })); }} />
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <InputField label="SKU" value={form.SKU}
             onChange={e => f('SKU', e.target.value)} placeholder="Ej: PROD-001" />
           <InputField label="Código de Barras" value={form.CodigoBarras}
             onChange={e => f('CodigoBarras', e.target.value)} />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <SelectField label="Unidad de Medida *" value={form.UnidadMedida}
             onChange={e => f('UnidadMedida', e.target.value)}>
             {UNIDADES.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
@@ -319,7 +340,7 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <InputField label="Precio Venta USD *" type="number" step="0.0001"
             value={form.PrecioUSD} error={errors.PrecioUSD}
             onChange={e => { f('PrecioUSD', e.target.value); setErrors(p => ({ ...p, PrecioUSD: '' })); }}
@@ -329,9 +350,19 @@ function ModalProducto({ data, categorias, onClose, onSaved }) {
             placeholder="0.00 (opcional)" />
         </div>
 
-        <InputField label="Precio Matriz → Tienda USD (solo Matriz)" type="number" min="0" step="0.0001"
-          value={form.PrecioSuministroUSD} onChange={e => f('PrecioSuministroUSD', e.target.value)}
-          placeholder="Vacío: costo + margen configurado" />
+        {puedeFijarSuministro && (
+          <InputField label="Precio Matriz → Tienda USD" type="number" min="0" step="0.0001"
+            value={form.PrecioSuministroUSD} onChange={e => f('PrecioSuministroUSD', e.target.value)}
+            placeholder="Vacío: costo + margen configurado" />
+        )}
+        {!data?.idProducto && idPuntoVenta && (
+          <div>
+            <InputField label="Existencia inicial en tu tienda" type="number" min="0" step="0.01"
+              value={form.StockInicial} placeholder="Ej: 24"
+              onChange={e => f('StockInicial', e.target.value)} />
+            <p className="text-xs text-gray-400 mt-1">Cuántas unidades tienes hoy. Después se ajusta en la pestaña Stock.</p>
+          </div>
+        )}
         <label className="block">
           <span className="block text-xs font-semibold text-gray-600 mb-1">IVA (incluido en el precio de venta)</span>
           <select value={form.AlicuotaIVA} onChange={e => f('AlicuotaIVA', e.target.value)}
@@ -675,8 +706,10 @@ function TabCategorias({ puedeEscribir }) {
 // ══════════════════════════════════════════════════════════════════════════
 // PESTAÑA — PRODUCTOS
 // ══════════════════════════════════════════════════════════════════════════
-function TabProductos({ puedeEscribir }) {
+function TabProductos({ puedeEscribir, usuario }) {
   const toast = useToast();
+  const [origen,      setOrigen]      = useState('');   // '' todos | '1' solo los propios de la tienda
+  const [puedeFijarSuministro, setPuedeFijarSuministro] = useState(false);
   const [productos,   setProductos]   = useState([]);
   const [categorias,  setCategorias]  = useState([]);
   const [total,       setTotal]       = useState(0);
@@ -697,23 +730,29 @@ function TabProductos({ puedeEscribir }) {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, limit: porPagina, search, idCategoria: catFiltro, orden: orden.col, dir: orden.dir };
+      const params = { page, limit: porPagina, search, idCategoria: catFiltro, propios: origen, orden: orden.col, dir: orden.dir };
       const r = await api.get('/inventario/productos', { params });
       setProductos(r.data.data);
+      setPuedeFijarSuministro(!!r.data.puedeFijarSuministro);
       setTotal(r.data.total);
       setPages(r.data.pages);
     } finally {
       setLoading(false);
     }
-  }, [page, search, catFiltro, porPagina, orden]);
+  }, [page, search, catFiltro, origen, porPagina, orden]);
 
   useEffect(() => { cargarCats(); }, [cargarCats]);
-  useEffect(() => { setPage(1); }, [search, catFiltro, porPagina, orden]);
+  useEffect(() => { setPage(1); }, [search, catFiltro, origen, porPagina, orden]);
   useEffect(() => { cargar(); }, [cargar]);
 
   const toggleStatus = async (prod) => {
     const nuevoStatus = prod.Status === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
-    await api.patch(`/inventario/productos/${prod.idProducto}/status`, { status: nuevoStatus });
+    try {
+      await api.patch(`/inventario/productos/${prod.idProducto}/status`, { status: nuevoStatus });
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'No se pudo cambiar el producto');
+      return;
+    }
     toast.success(
       nuevoStatus === 'ACTIVO' ? 'Producto activado' : 'Producto desactivado',
       prod.Nombre
@@ -735,6 +774,11 @@ function TabProductos({ puedeEscribir }) {
           className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue bg-white">
           <option value="">Todas las categorías</option>
           {categorias.map(c => <option key={c.idCategoria} value={c.idCategoria}>{c.Nombre}</option>)}
+        </select>
+        <select value={origen} onChange={e => setOrigen(e.target.value)} aria-label="Origen de los productos"
+          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-vida-blue bg-white">
+          <option value="">Catálogo VIDA y propios</option>
+          <option value="1">{puedeFijarSuministro ? 'Solo propios de las tiendas' : 'Solo mis productos'}</option>
         </select>
         {puedeEscribir && (
           <button onClick={() => setModal({})}
@@ -760,6 +804,9 @@ function TabProductos({ puedeEscribir }) {
                 <p className="font-bold text-gray-800 flex items-center gap-1.5">
                   {p.Nombre}
                   {p.EsProductoPlus ? <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-amber-400 text-white">PLUS</span> : null}
+                  {p.Propio
+                    ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700">{puedeFijarSuministro ? 'De una tienda' : 'Propio'}</span>
+                    : null}
                 </p>
                 {p.Descripcion && <p className="text-xs text-gray-400 truncate max-w-48">{p.Descripcion}</p>}
               </div>
@@ -773,7 +820,9 @@ function TabProductos({ puedeEscribir }) {
             <span className="font-bold text-gray-800 tabular-nums">${parseFloat(p.PrecioUSD).toFixed(2)}</span>) },
           { id: 'Status', titulo: 'Status', ordenable: true, alinear: 'center', render: p => (
             <Badge color={p.Status === 'ACTIVO' ? 'green' : 'red'}>{p.Status}</Badge>) },
-          ...(puedeEscribir ? [{ id: 'acciones', titulo: '', render: p => (
+          ...(puedeEscribir ? [{ id: 'acciones', titulo: '', render: p => !p.Editable ? (
+            <span className="block text-right text-[11px] text-gray-400 whitespace-nowrap" title="Producto del catálogo de VIDA: solo VIDA lo cambia">Catálogo VIDA</span>
+          ) : (
             <div className="flex gap-1 justify-end">
               <button onClick={() => setModal({ data: p })} title="Editar"
                 className="p-1.5 text-gray-400 hover:text-vida-blue hover:bg-blue-50 rounded-lg transition">
@@ -805,6 +854,8 @@ function TabProductos({ puedeEscribir }) {
         <ModalProducto
           data={modal.data}
           categorias={categorias}
+          puedeFijarSuministro={puedeFijarSuministro}
+          idPuntoVenta={usuario?.idPuntoVenta ?? null}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); cargar(); }}
         />
@@ -985,10 +1036,10 @@ export default function Inventario() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-white border border-gray-100 rounded-2xl p-1 mb-6 w-fit shadow-sm">
+      <div className="flex gap-1 bg-white border border-gray-100 rounded-2xl p-1 mb-6 w-fit max-w-full overflow-x-auto shadow-sm">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition whitespace-nowrap shrink-0
               ${tab === key
                 ? 'text-white shadow-sm'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
@@ -1000,7 +1051,7 @@ export default function Inventario() {
       </div>
 
       {/* Contenido */}
-      {tab === 'productos'  && <TabProductos  puedeEscribir={puedeEscribir} />}
+      {tab === 'productos'  && <TabProductos  puedeEscribir={puedeEscribir} usuario={usuario} />}
       {tab === 'categorias' && <TabCategorias puedeEscribir={puedeEscribir} />}
       {tab === 'stock'      && <TabStock      puedeEscribir={puedeEscribir} usuario={usuario} />}
     </div>
