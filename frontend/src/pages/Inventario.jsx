@@ -173,6 +173,8 @@ function ModalProducto({ data, categorias, puedeFijarSuministro, idPuntoVenta, o
     EsProductoPlus:  !!data?.EsProductoPlus,
     AlicuotaIVA:     data?.AlicuotaIVA     || 'GENERAL',
     StockInicial:    '',
+    PrecioPisoUSD:   data?.PrecioPisoUSD  ?? '',
+    PrecioTechoUSD:  data?.PrecioTechoUSD ?? '',
   });
   // Producto nuevo creado por una tienda: queda como propio de esa tienda (sql/60)
   const nuevoDeTienda = !data?.idProducto && !puedeFijarSuministro && !!idPuntoVenta;
@@ -200,6 +202,8 @@ function ModalProducto({ data, categorias, puedeFijarSuministro, idPuntoVenta, o
         PrecioUSD:       parseFloat(form.PrecioUSD),
         CostoUSD:        form.CostoUSD !== '' ? parseFloat(form.CostoUSD) : null,
         PesoKg:          form.PesoKg !== '' && form.PesoKg != null ? parseFloat(form.PesoKg) : null,
+        PrecioPisoUSD:   form.PrecioPisoUSD  !== '' && form.PrecioPisoUSD  != null ? parseFloat(form.PrecioPisoUSD)  : null,
+        PrecioTechoUSD:  form.PrecioTechoUSD !== '' && form.PrecioTechoUSD != null ? parseFloat(form.PrecioTechoUSD) : null,
         // El precio de suministro solo lo manda la Matriz, y solo si lo cambió
         ...(puedeFijarSuministro && String(form.PrecioSuministroUSD) !== String(data?.PrecioSuministroUSD ?? '') ? { PrecioSuministroUSD: form.PrecioSuministroUSD === '' ? null : Number(form.PrecioSuministroUSD) } : {}),
         UnidadesPorCaja: form.UnidadMedida === 'Caja' && form.UnidadesPorCaja !== ''
@@ -348,6 +352,22 @@ function ModalProducto({ data, categorias, puedeFijarSuministro, idPuntoVenta, o
           <InputField label="Costo proveedor USD" type="number" step="0.0001"
             value={form.CostoUSD} onChange={e => f('CostoUSD', e.target.value)}
             placeholder="0.00 (opcional)" />
+        </div>
+
+        {/* Rango de precio (Plan PLUS): el precio de venta debería quedar entre piso y techo */}
+        <div>
+          <div className="grid grid-cols-2 gap-3">
+            <InputField label="Precio piso USD" type="number" min="0" step="0.0001"
+              value={form.PrecioPisoUSD} placeholder="Opcional" onChange={e => f('PrecioPisoUSD', e.target.value)} />
+            <InputField label="Precio techo USD" type="number" min="0" step="0.0001"
+              value={form.PrecioTechoUSD} placeholder="Opcional" onChange={e => f('PrecioTechoUSD', e.target.value)} />
+          </div>
+          {form.PrecioUSD !== '' && ((form.PrecioPisoUSD !== '' && Number(form.PrecioUSD) < Number(form.PrecioPisoUSD))
+            || (form.PrecioTechoUSD !== '' && Number(form.PrecioUSD) > Number(form.PrecioTechoUSD))) ? (
+            <p className="text-xs text-orange-600 mt-1">El precio de venta queda fuera del rango piso–techo.</p>
+          ) : (
+            <p className="text-xs text-gray-400 mt-1">El mínimo y el máximo al que se debería vender. Se usa en el Plan PLUS de Reportes.</p>
+          )}
         </div>
 
         {puedeFijarSuministro && (

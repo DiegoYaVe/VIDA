@@ -32,6 +32,17 @@ async function insertarConId(req, { tabla, idCol, columnas, valores }) {
   return r.recordset[0].nuevoId;
 }
 
+// Piso y techo del precio (sql/62). undefined = no se tocan al editar.
+function rangoPrecio(body) {
+  const val = (v) => v === undefined ? undefined : (v === null || v === '' ? null : Number(v));
+  const piso = val(body.PrecioPisoUSD), techo = val(body.PrecioTechoUSD);
+  for (const v of [piso, techo]) {
+    if (v != null && (!Number.isFinite(v) || v < 0)) return { error: 'El precio piso y el techo deben ser números mayores o iguales a cero' };
+  }
+  if (piso != null && techo != null && piso > techo) return { error: 'El precio piso no puede ser mayor que el techo' };
+  return { piso, techo };
+}
+
 // Lee el dueño de un producto (sql/60) y decide si este usuario lo puede
 // cambiar. Devuelve { error, code } listo para responder, o { dueno }.
 async function permisoProducto(pool, user, idProducto) {
@@ -216,7 +227,7 @@ export async function listarProductos(request, reply) {
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
                p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.PrecioSuministroUSD, p.StockMinimo,
                p.ImagenProducto, p.Notas, p.EsProductoPlus, p.AlicuotaIVA, p.PesoKg, p.Status, p.FechaAlta,
-               p.idPuntoVentaDueno, ISNULL(s.Cantidad, 0) AS StockDisponible
+               p.idPuntoVentaDueno, p.PrecioPisoUSD, p.PrecioTechoUSD, ISNULL(s.Cantidad, 0) AS StockDisponible
         FROM VIDA_INVENTARIO_PRODUCTOS p
         LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
           ON c.idBranch = p.idBranch AND c.idCuenta = p.idCuenta AND c.idCategoria = p.idCategoria
@@ -252,7 +263,7 @@ export async function listarProductos(request, reply) {
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
                p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.PrecioSuministroUSD, p.StockMinimo,
                p.ImagenProducto, p.Notas, p.EsProductoPlus, p.AlicuotaIVA, p.Status, p.FechaAlta,
-               p.idPuntoVentaDueno,
+               p.idPuntoVentaDueno, p.PesoKg, p.PrecioPisoUSD, p.PrecioTechoUSD,
                ISNULL((SELECT SUM(s2.Cantidad) FROM VIDA_INVENTARIO_STOCK s2
                        WHERE s2.idBranch=p.idBranch AND s2.idCuenta=p.idCuenta
                          AND s2.idProducto=p.idProducto${filtroStockPv}), 0) AS StockDisponible
@@ -333,7 +344,7 @@ export async function obtenerProducto(request, reply) {
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
                p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.PrecioSuministroUSD, p.StockMinimo,
                p.ImagenProducto, p.Notas, p.EsProductoPlus, p.AlicuotaIVA, p.PesoKg, p.Status, p.FechaAlta,
-               p.idPuntoVentaDueno
+               p.idPuntoVentaDueno, p.PrecioPisoUSD, p.PrecioTechoUSD
         FROM VIDA_INVENTARIO_PRODUCTOS p
         LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
           ON c.idBranch = p.idBranch AND c.idCuenta = p.idCuenta AND c.idCategoria = p.idCategoria
@@ -362,6 +373,8 @@ export async function crearProducto(request, reply) {
 
   if (!Nombre || !UnidadMedida || !idCategoria)
     return reply.code(400).send({ error: 'Nombre, UnidadMedida e idCategoria son requeridos' });
+  const rango = rangoPrecio(request.body);
+  if (rango.error) return reply.code(400).send({ error: rango.error });
 
   try {
     const pool = await getPool();
@@ -410,13 +423,15 @@ export async function crearProducto(request, reply) {
       .input('AlicuotaIVA',  sql.VarChar(10),  AlicuotaIVA || 'GENERAL')
       .input('PesoKg',       sql.Decimal(10,3), PesoKg ?? null)
       .input('Dueno',        sql.BigInt,       dueno)
+      .input('Piso',         sql.Decimal(18,4), rango.piso ?? null)
+      .input('Techo',        sql.Decimal(18,4), rango.techo ?? null)
       .input('UsuAlta',      sql.VarChar(20),  String(idUsuario));
     const nuevoId = await insertarConId(req, {
       tabla: 'VIDA_INVENTARIO_PRODUCTOS', idCol: 'idProducto',
       columnas: ['idCategoria', 'Nombre', 'Descripcion', 'SKU', 'CodigoBarras', 'UnidadMedida',
-                 'PrecioUSD', 'CostoUSD', 'PrecioSuministroUSD', 'StockMinimo', 'Notas', 'EsProductoPlus', 'AlicuotaIVA', 'PesoKg', 'idPuntoVentaDueno', 'UsuAlta'],
+                 'PrecioUSD', 'CostoUSD', 'PrecioSuministroUSD', 'StockMinimo', 'Notas', 'EsProductoPlus', 'AlicuotaIVA', 'PesoKg', 'idPuntoVentaDueno', 'PrecioPisoUSD', 'PrecioTechoUSD', 'UsuAlta'],
       valores:  ['@idCategoria', '@Nombre', '@Descripcion', '@SKU', '@CodigoBarras', '@UnidadMedida',
-                 '@PrecioUSD', '@CostoUSD', '@PrecioSuministroUSD', '@StockMinimo', '@Notas', '@EsProductoPlus', '@AlicuotaIVA', '@PesoKg', '@Dueno', '@UsuAlta'],
+                 '@PrecioUSD', '@CostoUSD', '@PrecioSuministroUSD', '@StockMinimo', '@Notas', '@EsProductoPlus', '@AlicuotaIVA', '@PesoKg', '@Dueno', '@Piso', '@Techo', '@UsuAlta'],
     });
 
     return reply.code(201).send({ message: 'Producto creado', idProducto: nuevoId, Propio: dueno != null });
@@ -444,6 +459,8 @@ export async function editarProducto(request, reply) {
     const pool = await getPool();
     const permiso = await permisoProducto(pool, request.user, idProducto);
     if (permiso.error) return reply.code(permiso.code).send({ error: permiso.error });
+    const rango = rangoPrecio(request.body);
+    if (rango.error) return reply.code(400).send({ error: rango.error });
     // Solo la Matriz cambia el precio de suministro; de los demás se ignora.
     const suministro = permiso.opera ? PrecioSuministroUSD : undefined;
     if (suministro != null && (typeof suministro !== 'number' || !Number.isFinite(suministro) || suministro < 0))
@@ -484,12 +501,18 @@ export async function editarProducto(request, reply) {
       .input('EsProductoPlus', sql.Bit,         EsProductoPlus ? 1 : 0)
       .input('AlicuotaIVA',  sql.VarChar(10),   AlicuotaIVA ?? null)
       .input('PesoKg',       sql.Decimal(10,3), PesoKg ?? null)
+      .input('Piso',         sql.Decimal(18,4), rango.piso ?? null)
+      .input('Techo',        sql.Decimal(18,4), rango.techo ?? null)
+      .input('CambiarRango', sql.Bit,           rango.piso !== undefined || rango.techo !== undefined ? 1 : 0)
       .input('UsuMod',       sql.VarChar(20),   String(idUsuario))
       .query(`UPDATE VIDA_INVENTARIO_PRODUCTOS SET
                 idCategoria = @idCategoria, Nombre = @Nombre, Descripcion = @Descripcion,
                 SKU = @SKU, CodigoBarras = @CodigoBarras, UnidadMedida = @UnidadMedida,
                 PrecioUSD = @PrecioUSD, CostoUSD = @CostoUSD, PrecioSuministroUSD = CASE WHEN @CambiarSuministro=1 THEN @PrecioSuministroUSD ELSE PrecioSuministroUSD END, StockMinimo = @StockMinimo,
-                Notas = @Notas, EsProductoPlus = @EsProductoPlus, AlicuotaIVA = ISNULL(@AlicuotaIVA, AlicuotaIVA), PesoKg = @PesoKg, FechaMod = GETUTCDATE(), UsuMod = @UsuMod
+                Notas = @Notas, EsProductoPlus = @EsProductoPlus, AlicuotaIVA = ISNULL(@AlicuotaIVA, AlicuotaIVA), PesoKg = @PesoKg,
+                PrecioPisoUSD  = CASE WHEN @CambiarRango=1 THEN @Piso  ELSE PrecioPisoUSD  END,
+                PrecioTechoUSD = CASE WHEN @CambiarRango=1 THEN @Techo ELSE PrecioTechoUSD END,
+                FechaMod = GETUTCDATE(), UsuMod = @UsuMod
               WHERE idBranch = @idBranch AND idCuenta = @idCuenta AND idProducto = @idProducto`);
 
     return reply.send({ message: 'Producto actualizado' });

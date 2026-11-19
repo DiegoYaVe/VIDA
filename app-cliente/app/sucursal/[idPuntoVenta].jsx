@@ -21,6 +21,39 @@ import { obtenerUbicacion, kmEntre, textoDistancia } from '../../services/cercan
 
 const ALTO_PORTADA = 190;
 
+// Fila deslizable de productos destacados ("Productos PLUS", "Lo más pedido")
+function Carrusel({ titulo, estrella, lista, tasa, cantidadDe, mas, menos, onAbrir }) {
+  return (
+    <View style={{ gap: 12, paddingTop: 18 }}>
+      {estrella ? (
+        <View style={styles.tituloFila}>
+          <View style={styles.plusSello}><Text style={styles.plusSelloTexto}>PLUS</Text></View>
+          <Text style={styles.h2Plus}>{titulo}</Text>
+        </View>
+      ) : <Text style={styles.h2Pad}>{titulo}</Text>}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carrusel}>
+        {lista.map((p) => {
+          const img = absImg(p.ImagenProducto);
+          const { principal } = precioMonedas(parseFloat(p.PrecioPromo ?? p.PrecioUSD ?? 0), tasa);
+          return (
+            <TouchableOpacity key={p.idProducto} style={styles.destacado} activeOpacity={0.9} onPress={() => onAbrir(p)}>
+              <View style={styles.destacadoFoto}>
+                {img ? <Image source={{ uri: img }} style={styles.img} /> : <Icono nombre="cube-outline" tam={30} color={colores.textoTenue} />}
+                {p.PromoBadge ? <View style={styles.badge}><Text style={styles.badgeTexto} numberOfLines={1}>{p.PromoBadge}</Text></View> : null}
+                <View style={styles.destacadoControl}>
+                  <ControlCantidad cantidad={cantidadDe(p)} onMas={() => mas(p)} onMenos={() => menos(p)} flotante nombre={p.Nombre} />
+                </View>
+              </View>
+              <Text style={styles.destacadoPrecio}>{principal}</Text>
+              <Text style={styles.destacadoNombre} numberOfLines={2}>{p.Nombre}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function TiendaScreen() {
   const tasa = useTasaReferencial();
   const { idPuntoVenta } = useLocalSearchParams();
@@ -87,6 +120,8 @@ export default function TiendaScreen() {
     });
     return [...m.entries()];
   }, [filtrados]);
+  // Productos PLUS de la tienda: los de mayor ganancia, en su propio espacio
+  const plus = useMemo(() => productos.filter((p) => p.EsProductoPlus), [productos]);
   // Lo más pedido: primero las ofertas, luego los primeros del catálogo
   const destacados = useMemo(() => {
     const conPromo = productos.filter((p) => p.PromoBadge || p.PromoNombre);
@@ -200,29 +235,11 @@ export default function TiendaScreen() {
               </View>
             ) : null}
 
+            {!busqueda && plus.length > 0 ? (
+              <Carrusel titulo="Productos PLUS" estrella lista={plus} tasa={tasa} cantidadDe={cantidadDe} mas={mas} menos={menos} onAbrir={setAbierto} />
+            ) : null}
             {!busqueda && destacados.length > 2 ? (
-              <View style={{ gap: 12, paddingTop: 18 }}>
-                <Text style={styles.h2Pad}>Lo más pedido</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carrusel}>
-                  {destacados.map((p) => {
-                    const img = absImg(p.ImagenProducto);
-                    const { principal } = precioMonedas(parseFloat(p.PrecioPromo ?? p.PrecioUSD ?? 0), tasa);
-                    return (
-                      <TouchableOpacity key={p.idProducto} style={styles.destacado} activeOpacity={0.9} onPress={() => setAbierto(p)}>
-                        <View style={styles.destacadoFoto}>
-                          {img ? <Image source={{ uri: img }} style={styles.img} /> : <Icono nombre="cube-outline" tam={30} color={colores.textoTenue} />}
-                          {p.PromoBadge ? <View style={styles.badge}><Text style={styles.badgeTexto} numberOfLines={1}>{p.PromoBadge}</Text></View> : null}
-                          <View style={styles.destacadoControl}>
-                            <ControlCantidad cantidad={cantidadDe(p)} onMas={() => mas(p)} onMenos={() => menos(p)} flotante nombre={p.Nombre} />
-                          </View>
-                        </View>
-                        <Text style={styles.destacadoPrecio}>{principal}</Text>
-                        <Text style={styles.destacadoNombre} numberOfLines={2}>{p.Nombre}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
+              <Carrusel titulo="Lo más pedido" lista={destacados} tasa={tasa} cantidadDe={cantidadDe} mas={mas} menos={menos} onAbrir={setAbierto} />
             ) : null}
 
             {secciones.length === 0 && (
@@ -295,6 +312,10 @@ const styles = StyleSheet.create({
   destacadoNombre: { fontSize: 13, color: colores.textoSuave, lineHeight: 17 },
 
   seccion: { paddingTop: 22 },
+  tituloFila: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20 },
+  h2Plus: { fontFamily: fuentes.tituloFuerte, fontSize: 20, color: colores.marino },
+  plusSello: { backgroundColor: '#F2B705', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  plusSelloTexto: { color: '#FFFFFF', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
   h2: { paddingHorizontal: 20, fontFamily: fuentes.tituloFuerte, fontSize: 20, color: colores.marino, marginBottom: 2 },
 
   centro: { alignItems: 'center', justifyContent: 'center', padding: 32, gap: 10, marginTop: 200 },

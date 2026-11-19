@@ -2,7 +2,7 @@
 import { authenticate, requireRole } from '../middlewares/auth.js';
 import {
   obtenerFinanzas, guardarFinanzas, calcularRentabilidad,
-  obtenerMetas, guardarMetas, progresoMetas,
+  obtenerMetas, guardarMetas, progresoMetas, obtenerPlanPlus, guardarPlanPlus,
 } from '../controllers/finanzas.controller.js';
 
 // La calculadora es para el empresario (ADMIN) y hacia arriba.
@@ -17,6 +17,12 @@ export async function finanzasRoutes(fastify) {
 
   fastify.get('/finanzas/rentabilidad',
     { preHandler: [authenticate, requireRole(...ROLES)] }, calcularRentabilidad);
+
+  // Plan PLUS: cuántas unidades de los productos elegidos cubren los costos fijos
+  fastify.get('/finanzas/plan-plus',
+    { preHandler: [authenticate, requireRole(...ROLES)] }, obtenerPlanPlus);
+  fastify.put('/finanzas/plan-plus',
+    { preHandler: [authenticate, requireRole(...ROLES)] }, guardarPlanPlus);
 
   fastify.get('/metas',
     { preHandler: [authenticate, requireRole(...ROLES)] }, obtenerMetas);

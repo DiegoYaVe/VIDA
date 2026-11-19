@@ -4,6 +4,7 @@
 // Mixto / Solo Normal) y meta diaria. Operación USD-only.
 import { getPool, sql } from '../db/sqlserver.js';
 import { tiendaEnAlcance } from '../services/alcance.service.js';
+import { margenesProducto, planEquilibrio, seleccionInicial, fueraDeRango } from '../services/planPlus.service.js';
 
 const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
 
@@ -242,9 +243,11 @@ export async function calcularRentabilidad(request, reply) {
     const prodR = await pool.request()
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
+      .input('pv', sql.BigInt, idPuntoVenta)
       .query(`SELECT PrecioUSD, CostoUSD, EsProductoPlus
               FROM VIDA_INVENTARIO_PRODUCTOS
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'`);
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'
+                AND (idPuntoVentaDueno IS NULL OR idPuntoVentaDueno=@pv)   -- catálogo de VIDA + los de esta tienda`);
     const productos = prodR.recordset;
     const plus   = productos.filter(p => p.EsProductoPlus);
     const normal = productos.filter(p => !p.EsProductoPlus);
@@ -307,5 +310,150 @@ export async function calcularRentabilidad(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'Error al calcular rentabilidad' });
+  }
+}
+
+// ── PLAN PLUS ─────────────────────────────────────────────────────────────
+// Con unos pocos productos (los PLUS, el ancla o el estrella) cubrir los costos
+// fijos de la bodega: cuántas unidades vender de cada uno, contra lo que se
+// vendió en los últimos 30 días. Reglas en services/planPlus.service.js.
+
+// Productos que la tienda puede poner en su plan (catálogo de VIDA + los suyos),
+// con lo vendido en los últimos 30 días en esa tienda (POS y app, entregados).
+async function productosParaPlan(pool, idBranch, idCuenta, idPuntoVenta) {
+  const r = await pool.request()
+    .input('idBranch', sql.BigInt, idBranch)
+    .input('idCuenta', sql.BigInt, idCuenta)
+    .input('pv', sql.BigInt, idPuntoVenta)
+    .query(`
+      SELECT p.idProducto, p.Nombre, p.SKU, p.PrecioUSD, ISNULL(p.CostoUSD,0) AS CostoUSD,
+             p.PrecioPisoUSD, p.PrecioTechoUSD, p.EsProductoPlus, p.idPuntoVentaDueno,
+             c.Nombre AS NombreCategoria,
+             ISNULL(v.Vendidas30, 0) AS Vendidas30
+      FROM VIDA_INVENTARIO_PRODUCTOS p
+      LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
+        ON c.idBranch=p.idBranch AND c.idCuenta=p.idCuenta AND c.idCategoria=p.idCategoria
+      LEFT JOIN (
+        SELECT d.idProducto, SUM(d.Cantidad) AS Vendidas30
+        FROM VIDA_PEDIDOS_DETALLE d
+        JOIN VIDA_PEDIDOS ped ON ped.idBranch=d.idBranch AND ped.idCuenta=d.idCuenta AND ped.idPedido=d.idPedido
+        WHERE d.idBranch=@idBranch AND d.idCuenta=@idCuenta AND ped.idPuntoVenta=@pv
+          AND ped.Status='ENTREGADO' AND ped.FechaAlta >= DATEADD(DAY,-30,GETUTCDATE())
+        GROUP BY d.idProducto
+      ) v ON v.idProducto = p.idProducto
+      WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.Status='ACTIVO'
+        AND (p.idPuntoVentaDueno IS NULL OR p.idPuntoVentaDueno=@pv)
+      ORDER BY p.EsProductoPlus DESC, p.Nombre`);
+  return r.recordset.map(p => ({
+    ...p, PrecioUSD: Number(p.PrecioUSD), CostoUSD: Number(p.CostoUSD), Vendidas30: Number(p.Vendidas30),
+    PrecioPisoUSD: p.PrecioPisoUSD == null ? null : Number(p.PrecioPisoUSD),
+    PrecioTechoUSD: p.PrecioTechoUSD == null ? null : Number(p.PrecioTechoUSD),
+    EsProductoPlus: !!p.EsProductoPlus,
+  }));
+}
+
+// GET /finanzas/plan-plus?idPuntoVenta=&incluirMeta=
+export async function obtenerPlanPlus(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const idPuntoVenta = pvEfectivo(request, request.query.idPuntoVenta);
+  if (!idPuntoVenta) return reply.code(400).send({ error: 'Se requiere idPuntoVenta' });
+  if (!(await tiendaEnAlcance(request.user, idPuntoVenta))) return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
+  try {
+    const pool = await getPool();
+    const fin = await leerFinanzas(pool, idBranch, idCuenta, idPuntoVenta);
+    const extra = await pool.request()
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('pv', sql.BigInt, idPuntoVenta)
+      .query(`SELECT PlanPlusGuardado, PlanPlusIncluyeMeta FROM VIDA_TIENDA_FINANZAS
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@pv;
+              SELECT idProducto, PesoPct FROM VIDA_TIENDA_PLAN_PLUS
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@pv`);
+    const cfg = extra.recordsets[0][0] || {};
+    const productos = await productosParaPlan(pool, idBranch, idCuenta, idPuntoVenta);
+    const visibles = new Set(productos.map(p => String(p.idProducto)));
+    const guardado = !!cfg.PlanPlusGuardado;
+    const seleccion = (guardado ? extra.recordsets[1] : seleccionInicial(productos))
+      .filter(s => visibles.has(String(s.idProducto)))
+      .map(s => ({ idProducto: s.idProducto, PesoPct: s.PesoPct == null ? null : Number(s.PesoPct) }));
+    const incluirMeta = request.query.incluirMeta != null ? request.query.incluirMeta === '1' : !!cfg.PlanPlusIncluyeMeta;
+    const pctVar = Number(fin.PctComisionDelivery) + Number(fin.PctImpuestos) + Number(fin.PctPasarela);
+    const porId = new Map(productos.map(p => [String(p.idProducto), p]));
+    const plan = planEquilibrio({
+      costosFijos: Number(fin.CostosFijosMensualUSD), metaGanancia: Number(fin.MetaGananciaMensualUSD),
+      incluirMeta, pctVar,
+      productos: seleccion.map(s => ({ ...porId.get(String(s.idProducto)), PesoPct: s.PesoPct })),
+    });
+    return reply.send({
+      idPuntoVenta: Number(idPuntoVenta),
+      finanzas: { CostosFijosMensualUSD: Number(fin.CostosFijosMensualUSD), MetaGananciaMensualUSD: Number(fin.MetaGananciaMensualUSD), pctVariables: pctVar },
+      guardado, incluirMeta, seleccion, plan,
+      productos: productos.map(p => ({
+        ...p, ...margenesProducto(p.PrecioUSD, p.CostoUSD, pctVar),
+        Propio: p.idPuntoVentaDueno != null,
+        RangoPrecio: fueraDeRango(p.PrecioUSD, p.PrecioPisoUSD, p.PrecioTechoUSD),
+      })),
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al calcular el Plan PLUS' });
+  }
+}
+
+// PUT /finanzas/plan-plus { idPuntoVenta?, incluirMeta, productos:[{ idProducto, PesoPct }] }
+export async function guardarPlanPlus(request, reply) {
+  const { idBranch, idCuenta, idUsuario } = request.user;
+  const b = request.body || {};
+  const idPuntoVenta = pvEfectivo(request, b.idPuntoVenta);
+  if (!idPuntoVenta) return reply.code(400).send({ error: 'Se requiere idPuntoVenta' });
+  if (!(await tiendaEnAlcance(request.user, idPuntoVenta))) return reply.code(403).send({ error: 'Esa tienda está fuera de tu alcance' });
+  const items = Array.isArray(b.productos) ? b.productos : [];
+  if (items.length > 50) return reply.code(400).send({ error: 'Elige como máximo 50 productos para el plan' });
+  for (const it of items) {
+    if (!Number.isSafeInteger(Number(it?.idProducto)) || Number(it.idProducto) <= 0)
+      return reply.code(400).send({ error: 'Producto inválido' });
+    if (it.PesoPct != null && it.PesoPct !== '' && !(Number(it.PesoPct) >= 0 && Number(it.PesoPct) <= 100))
+      return reply.code(400).send({ error: 'El peso de cada producto va de 0 a 100 %' });
+  }
+  if (new Set(items.map(i => String(i.idProducto))).size !== items.length)
+    return reply.code(400).send({ error: 'Hay productos repetidos' });
+
+  let tx;
+  try {
+    const pool = await getPool();
+    // Solo productos que esa tienda ve (catálogo de VIDA + los suyos)
+    const visibles = new Set((await productosParaPlan(pool, idBranch, idCuenta, idPuntoVenta)).map(p => String(p.idProducto)));
+    if (items.some(i => !visibles.has(String(i.idProducto))))
+      return reply.code(400).send({ error: 'Algún producto no está disponible en esta tienda' });
+
+    tx = new sql.Transaction(pool);
+    await tx.begin();
+    const base = () => new sql.Request(tx)
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('pv', sql.BigInt, idPuntoVenta);
+    await base().query(`DELETE FROM VIDA_TIENDA_PLAN_PLUS WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@pv`);
+    for (const it of items) {
+      await base()
+        .input('idProducto', sql.BigInt, Number(it.idProducto))
+        .input('Peso', sql.Decimal(5, 2), it.PesoPct == null || it.PesoPct === '' ? null : Number(it.PesoPct))
+        .input('Usu', sql.VarChar(30), `U:${idUsuario}`)
+        .query(`INSERT INTO VIDA_TIENDA_PLAN_PLUS (idBranch,idCuenta,idPuntoVenta,idProducto,PesoPct,UsuAlta)
+                VALUES (@idBranch,@idCuenta,@pv,@idProducto,@Peso,@Usu)`);
+    }
+    // La marca vive en VIDA_TIENDA_FINANZAS: si la tienda no tenía fila, nace con ceros
+    await base()
+      .input('Meta', sql.Bit, b.incluirMeta ? 1 : 0)
+      .input('Usu', sql.VarChar(20), String(idUsuario))
+      .query(`
+        MERGE VIDA_TIENDA_FINANZAS AS t
+        USING (SELECT @idBranch AS idBranch, @idCuenta AS idCuenta, @pv AS idPuntoVenta) AS s
+          ON (t.idBranch=s.idBranch AND t.idCuenta=s.idCuenta AND t.idPuntoVenta=s.idPuntoVenta)
+        WHEN MATCHED THEN UPDATE SET PlanPlusGuardado=1, PlanPlusIncluyeMeta=@Meta, FechaMod=GETUTCDATE(), UsuMod=@Usu
+        WHEN NOT MATCHED THEN INSERT (idBranch,idCuenta,idPuntoVenta,PlanPlusGuardado,PlanPlusIncluyeMeta,UsuAlta)
+          VALUES (@idBranch,@idCuenta,@pv,1,@Meta,@Usu);`);
+    await tx.commit();
+    tx = null;
+    return reply.send({ message: 'Plan PLUS guardado' });
+  } catch (err) {
+    if (tx) { try { await tx.rollback(); } catch {} }
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al guardar el Plan PLUS' });
   }
 }

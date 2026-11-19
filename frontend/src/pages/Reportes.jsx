@@ -14,6 +14,7 @@ import {
   PieChart, Pie, Cell,
 } from 'recharts';
 import api, { API_ORIGIN } from '../services/api.js';
+import TabPlanPlus from '../components/PlanPlus.jsx';
 import {
   exportarVentasExcel, exportarProductosExcel,
   exportarInventarioExcel, exportarMovimientosExcel,
@@ -1939,6 +1940,7 @@ const TABS = [
   { id: 'movimientos',  label: 'Movimientos',   icon: ArrowUpDown  },
   { id: 'metas',        label: 'Metas',         icon: Target       },
   { id: 'rentabilidad', label: 'Rentabilidad',  icon: Calculator   },
+  { id: 'planplus',     label: 'Plan PLUS',     icon: Star         },
 ];
 
 export default function Reportes() {
@@ -2000,6 +2002,7 @@ export default function Reportes() {
         {tab === 'movimientos' && <TabMovimientos filtros={filtros} />}
         {tab === 'metas' && <TabMetas filtros={filtros} puedeVerRed={puedeVerRed} />}
         {tab === 'rentabilidad' && <TabRentabilidad filtros={filtros} puedeVerRed={puedeVerRed} />}
+        {tab === 'planplus' && <TabPlanPlus filtros={filtros} puedeVerRed={puedeVerRed} onIrRentabilidad={() => setTab('rentabilidad')} />}
       </div>
     </div>
   );
