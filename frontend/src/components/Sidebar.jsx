@@ -2,11 +2,12 @@
 // Barra lateral del panel. Se colapsa a un riel de íconos (con nombre al pasar
 // el mouse) para dar espacio a la pantalla: botón en el borde o Ctrl+B. La
 // preferencia se recuerda en este navegador; en pantallas angostas arranca
-// colapsada.
+// colapsada. En el teléfono (< 768 px) es un menú que se abre desde la barra
+// superior (Layout) y tapa la pantalla, siempre con los nombres a la vista.
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore.js';
-import { LogOut, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { LogOut, ChevronRight, ChevronsLeft, ChevronsRight, X } from 'lucide-react';
 import * as Icons from 'lucide-react';
 import { portalDeUsuario, PORTAL_LABEL, PORTAL_BADGE } from '../config/portales.js';
 
@@ -18,6 +19,18 @@ function leerPreferencia() {
     if (v != null) return v === '1';
   } catch { /* sin almacenamiento: se usa el ancho */ }
   return typeof window !== 'undefined' && window.innerWidth < 1280;
+}
+
+const CONSULTA_MOVIL = '(max-width: 767px)';
+function useEsMovil() {
+  const [movil, setMovil] = useState(() => typeof window !== 'undefined' && window.matchMedia(CONSULTA_MOVIL).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(CONSULTA_MOVIL);
+    const cambio = () => setMovil(mq.matches);
+    mq.addEventListener('change', cambio);
+    return () => mq.removeEventListener('change', cambio);
+  }, []);
+  return movil;
 }
 
 // Mapeo de nombre de ícono (string de BD) → componente Lucide
@@ -64,11 +77,22 @@ function Tooltip({ texto, visible, children }) {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ abiertoMovil = false, onCerrarMovil }) {
   const { usuario, pantallas, logout } = useAuthStore();
   const navigate = useNavigate();
   const portal = portalDeUsuario(usuario);
-  const [colapsada, setColapsada] = useState(leerPreferencia);
+  const [preferencia, setColapsada] = useState(leerPreferencia);
+  const movil = useEsMovil();
+  // En el teléfono el menú siempre muestra los nombres
+  const colapsada = !movil && preferencia;
+
+  // Esc cierra el menú del teléfono
+  useEffect(() => {
+    if (!movil || !abiertoMovil) return;
+    const onKey = (e) => { if (e.key === 'Escape') onCerrarMovil?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [movil, abiertoMovil, onCerrarMovil]);
 
   const alternar = useCallback(() => {
     setColapsada((c) => {
@@ -94,23 +118,40 @@ export default function Sidebar() {
     navigate('/login');
   };
 
-  const etiqueta = `transition-[opacity,width] duration-200 whitespace-nowrap overflow-hidden ${colapsada ? 'opacity-0 w-0' : 'opacity-100'}`;
+  // Colapsada, la etiqueta sale del flujo (hidden): con w-0 + flex-1 seguía
+  // ocupando el espacio sobrante y empujaba el ícono a la izquierda del botón.
+  const etiqueta = `whitespace-nowrap overflow-hidden ${colapsada ? 'hidden' : ''}`;
 
   return (
+    <>
+    {movil && abiertoMovil && (
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onCerrarMovil} aria-hidden="true" />
+    )}
     <aside
-      className={`shrink-0 bg-white border-r border-gray-100 flex flex-col h-screen sticky top-0 z-30
-                  transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${colapsada ? 'w-[76px]' : 'w-64'}`}
-      aria-label="Menú principal">
+      className={movil
+        ? `fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-white flex flex-col h-full shadow-2xl
+           transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${abiertoMovil ? 'translate-x-0' : '-translate-x-full'}`
+        : `shrink-0 bg-white border-r border-gray-100 flex flex-col h-screen sticky top-0 z-30
+           transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${colapsada ? 'w-[76px]' : 'w-64'}`}
+      aria-label="Menú principal" aria-hidden={movil && !abiertoMovil ? true : undefined}
+      inert={movil && !abiertoMovil ? '' : undefined}>
 
-      {/* Botón para colapsar / expandir, sobre el borde */}
-      <button onClick={alternar}
+      {movil && (
+        <button onClick={onCerrarMovil} aria-label="Cerrar menú"
+          className="absolute right-3 top-3 z-10 w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100">
+          <X size={20} />
+        </button>
+      )}
+
+      {/* Botón para colapsar / expandir, sobre el borde (solo en computadora) */}
+      {!movil && <button onClick={alternar}
         className="absolute -right-3.5 top-[74px] z-40 w-7 h-7 rounded-full bg-white border border-gray-200 shadow-md
                    flex items-center justify-center text-gray-500 hover:text-vida-blue hover:border-vida-blue hover:scale-110
                    transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-vida-blue"
         title={colapsada ? 'Expandir menú (Ctrl+B)' : 'Colapsar menú (Ctrl+B)'}
         aria-label={colapsada ? 'Expandir menú' : 'Colapsar menú'} aria-expanded={!colapsada}>
         {colapsada ? <ChevronsRight size={15} /> : <ChevronsLeft size={15} />}
-      </button>
+      </button>}
 
       {/* Logo: completo o el símbolo de la gota */}
       <div className={`border-b border-gray-100 h-[86px] flex items-center overflow-hidden transition-[padding] duration-300 ${colapsada ? 'px-0 justify-center' : 'px-4'}`}>
@@ -141,6 +182,7 @@ export default function Sidebar() {
           <Tooltip key={p.idPantalla} texto={p.Nombre} visible={colapsada}>
             <NavLink
               to={p.Link}
+              onClick={movil ? onCerrarMovil : undefined}
               aria-label={colapsada ? p.Nombre : undefined}
               className={({ isActive }) =>
                 `sidebar-item ${isActive ? 'active' : ''} ${colapsada ? '!px-0 justify-center !gap-0 h-11' : ''}`
@@ -157,7 +199,7 @@ export default function Sidebar() {
       {/* Usuario */}
       <div className={`border-t border-gray-100 transition-[padding] duration-300 ${colapsada ? 'px-3 py-3' : 'p-4'}`}>
         <Tooltip texto={`${usuario?.Nombre || ''} ${usuario?.Apellidos || ''} · ${usuario?.TipoUsuario || ''}`} visible={colapsada}>
-          <NavLink to="/perfil"
+          <NavLink to="/perfil" onClick={movil ? onCerrarMovil : undefined}
             className={`flex items-center gap-3 mb-2 hover:bg-gray-50 rounded-xl p-2 transition-colors cursor-pointer ${colapsada ? 'justify-center' : ''}`}>
             <Avatar nombre={usuario?.Nombre} apellidos={usuario?.Apellidos} imagen={usuario?.ImagenUsuario} />
             <div className={`min-w-0 ${etiqueta}`}>
@@ -176,5 +218,6 @@ export default function Sidebar() {
         </Tooltip>
       </div>
     </aside>
+    </>
   );
 }

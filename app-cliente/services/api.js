@@ -38,7 +38,16 @@ api.interceptors.response.use(
       AsyncStorage.removeItem('vida_cliente_token').catch(() => {});
       useAuthStore.getState().logout();
     }
-    const msg = data?.message || data?.error || error?.message || 'Error de red';
+    // Sin respuesta del servidor axios solo dice "Network Error" o "timeout of
+    // 15000ms exceeded": se cambia por un mensaje que la persona entienda.
+    const sinRespuesta = !error?.response;
+    const msg = sinRespuesta
+      ? (error?.code === 'ECONNABORTED'
+          ? 'El servidor tardó demasiado en responder. Intenta de nuevo en un momento.'
+          : 'No pudimos conectar con VIDA. Revisa tu conexión a internet e intenta de nuevo.')
+      : (data?.message || data?.error || (error?.response?.status >= 500
+          ? 'Tuvimos un problema en el servidor. Intenta de nuevo en un momento.'
+          : error?.message) || 'Algo salió mal. Intenta de nuevo.');
     const err = new Error(msg);
     err.response = error?.response;
     err.config = error?.config;

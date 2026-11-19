@@ -65,6 +65,16 @@ html.vida-cargando body::before {
   html.vida-cargando body::before { animation-duration: 3s; }
 }
 
+/* ── Teléfono (< 640 px) ──────────────────────────────────────────────────────
+ * Las pantallas se pensaron para computadora con p-6 (24 px) por lado: en un
+ * teléfono de 375 px eso se comía el 13 % del ancho. Dentro del contenido se
+ * baja a 16 px sin tocar cada pantalla. */
+@media (max-width: 639px) {
+  main .p-6  { padding: 1rem; }
+  main .px-6 { padding-left: 1rem; padding-right: 1rem; }
+  main .p-8  { padding: 1.25rem; }
+}
+
 /* ── Impresión universal del ticket POS ──────────────────────────────────────
  * Al imprimir (window.print) se oculta todo menos #ticket-imprimible y se le da
  * formato de ticket térmico. Funciona con CUALQUIER impresora instalada en el

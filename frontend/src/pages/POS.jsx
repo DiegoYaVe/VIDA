@@ -11,7 +11,7 @@ import SyncStatusBar from '../components/SyncStatusBar.jsx';
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, CreditCard,
   Check, X,
-  Barcode, ChevronDown, Printer, RotateCcw, Tag, Lock, RefreshCw,
+  Barcode, ChevronDown, ChevronLeft, Printer, RotateCcw, Tag, Lock, RefreshCw,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -138,6 +138,8 @@ export default function POS() {
 
   // Carrito
   const [carrito, setCarrito] = useState([]);
+  // En el teléfono no caben catálogo y carrito lado a lado: se ve uno a la vez
+  const [vistaMovil, setVistaMovil] = useState('productos');
 
   // Modales
   const [modalPago,  setModalPago]  = useState(false);
@@ -298,6 +300,7 @@ export default function POS() {
     if (carrito.length === 0) return;
     if (!confirm('¿Limpiar el carrito?')) return;
     setCarrito([]);
+    setVistaMovil('productos');
   }
 
   const total = carrito.reduce((s, i) => s + i.Cantidad * i.PrecioUnitario, 0);
@@ -404,6 +407,7 @@ export default function POS() {
 
       setModalPago(false);
       setCarrito([]);
+      setVistaMovil('productos');
       quitarCupon();
     } catch (err) {
       setError('Error al guardar la venta: ' + (err.message || 'desconocido'));
@@ -414,7 +418,7 @@ export default function POS() {
   }
 
   return (
-    <div className="relative flex h-[calc(100vh-4rem)] overflow-hidden bg-vida-gray">
+    <div className="relative flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden bg-vida-gray">
 
       {/* ── Caja cerrada: bloquea todo el punto de venta ── */}
       {bloqueado && (
@@ -451,10 +455,10 @@ export default function POS() {
       )}
 
       {/* ── Panel izquierdo: búsqueda y catálogo ── */}
-      <div className="flex-1 flex flex-col p-4 gap-3 overflow-hidden" inert={bloqueado ? '' : undefined} aria-hidden={bloqueado || undefined}>
+      <div className={`flex-1 min-h-0 flex-col p-3 md:p-4 gap-3 overflow-hidden ${vistaMovil === 'carrito' ? 'hidden md:flex' : 'flex'}`} inert={bloqueado ? '' : undefined} aria-hidden={bloqueado || undefined}>
 
         {/* Barra superior */}
-        <div className="flex gap-2 items-center">
+        <div className="flex flex-wrap gap-2 items-center">
           {/* Estado de conexión y sincronización */}
           <SyncStatusBar />
 
@@ -474,7 +478,7 @@ export default function POS() {
           )}
 
           {/* Búsqueda */}
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-[12rem]">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"/>
             <Barcode size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-300"/>
             <input
@@ -507,7 +511,7 @@ export default function POS() {
                 const stock = p.StockDisponible ?? p.StockTotal;
                 return (
                   <button key={p.idProducto} onClick={() => agregarAlCarrito(p)}
-                    className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-vida-blue-light transition-colors text-left">
+                    className="w-full flex items-center justify-between px-4 md:px-5 py-3.5 hover:bg-vida-blue-light transition-colors text-left">
                     <div className="min-w-0">
                       <p className="font-semibold text-gray-800 truncate">{p.Nombre}</p>
                       <p className="text-xs text-gray-400 mt-0.5">SKU: {p.SKU} · {p.UnidadMedida}</p>
@@ -533,14 +537,27 @@ export default function POS() {
             </div>
           </div>
         )}
+
+        {carrito.length > 0 && (
+          <button onClick={() => setVistaMovil('carrito')}
+            className="md:hidden shrink-0 w-full flex items-center justify-between gap-3 bg-vida-blue text-white rounded-2xl px-4 py-3.5 font-bold shadow-lg">
+            <span className="flex items-center gap-2"><ShoppingCart size={18}/> Ver carrito
+              <span className="bg-white/20 text-xs px-2 py-0.5 rounded-full">{carrito.length}</span></span>
+            <span>${totalFinal.toFixed(2)}</span>
+          </button>
+        )}
       </div>
 
       {/* ── Panel derecho: carrito y cobro ── */}
-      <div className="w-96 bg-white flex flex-col shadow-xl" inert={bloqueado ? '' : undefined} aria-hidden={bloqueado || undefined}>
+      <div className={`w-full md:w-96 flex-1 md:flex-none min-h-0 bg-white flex-col shadow-xl ${vistaMovil === 'productos' ? 'hidden md:flex' : 'flex'}`} inert={bloqueado ? '' : undefined} aria-hidden={bloqueado || undefined}>
 
         {/* Header carrito */}
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <div className="flex items-center gap-2">
+            <button onClick={() => setVistaMovil('productos')} aria-label="Volver a los productos"
+              className="md:hidden -ml-2 mr-1 w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100">
+              <ChevronLeft size={20}/>
+            </button>
             <ShoppingCart size={20} className="text-vida-blue"/>
             <span className="font-bold text-gray-800">Carrito</span>
             {carrito.length > 0 && (

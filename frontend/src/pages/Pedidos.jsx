@@ -689,7 +689,7 @@ export default function Pedidos() {
           <h1 className="text-2xl font-black text-gray-900">Panel de Pedidos</h1>
           <p className="text-gray-500 text-sm mt-1">Monitorea y gestiona los pedidos en tiempo real</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Indicador WebSocket */}
           <div className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-full border ${
             wsVivo
@@ -719,8 +719,8 @@ export default function Pedidos() {
 
       {/* Filtros */}
       <div className="flex gap-2 flex-wrap mb-6">
-        {/* Por status */}
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+        {/* Por status: en el teléfono se desliza de lado */}
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl max-w-full overflow-x-auto">
           {[
             { v: '',           label: 'Todos' },
             { v: 'NUEVO',      label: 'Nuevos' },
@@ -731,7 +731,7 @@ export default function Pedidos() {
             { v: 'CANCELADO',  label: 'Cancelados' },
           ].map(f => (
             <button key={f.v} onClick={() => setFiltStatus(f.v)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
                 filtStatus === f.v ? 'bg-white text-vida-blue shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}>
               {f.label}

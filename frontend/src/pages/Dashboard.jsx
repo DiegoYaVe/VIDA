@@ -41,14 +41,16 @@ function KpiCard({ icon: Icon, label, valor, sub, variacion, color, onClick }) {
   const positivo = variacion >= 0;
   return (
     <div onClick={onClick}
-      className={`bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex items-center gap-4 ${onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}>
-      <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+      className={`bg-white rounded-2xl p-4 sm:p-5 border border-gray-100 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 min-w-0 ${onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}>
+      {/* En el teléfono, dos tarjetas por fila: el ícono va arriba para que el
+          número y la etiqueta tengan todo el ancho y no se corten */}
+      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0"
         style={{ backgroundColor: `${color}18` }}>
         <Icon size={22} style={{ color }} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide truncate">{label}</p>
-        <p className="text-xl font-black text-gray-900 leading-tight truncate">{valor}</p>
+        <p className="text-[11px] sm:text-xs text-gray-400 font-semibold uppercase tracking-wide leading-tight">{label}</p>
+        <p className="text-lg sm:text-xl font-black text-gray-900 leading-tight truncate">{valor}</p>
         {sub && <p className="text-xs text-gray-400 mt-0.5 truncate">{sub}</p>}
         {variacion !== undefined && (
           <div className="flex items-center gap-1 mt-0.5">
