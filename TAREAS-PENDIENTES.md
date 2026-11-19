@@ -18,9 +18,9 @@ Cada una indica de dónde salió y su estado.
 | 11 | Tarjeta de crédito VIDA para clientes | Flujograma, etapa 7 "Fidelizar al cliente: Club VIDA" (propuesta) | Propuesta aprobada · anotada |
 | 12 | Punto de equilibrio calculado con los datos reales, por tienda y para la Matriz (todas las tiendas o un grupo) | Audios de WhatsApp | Anotada |
 | 13 | Productos PLUS de cada tienda visibles en la app, y sección "Productos Club VIDA" con todos | Audios de WhatsApp | Anotada |
-| 14 | Afiliación de la tienda con kit y paquetes por nivel | Audios de WhatsApp | Anotada |
-| 15 | Mantenimiento mensual de la plataforma según el nivel de la tienda | Audios de WhatsApp | Anotada |
-| 16 | Cobro de la suscripción: activar o suspender la tienda según su pago, con multa al reactivar | Audios de WhatsApp | Anotada |
+| 14 | Afiliación de la tienda con kit y paquetes por nivel | Audios de WhatsApp | **Programada** (19 nov): Portal Corporativo → Afiliación y mensualidades |
+| 15 | Mantenimiento mensual de la plataforma según el nivel de la tienda | Audios de WhatsApp | **Programada** (19 nov): cargo mensual automático en Cuentas |
+| 16 | Cobro de la suscripción: activar o suspender la tienda según su pago, con multa al reactivar | Audios de WhatsApp | **Programada** (19 nov): corte y multa configurables, nacen apagados |
 | 17 | Ingreso de VIDA: porcentaje sobre lo que los proveedores le venden a las tiendas | Audios de WhatsApp | Anotada |
 | 18 | Metas de la Matriz por ventas y por número de tiendas, y pago al personal en Finanzas | Audios de WhatsApp | Anotada |
 | 19 | Carga del inventario de una tienda desde un archivo Excel | Audios de WhatsApp | Anotada |
