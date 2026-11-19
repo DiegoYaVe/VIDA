@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import Sidebar from './Sidebar.jsx';
+import AvisoSuscripcion from './AvisoSuscripcion.jsx';
 
 export default function Layout({ children }) {
   const [menuAbierto, setMenuAbierto] = useState(false);
@@ -27,6 +28,8 @@ export default function Layout({ children }) {
           <img src="/logo-sidebar.png" alt="Comercializadora VIDA" className="h-8 w-auto object-contain"
             onError={e => { e.target.src = '/logo-simbolo.png'; }} />
         </header>
+        {/* Mensualidad de la tienda: aviso de vencimiento o pantalla de suspensión */}
+        <AvisoSuscripcion />
         {/* El área de contenido hace scroll por sí misma: antes era overflow-hidden y
             cada pantalla debía crear su propia zona con scroll; las que no lo hacían
             (Pedidos, Inventario, Proveedores, Ventas, Cuentas) no bajaban con el mouse.

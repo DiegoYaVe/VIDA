@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import api from '../services/api.js';
 import { useAuthStore } from '../store/authStore.js';
+import SuscripcionesVida from '../components/SuscripcionesVida.jsx';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 const NUM = (v) => Number(v || 0).toLocaleString('es-VE');
@@ -286,6 +287,10 @@ export default function Corporativo() {
   const [cargando, setCarg] = useState(true);
   const [wizard, setWizard] = useState(false);
   const [q, setQ] = useState('');
+  // Afiliación y mensualidades: solo para quien opera la Matriz (lo dice el backend)
+  const [vista, setVista] = useState('red');
+  const [operaMatriz, setOperaMatriz] = useState(false);
+  useEffect(() => { api.get('/matriz').then(r => setOperaMatriz(!!r.data?.operaMatriz)).catch(() => setOperaMatriz(false)); }, []);
 
   const cargar = useCallback(async () => {
     setCarg(true);
@@ -326,7 +331,22 @@ export default function Corporativo() {
         </div>
       </div>
 
-      {cargando ? <Spinner /> : (
+      {operaMatriz && (
+        <div className="bg-white border-b border-gray-100 px-6">
+          <div className="flex gap-1 overflow-x-auto">
+            {[['red', 'Red de tiendas'], ['suscripciones', 'Afiliación y mensualidades']].map(([k, label]) => (
+              <button key={k} onClick={() => setVista(k)} aria-pressed={vista === k}
+                className={`px-4 py-3.5 text-sm font-semibold border-b-2 whitespace-nowrap transition-all ${vista === k ? 'border-vida-blue text-vida-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {vista === 'suscripciones' && operaMatriz ? (
+        <div className="p-6"><SuscripcionesVida /></div>
+      ) : cargando ? <Spinner /> : (
         <div className="p-6 space-y-5">
           {/* Fila superior: meta + estados */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

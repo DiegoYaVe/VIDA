@@ -67,6 +67,10 @@ api.interceptors.response.use(
         try { const { useAuthStore } = await import('../store/authStore.js'); useAuthStore.setState({ usuario: null, accessToken: null, pantallas: [] }); } catch { /* noop */ }
       }
     }
+    // Tienda suspendida por falta de pago: AvisoSuscripcion muestra por qué y cómo pagar
+    if (response?.status === 423 && response.data?.codigo === 'TIENDA_SUSPENDIDA') {
+      window.dispatchEvent(new Event('vida:tienda-suspendida'));
+    }
     return Promise.reject(error);
   }
 );

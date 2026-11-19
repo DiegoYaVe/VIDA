@@ -23,6 +23,8 @@ import { deliveryRoutes }   from './routes/delivery.routes.js';
 import { promocionesRoutes } from './routes/promociones.routes.js';
 import { matrizRoutes }      from './routes/matriz.routes.js';
 import { reabastoVidaRoutes } from './routes/reabastoVida.routes.js';
+import { suscripcionRoutes } from './routes/suscripcion.routes.js';
+import { generarCargosSuscripcion } from './services/suscripcionDatos.service.js';
 import { corporativoRoutes } from './routes/corporativo.routes.js';
 import { paisesRoutes }     from './routes/paises.routes.js';
 import { estadosRoutes }    from './routes/estados.routes.js';
@@ -205,6 +207,7 @@ fastify.register(deliveryRoutes,   { prefix: '/api' });
 fastify.register(promocionesRoutes, { prefix: '/api' });
 fastify.register(matrizRoutes,      { prefix: '/api' });
 fastify.register(reabastoVidaRoutes, { prefix: '/api' });
+fastify.register(suscripcionRoutes, { prefix: '/api' });
 fastify.register(corporativoRoutes, { prefix: '/api' });
 fastify.register(paisesRoutes,     { prefix: '/api' });
 fastify.register(estadosRoutes,    { prefix: '/api' });
@@ -270,6 +273,15 @@ const correrCuponesInactividad = async () => {
 };
 setInterval(correrCuponesInactividad, 24 * 60 * 60 * 1000);
 setTimeout(correrCuponesInactividad, 10 * 60 * 1000);
+
+// Job: mensualidades de las tiendas y multas de reconexión (sql/63). Una vez
+// al día y una primera corrida 15 min después de arrancar (el server se
+// reinicia seguido en IIS). Es idempotente: no duplica cargos.
+const correrSuscripciones = async () => {
+  try { await generarCargosSuscripcion(await getPool(), fastify.log); } catch (e) { fastify.log.error(e, 'job suscripciones'); }
+};
+setInterval(correrSuscripciones, 24 * 60 * 60 * 1000);
+setTimeout(correrSuscripciones, 15 * 60 * 1000);
 
 // Job: vencimiento de puntos por inactividad. Corre una vez al día (el
 // vencimiento es por meses, no necesita más). Configurable con
