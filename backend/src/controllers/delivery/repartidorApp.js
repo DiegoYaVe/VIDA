@@ -1445,7 +1445,8 @@ const SELECT_ENVIO = `
   SELECT pp.idPedidoProveedor, pp.idPedidoMatriz, pp.Folio, pp.Status, pp.CodigoRetiro, pp.idRepartidor,
          s.Nombre AS NombreSucursal, s.Direccion AS DireccionSucursal,
          s.Latitud AS LatSucursal, s.Longitud AS LonSucursal,
-         tienda.NomComercial AS NombreTienda, tienda.Direccion AS DireccionTienda,
+         tienda.NomComercial AS NombreTienda,
+         LTRIM(RTRIM(CONCAT(tienda.Calle, ' ', tienda.NumExt, CASE WHEN tienda.Colonia IS NOT NULL THEN CONCAT(', ', tienda.Colonia) ELSE '' END))) AS DireccionTienda,
          tienda.Latitud AS LatTienda, tienda.Longitud AS LonTienda,
          w.PesoKg, w.SinPeso
   FROM VIDA_PEDIDOS_PROVEEDOR pp
