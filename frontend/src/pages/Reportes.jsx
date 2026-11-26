@@ -1459,10 +1459,10 @@ function TabDelivery({ filtros }) {
               )}
             </div>
           </div>
-        </>
 
           {/* Comentarios y sugerencias que dejan los clientes en la app */}
           <ComentariosClientes comentarios={datos.comentarios || []} />
+        </>
       )}
     </div>
   );
