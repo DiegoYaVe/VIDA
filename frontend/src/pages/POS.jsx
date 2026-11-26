@@ -527,7 +527,11 @@ export default function POS() {
                     className="w-full flex items-center justify-between px-4 md:px-5 py-3.5 hover:bg-vida-blue-light transition-colors text-left">
                     <div className="min-w-0">
                       <p className="font-semibold text-gray-800 truncate">{p.Nombre}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">SKU: {p.SKU} · {p.UnidadMedida}</p>
+                      <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        {p.EsEstrella ? <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-vida-blue text-white">★ ESTRELLA</span> : null}
+                        {p.EsProductoPlus ? <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-amber-400 text-white">PLUS</span> : null}
+                        <span>SKU: {p.SKU} · {p.UnidadMedida}</span>
+                      </p>
                     </div>
                     <div className="text-right shrink-0 ml-4">
                       <p className="font-bold text-vida-blue text-lg">${parseFloat(p.PrecioUSD).toFixed(2)}</p>

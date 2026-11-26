@@ -5,6 +5,7 @@
 import { getPool, sql } from '../db/sqlserver.js';
 import { tiendaEnAlcance } from '../services/alcance.service.js';
 import { margenesProducto, planEquilibrio, seleccionInicial, fueraDeRango } from '../services/planPlus.service.js';
+import { sqlEsPlus } from '../services/destacadosTienda.service.js';
 
 const ROLES_RED = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
 
@@ -244,10 +245,10 @@ export async function calcularRentabilidad(request, reply) {
       .input('idBranch', sql.BigInt, idBranch)
       .input('idCuenta', sql.BigInt, idCuenta)
       .input('pv', sql.BigInt, idPuntoVenta)
-      .query(`SELECT PrecioUSD, CostoUSD, EsProductoPlus
-              FROM VIDA_INVENTARIO_PRODUCTOS
-              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND Status='ACTIVO'
-                AND (idPuntoVentaDueno IS NULL OR idPuntoVentaDueno=@pv)   -- catálogo de VIDA + los de esta tienda`);
+      .query(`SELECT p.PrecioUSD, p.CostoUSD, ${sqlEsPlus('p', '@pv')} AS EsProductoPlus
+              FROM VIDA_INVENTARIO_PRODUCTOS p
+              WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.Status='ACTIVO'
+                AND (p.idPuntoVentaDueno IS NULL OR p.idPuntoVentaDueno=@pv)   -- catálogo de VIDA + los de esta tienda`);
     const productos = prodR.recordset;
     const plus   = productos.filter(p => p.EsProductoPlus);
     const normal = productos.filter(p => !p.EsProductoPlus);
@@ -327,7 +328,7 @@ async function productosParaPlan(pool, idBranch, idCuenta, idPuntoVenta) {
     .input('pv', sql.BigInt, idPuntoVenta)
     .query(`
       SELECT p.idProducto, p.Nombre, p.SKU, p.PrecioUSD, ISNULL(p.CostoUSD,0) AS CostoUSD,
-             p.PrecioPisoUSD, p.PrecioTechoUSD, p.EsProductoPlus, p.idPuntoVentaDueno,
+             p.PrecioPisoUSD, p.PrecioTechoUSD, ${sqlEsPlus('p', '@pv')} AS EsProductoPlus, p.idPuntoVentaDueno,
              c.Nombre AS NombreCategoria,
              ISNULL(v.Vendidas30, 0) AS Vendidas30
       FROM VIDA_INVENTARIO_PRODUCTOS p
@@ -343,7 +344,7 @@ async function productosParaPlan(pool, idBranch, idCuenta, idPuntoVenta) {
       ) v ON v.idProducto = p.idProducto
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.Status='ACTIVO'
         AND (p.idPuntoVentaDueno IS NULL OR p.idPuntoVentaDueno=@pv)
-      ORDER BY p.EsProductoPlus DESC, p.Nombre`);
+      ORDER BY EsProductoPlus DESC, p.Nombre`);
   return r.recordset.map(p => ({
     ...p, PrecioUSD: Number(p.PrecioUSD), CostoUSD: Number(p.CostoUSD), Vendidas30: Number(p.Vendidas30),
     PrecioPisoUSD: p.PrecioPisoUSD == null ? null : Number(p.PrecioPisoUSD),

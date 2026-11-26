@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 import api, { API_ORIGIN } from '../services/api.js';
 import TabPlanPlus from '../components/PlanPlus.jsx';
+import ArranqueMes from '../components/ArranqueMes.jsx';
 import {
   exportarVentasExcel, exportarProductosExcel,
   exportarInventarioExcel, exportarMovimientosExcel,
@@ -27,8 +28,8 @@ import {
 } from '../utils/exportPDF.js';
 import { useAuthStore } from '../store/authStore.js';
 import { hoyCaracas } from '../utils/fechas.js';
-
 import ComentariosClientes from '../components/ComentariosClientes.jsx';
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const USD  = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const FMT  = (v) => Number(v || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1944,6 +1945,7 @@ const TABS = [
   { id: 'movimientos',  label: 'Movimientos',   icon: ArrowUpDown  },
   { id: 'metas',        label: 'Metas',         icon: Target       },
   { id: 'rentabilidad', label: 'Rentabilidad',  icon: Calculator   },
+  { id: 'arranque',     label: 'Arranque del mes', icon: Award    },
   { id: 'planplus',     label: 'Plan PLUS',     icon: Star         },
 ];
 
@@ -2006,6 +2008,7 @@ export default function Reportes() {
         {tab === 'movimientos' && <TabMovimientos filtros={filtros} />}
         {tab === 'metas' && <TabMetas filtros={filtros} puedeVerRed={puedeVerRed} />}
         {tab === 'rentabilidad' && <TabRentabilidad filtros={filtros} puedeVerRed={puedeVerRed} />}
+        {tab === 'arranque' && <ArranqueMes filtros={filtros} puedeVerRed={puedeVerRed} />}
         {tab === 'planplus' && <TabPlanPlus filtros={filtros} puedeVerRed={puedeVerRed} onIrRentabilidad={() => setTab('rentabilidad')} />}
       </div>
     </div>

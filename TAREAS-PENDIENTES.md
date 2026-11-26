@@ -10,14 +10,14 @@ Cada una indica de dónde salió y su estado.
 | 3 | Modalidad proveedor directo, coordinada por VIDA | Flujograma, etapa 2 "Abastecer la red" (propuesta) | Propuesta aprobada · anotada |
 | 4 | Reabasto sugerido por stock mínimo, que se envía solo después de negociarlo con el empresario | Flujograma, etapa 3 "Surtir la tienda" | Propuesta original rechazada · versión negociada anotada |
 | 5 | El empresario puede ir a comprar al centro de distribución con su tarjeta digital, además de recibir el reabasto | Flujograma, etapa 3 "Surtir la tienda" (propuesta) | Propuesta aprobada (confirmada por audio) · anotada |
-| 6 | Cuadro de arranque del mes | Flujograma, etapa 4 "Arrancar el mes con una meta" (propuesta) | Propuesta aprobada · anotada |
-| 7 | Producto estrella por tienda | Flujograma, etapa 4 (propuesta) | Propuesta aprobada · anotada |
-| 8 | Indicador de unidades PLUS vendidas | Flujograma, etapa 4 (propuesta) | Propuesta aprobada · anotada |
+| 6 | Cuadro de arranque del mes | Flujograma, etapa 4 "Arrancar el mes con una meta" (propuesta) | **Programada** (26 nov): Reportes → Arranque del mes |
+| 7 | Producto estrella por tienda | Flujograma, etapa 4 (propuesta) | **Programada** (26 nov): VIDA lo asigna en Arranque del mes; se ve en la caja |
+| 8 | Indicador de unidades PLUS vendidas | Flujograma, etapa 4 (propuesta) | **Programada** (26 nov): por tienda y ranking de la red |
 | 9 | Cobro de pedidos a domicilio y pago de comisión al repartidor | Flujograma, etapa 6 (paso 7) y "Cómo se mueve el dinero" | **En observación** · el modelo actual se rechazó, falta definir el nuevo |
 | 10 | Repartidor propio de la tienda | Flujograma, etapa 6 "Pedido a domicilio" (propuesta) | Propuesta aprobada · anotada |
 | 11 | Tarjeta de crédito VIDA para clientes | Flujograma, etapa 7 "Fidelizar al cliente: Club VIDA" (propuesta) | Propuesta aprobada · anotada |
 | 12 | Punto de equilibrio calculado con los datos reales, por tienda y para la Matriz (todas las tiendas o un grupo) | Audios de WhatsApp | Anotada |
-| 13 | Productos PLUS de cada tienda visibles en la app, y sección "Productos Club VIDA" con todos | Audios de WhatsApp | Anotada |
+| 13 | Productos PLUS de cada tienda visibles en la app, y sección "Productos Club VIDA" con todos | Audios de WhatsApp | **Programada**: sección Productos Club VIDA en la app y PLUS propios de cada tienda (26 nov) |
 | 14 | Afiliación de la tienda con kit y paquetes por nivel | Audios de WhatsApp | **Programada** (19 nov): Portal Corporativo → Afiliación y mensualidades |
 | 15 | Mantenimiento mensual de la plataforma según el nivel de la tienda | Audios de WhatsApp | **Programada** (19 nov): cargo mensual automático en Cuentas |
 | 16 | Cobro de la suscripción: activar o suspender la tienda según su pago, con multa al reactivar | Audios de WhatsApp | **Programada** (19 nov): corte y multa configurables, nacen apagados |
@@ -197,6 +197,12 @@ Cada una indica de dónde salió y su estado.
 
 **Relación entre las tres:** el producto estrella (7) y el indicador PLUS (8) encajan naturalmente dentro del cuadro de arranque del mes (6); conviene diseñarlas como una sola pantalla.
 
+**Cómo quedó (26 nov 2026, programado):** una sola pestaña, **Reportes → Arranque del mes**.
+- **Por tienda:** lo vendido en el mes contra la meta mensual (con barra de avance y el día del mes), la proyección al cierre, los **últimos 6 meses** en gráfica contra la meta, las unidades PLUS por mes, el % de la venta que es PLUS, el producto estrella (unidades este mes y el pasado), los PLUS de la tienda y lo más vendido este mes y el anterior.
+- **Toda la red** (VIDA, sin elegir tienda): ranking de tiendas por unidades PLUS del mes, con venta PLUS y % en PLUS.
+- **Producto estrella:** lo elige VIDA a mano, hasta 3 por tienda, con el botón "Definir PLUS y estrella". Sale con la etiqueta ★ ESTRELLA en la caja.
+- **PLUS por tienda:** en el mismo editor VIDA elige hasta 30 PLUS propios de cada tienda; si no elige ninguno, la tienda usa la marca PLUS general del producto. Aplica en la app, la caja, Rentabilidad y el Plan PLUS (sql/65).
+
 ---
 
 ## 9. Cobro de pedidos a domicilio y pago de comisión al repartidor — EN OBSERVACIÓN
@@ -329,6 +335,8 @@ Cada una indica de dónde salió y su estado.
 **Relación:** con la **tarea 7** (producto estrella por tienda) y la **tarea 14** (el producto PLUS se define al afiliar la tienda).
 
 **Por definir:** si "producto PLUS" y "producto estrella" son lo mismo; si la sección "Productos Club VIDA" muestra los de la tienda elegida o los de todas las tiendas cercanas; si comprar productos PLUS da más puntos del Club.
+
+**Cómo quedó (programado):** la app tiene la sección **Productos Club VIDA**. Desde el 26 nov cada tienda puede tener **sus propios PLUS** (los define VIDA en Reportes → Arranque del mes); la app muestra los PLUS de la tienda donde está el producto. PLUS y estrella quedaron como cosas distintas: PLUS = productos de mayor ganancia de la tienda; estrella = el producto en que se enfoca este mes.
 
 ---
 

@@ -16,6 +16,7 @@ import fs from 'fs';
 import { getConfigVal, nextIdTx } from './comun.js';
 import { guardarPrevio, rutaPrevio, tokenValido, dirComprobantes } from '../../services/comprobantePrevio.service.js';
 import { reembolsarPuntosPedido } from './puntos.js';
+import { sqlEsPlus } from '../../services/destacadosTienda.service.js';
 
 // ══════════════════════════════════════════════════════════════════════════
 // DATOS DE PAGO MÓVIL (públicos — la app los muestra en el checkout)
@@ -278,7 +279,7 @@ export async function listarProductosApp(request, reply) {
 
     const r = await req.query(`
       SELECT p.idProducto, p.Nombre, p.Descripcion, p.PrecioUSD, p.ImagenProducto,
-             p.EsProductoPlus, p.idCategoria, c.Nombre AS NombreCategoria,
+             ${sqlEsPlus('p', 'inv.idPuntoVenta')} AS EsProductoPlus, p.idCategoria, c.Nombre AS NombreCategoria,
              inv.Cantidad AS StockDisponible,
              inv.idPuntoVenta,
              pv.NomComercial AS NombreSucursal, pv.Ciudad

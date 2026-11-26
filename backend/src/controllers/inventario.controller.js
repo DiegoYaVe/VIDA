@@ -10,6 +10,7 @@ import { ordenSql, limiteSeguro } from '../services/ordenLista.js';
 import {
   alcanceProductos, filtroProductosVisibles, productoVisible, puedeEditarProducto, duenoAlCrear, esRolRed,
 } from '../services/productosTienda.service.js';
+import { sqlEsPlus, sqlEsEstrella } from '../services/destacadosTienda.service.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -226,7 +227,8 @@ export async function listarProductos(request, reply) {
         SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
                p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.PrecioSuministroUSD, p.StockMinimo,
-               p.ImagenProducto, p.Notas, p.EsProductoPlus, p.AlicuotaIVA, p.PesoKg, p.Status, p.FechaAlta,
+               p.ImagenProducto, p.Notas, ${sqlEsPlus('p', '@idPuntoVenta')} AS EsProductoPlus,
+               ${sqlEsEstrella('p', '@idPuntoVenta')} AS EsEstrella, p.AlicuotaIVA, p.PesoKg, p.Status, p.FechaAlta,
                p.idPuntoVentaDueno, p.PrecioPisoUSD, p.PrecioTechoUSD, ISNULL(s.Cantidad, 0) AS StockDisponible
         FROM VIDA_INVENTARIO_PRODUCTOS p
         LEFT JOIN VIDA_INVENTARIO_CATEGORIAS c
@@ -262,7 +264,9 @@ export async function listarProductos(request, reply) {
         SELECT p.idProducto, p.idCategoria, c.Nombre AS NombreCategoria,
                p.Nombre, p.Descripcion, p.SKU, p.CodigoBarras,
                p.UnidadMedida, p.PrecioUSD, p.CostoUSD, p.PrecioSuministroUSD, p.StockMinimo,
-               p.ImagenProducto, p.Notas, p.EsProductoPlus, p.AlicuotaIVA, p.Status, p.FechaAlta,
+               p.ImagenProducto, p.Notas,
+               ${pvStock ? sqlEsPlus('p', '@pvStock') : 'p.EsProductoPlus'} AS EsProductoPlus,
+               ${pvStock ? sqlEsEstrella('p', '@pvStock') : 'CAST(0 AS BIT)'} AS EsEstrella, p.AlicuotaIVA, p.Status, p.FechaAlta,
                p.idPuntoVentaDueno, p.PesoKg, p.PrecioPisoUSD, p.PrecioTechoUSD,
                ISNULL((SELECT SUM(s2.Cantidad) FROM VIDA_INVENTARIO_STOCK s2
                        WHERE s2.idBranch=p.idBranch AND s2.idCuenta=p.idCuenta
