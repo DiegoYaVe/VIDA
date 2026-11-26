@@ -1,486 +1,1016 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VIDA — Gestión y delivery para tu negocio</title>
-  <meta name="description" content="Sistema todo-en-uno para gestionar tu negocio, recibir pedidos en línea y coordinar tus entregas. Más ventas, menos caos." />
-  <meta property="og:title" content="VIDA — Tu tienda, en todas partes" />
-  <meta property="og:description" content="POS, pedidos en línea, pagos y delivery en un solo sistema. Simple para tu equipo, conveniente para tus clientes." />
-  <meta property="og:type" content="website" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Comercializadora VIDA — Plataforma de Desarrollo Empresarial</title>
+<meta name="description" content="VIDA convierte personas comunes en empresarios del comercio minorista. Conectamos proveedores, transporte, emprendedores y consumidores en un solo sistema. Por Venezuela, sus productos y su gente." />
+<meta property="og:title" content="Comercializadora VIDA — Por Venezuela, sus productos y su gente" />
+<meta property="og:description" content="La red de distribución inteligente más importante de Venezuela. Crédito, capacitación, producto y tecnología en una sola plataforma." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="assets/symbol.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
-    :root {
-      --blue: #1A6A9A;
-      --green: #27AE60;
-      --blue-light: #E6F1FB;
-      --green-light: #EAF3DE;
-      --amber-light: #FAEEDA;
-      --amber: #BA7517;
-      --coral-light: #FAECE7;
-      --coral: #993C1D;
-      --teal-light: #E1F5EE;
-      --teal: #0F6E56;
-      --purple-light: #EEEDFE;
-      --purple: #534AB7;
-      --bg: #ffffff;
-      --bg-secondary: #F7F9FB;
-      --text: #111827;
-      --text-muted: #6B7280;
-      --border: rgba(0,0,0,0.08);
-      --radius: 14px;
-      --radius-sm: 8px;
-    }
+:root{
+  --navy-900:#06122e;
+  --navy-800:#0a1d44;
+  --navy-700:#102a5c;
+  --navy-600:#173a78;
+  --blue:#1f7ec4;
+  --blue-bright:#2e9bd6;
+  --sky:#7ec8ec;
+  --green:#36a93a;
+  --green-bright:#5cbb3f;
+  --lime:#8cc63f;
+  --ink:#0e1726;
+  --muted:#5b6b82;
+  --muted-light:#8896a8;
+  --bg:#ffffff;
+  --bg-soft:#f3f7fc;
+  --bg-soft2:#eaf2fa;
+  --border:rgba(16,42,92,.10);
+  --radius:18px;
+  --radius-sm:12px;
+  --shadow:0 18px 50px rgba(10,29,68,.10);
+  --shadow-lg:0 30px 80px rgba(10,29,68,.18);
+  --grad:linear-gradient(120deg,var(--blue) 0%,var(--green) 100%);
+  --grad-soft:linear-gradient(120deg,#2e9bd6,#5cbb3f);
+  --maxw:1180px;
+}
 
-    html { scroll-behavior: smooth; }
-    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+html{scroll-behavior:smooth}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);line-height:1.65;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 
-    /* NAV */
-    nav {
-      position: sticky; top: 0; z-index: 100;
-      background: rgba(255,255,255,0.94);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
-      padding: 0 32px;
-      display: flex; align-items: center; justify-content: space-between;
-      height: 64px;
-    }
-    .nav-logo {
-      font-size: 22px; font-weight: 600; letter-spacing: 6px;
-      background: linear-gradient(135deg, var(--blue), var(--green));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    }
-    .nav-links { display: flex; gap: 32px; align-items: center; }
-    .nav-links a { font-size: 14px; color: var(--text-muted); text-decoration: none; transition: color .2s; }
-    .nav-links a:hover { color: var(--blue); }
-    .nav-cta {
-      background: linear-gradient(135deg, var(--blue), var(--green));
-      color: #fff !important; padding: 9px 22px; border-radius: var(--radius-sm);
-      font-weight: 500; font-size: 14px !important;
-    }
-    @media(max-width:600px){ .nav-links { display: none; } }
+h1,h2,h3,h4,.display{font-family:'Montserrat',sans-serif}
 
-    /* HERO */
-    .hero {
-      background: linear-gradient(135deg, var(--blue) 0%, var(--green) 100%);
-      padding: 110px 24px 130px; text-align: center;
-      position: relative; overflow: hidden;
-    }
-    .hero::before {
-      content:''; position:absolute; top:-80px; right:-80px;
-      width:340px; height:340px; border-radius:50%; background:rgba(255,255,255,0.06);
-    }
-    .hero::after {
-      content:''; position:absolute; bottom:-100px; left:-60px;
-      width:420px; height:420px; border-radius:50%; background:rgba(255,255,255,0.04);
-    }
-    .hero-inner { position:relative; z-index:1; max-width:700px; margin:0 auto; }
-    .hero-logo { font-size:84px; font-weight:600; color:#fff; letter-spacing:18px; line-height:1; }
-    .hero-tag {
-      display:inline-flex; align-items:center; gap:8px; margin-top:18px;
-      background:rgba(255,255,255,0.16); border:1px solid rgba(255,255,255,0.28);
-      border-radius:20px; padding:6px 20px; font-size:13px; color:rgba(255,255,255,0.9);
-    }
-    .hero h1 { margin-top:28px; font-size:32px; font-weight:500; color:#fff; line-height:1.35; }
-    .hero-sub { margin-top:16px; font-size:17px; color:rgba(255,255,255,0.78); line-height:1.7; }
-    .hero-ctas { display:flex; gap:12px; justify-content:center; margin-top:42px; flex-wrap:wrap; }
-    .btn-white {
-      background:#fff; color:var(--blue); padding:15px 34px;
-      border-radius:var(--radius-sm); font-size:15px; font-weight:600;
-      text-decoration:none; transition:transform .15s, box-shadow .15s;
-    }
-    .btn-white:hover { transform:translateY(-2px); box-shadow:0 8px 28px rgba(0,0,0,0.18); }
-    .btn-ghost {
-      background:rgba(255,255,255,0.12); color:#fff; padding:15px 34px;
-      border-radius:var(--radius-sm); font-size:15px; font-weight:500;
-      text-decoration:none; border:1px solid rgba(255,255,255,0.35); transition:background .2s;
-    }
-    .btn-ghost:hover { background:rgba(255,255,255,0.22); }
-    .pills { display:flex; gap:8px; justify-content:center; margin-top:38px; flex-wrap:wrap; }
-    .pill {
-      background:rgba(255,255,255,0.14); border:1px solid rgba(255,255,255,0.22);
-      border-radius:20px; padding:6px 16px; font-size:12px; color:rgba(255,255,255,0.88);
-    }
+/* ---------- utilities ---------- */
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 26px}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--blue);margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.eyebrow.center{justify-content:center}
+.eyebrow::before{content:'';width:26px;height:2px;background:var(--grad);border-radius:2px}
+.eyebrow.center::before{display:none}
+.gtext{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.reveal{opacity:0;transform:translateY(28px);transition:opacity .7s cubic-bezier(.2,.7,.3,1),transform .7s cubic-bezier(.2,.7,.3,1)}
+.reveal.in{opacity:1;transform:none}
+.section{padding:96px 0}
+.section-head{max-width:680px;margin:0 auto 56px;text-align:center}
+.section-head h2{font-size:clamp(28px,4vw,42px);font-weight:800;line-height:1.12;letter-spacing:-.5px}
+.section-head p{margin-top:16px;color:var(--muted);font-size:17px}
+.kicker{font-size:13px;color:var(--muted-light);letter-spacing:.5px}
 
-    /* SECTIONS */
-    .section { padding:88px 24px; max-width:840px; margin:0 auto; }
-    .section-center { text-align:center; }
-    .label {
-      font-size:11px; font-weight:600; letter-spacing:2.5px;
-      text-transform:uppercase; color:var(--blue); margin-bottom:12px;
-    }
-    .section h2 { font-size:28px; font-weight:500; color:var(--text); line-height:1.35; margin-bottom:14px; }
-    .section p { font-size:16px; color:var(--text-muted); line-height:1.75; margin-bottom:40px; }
-    .divider { height:1px; background:var(--border); max-width:840px; margin:0 auto; }
+/* ---------- NAV ---------- */
+nav{position:sticky;top:0;z-index:120;background:rgba(255,255,255,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);transition:box-shadow .3s}
+nav.scrolled{box-shadow:0 6px 30px rgba(10,29,68,.07)}
+.nav-in{max-width:var(--maxw);margin:0 auto;height:72px;padding:0 26px;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:11px;text-decoration:none}
+.brand img{height:48px;width:auto;display:block}
+.brand-name{font-family:'Montserrat';font-weight:800;font-size:21px;letter-spacing:3px;color:var(--navy-800)}
+.nav-links{display:flex;gap:30px;align-items:center}
+.nav-links a{font-size:14.5px;color:var(--muted);text-decoration:none;font-weight:500;transition:color .2s}
+.nav-links a:hover{color:var(--blue)}
+.nav-cta{background:var(--grad);color:#fff!important;padding:11px 22px;border-radius:10px;font-weight:600;font-size:14px!important;box-shadow:0 8px 20px rgba(31,126,196,.28);transition:transform .15s,box-shadow .15s}
+.nav-cta:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(31,126,196,.4)}
+@media(max-width:880px){.nav-links a:not(.nav-cta){display:none}}
 
-    /* STATS */
-    .stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; }
-    .stat-card {
-      background:var(--bg-secondary); border-radius:var(--radius); padding:28px 16px;
-      text-align:center; border:1px solid var(--border);
-    }
-    .stat-num {
-      font-size:34px; font-weight:600;
-      background:linear-gradient(135deg,var(--blue),var(--green));
-      -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-    }
-    .stat-label { font-size:13px; color:var(--text-muted); margin-top:6px; line-height:1.4; }
+/* ---------- HERO ---------- */
+.hero{position:relative;background:radial-gradient(1200px 600px at 80% -10%,var(--navy-600) 0%,transparent 55%),radial-gradient(900px 700px at 0% 110%,#0d2455 0%,transparent 50%),linear-gradient(160deg,var(--navy-900),var(--navy-800) 60%,var(--navy-700));overflow:hidden}
+.hero-grid{max-width:var(--maxw);margin:0 auto;padding:70px 26px 90px;display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;position:relative;z-index:2}
+.hero-badge{display:inline-flex;align-items:center;gap:9px;background:rgba(126,200,236,.12);border:1px solid rgba(126,200,236,.28);border-radius:30px;padding:7px 16px;font-size:12.5px;color:var(--sky);letter-spacing:.4px;font-weight:500}
+.hero-badge .dot{width:7px;height:7px;border-radius:50%;background:var(--green-bright);box-shadow:0 0 0 4px rgba(92,187,63,.25)}
+.hero h1{margin-top:24px;font-size:clamp(40px,6.2vw,72px);font-weight:900;line-height:.98;color:#fff;letter-spacing:-1px}
+.hero h1 .vida{display:block;font-size:clamp(64px,11vw,124px);letter-spacing:6px;background:linear-gradient(120deg,#8AD0EE 0%,#5cbb3f 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
+.hero-sub{margin-top:22px;font-size:18px;color:rgba(255,255,255,.74);max-width:480px;line-height:1.7}
+.hero-sub b{color:#fff;font-weight:600}
+.hero-ctas{display:flex;gap:13px;margin-top:34px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:9px;text-decoration:none;font-weight:600;border-radius:11px;transition:transform .15s,box-shadow .2s,background .2s;cursor:pointer;border:none}
+.btn-primary{background:var(--grad);color:#fff;padding:15px 30px;font-size:15.5px;box-shadow:0 14px 34px rgba(54,169,58,.34)}
+.btn-primary:hover{transform:translateY(-3px);box-shadow:0 20px 44px rgba(54,169,58,.46)}
+.btn-ghost{background:rgba(255,255,255,.08);color:#fff;padding:15px 28px;font-size:15px;border:1px solid rgba(255,255,255,.22)}
+.btn-ghost:hover{background:rgba(255,255,255,.16)}
+.hero-pillars{display:flex;gap:26px;margin-top:42px;flex-wrap:wrap}
+.hero-pillar{display:flex;align-items:center;gap:10px;color:rgba(255,255,255,.78);font-size:13.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+.hero-pillar svg{width:22px;height:22px;color:var(--sky)}
+.hero-pillar:last-child{color:var(--green-bright)}
+/* hero visual */
+.hero-visual{position:relative}
+.hero-photo{position:relative;border-radius:26px;overflow:hidden;box-shadow:0 40px 90px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1)}
+.hero-photo img{width:100%;display:block;aspect-ratio:4/4.4;object-fit:cover;object-position:center top}
+.hero-photo::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(6,18,46,.55))}
+.float-card{position:absolute;background:rgba(255,255,255,.96);backdrop-filter:blur(8px);border-radius:15px;padding:14px 18px;box-shadow:var(--shadow-lg);display:flex;align-items:center;gap:12px}
+.float-card .fc-icon{width:40px;height:40px;border-radius:11px;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0}
+.float-card .fc-num{font-family:'Montserrat';font-weight:800;font-size:20px;color:var(--navy-800);line-height:1}
+.float-card .fc-label{font-size:11.5px;color:var(--muted);margin-top:2px}
+.fc-1{top:24px;left:-26px;animation:float 5s ease-in-out infinite}
+.fc-2{bottom:34px;right:-22px;animation:float 5s ease-in-out infinite .8s}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+.hero-wave{position:absolute;bottom:-1px;left:0;width:100%;line-height:0;z-index:3}
+.hero-wave svg{width:100%;height:70px;display:block}
+@media(max-width:860px){
+  .hero-grid{grid-template-columns:1fr;padding:54px 26px 80px}
+  .hero-visual{display:none}
+}
 
-    /* APPS */
-    .apps-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:20px; }
-    .app-card {
-      background:var(--bg); border:1px solid var(--border); border-radius:var(--radius);
-      padding:36px 24px; text-align:center; transition:box-shadow .2s, transform .2s;
-    }
-    .app-card:hover { box-shadow:0 10px 40px rgba(0,0,0,0.09); transform:translateY(-4px); }
-    .app-circle {
-      width:68px; height:68px; border-radius:50%;
-      display:flex; align-items:center; justify-content:center;
-      margin:0 auto 20px; font-size:30px;
-    }
-    .app-circle.blue { background:var(--blue-light); color:var(--blue); }
-    .app-circle.green { background:var(--green-light); color:var(--green); }
-    .app-circle.amber { background:var(--amber-light); color:var(--amber); }
-    .app-name { font-size:17px; font-weight:600; margin-bottom:10px; }
-    .app-desc { font-size:14px; color:var(--text-muted); line-height:1.65; }
+/* ---------- LOGOS / strip stats ---------- */
+.strip{background:var(--bg-soft);border-bottom:1px solid var(--border)}
+.strip-in{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;padding:38px 0}
+.strip-item{text-align:center}
+.strip-num{font-family:'Montserrat';font-weight:900;font-size:clamp(28px,4vw,40px);background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
+.strip-label{font-size:13px;color:var(--muted);margin-top:8px;line-height:1.4}
+@media(max-width:680px){.strip-in{grid-template-columns:repeat(2,1fr);gap:28px 20px}}
 
-    /* FEATURES */
-    .feat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:16px; }
-    .feat-card {
-      background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius);
-      padding:26px; transition:border-color .2s;
-    }
-    .feat-card:hover { border-color:rgba(26,106,154,0.3); }
-    .feat-icon {
-      width:46px; height:46px; border-radius:var(--radius-sm);
-      display:flex; align-items:center; justify-content:center;
-      font-size:22px; margin-bottom:16px;
-    }
-    .feat-icon.blue { background:var(--blue-light); color:var(--blue); }
-    .feat-icon.green { background:var(--green-light); color:var(--green); }
-    .feat-icon.amber { background:var(--amber-light); color:var(--amber); }
-    .feat-icon.coral { background:var(--coral-light); color:var(--coral); }
-    .feat-icon.teal { background:var(--teal-light); color:var(--teal); }
-    .feat-icon.purple { background:var(--purple-light); color:var(--purple); }
-    .feat-title { font-size:15px; font-weight:600; margin-bottom:8px; }
-    .feat-desc { font-size:13px; color:var(--text-muted); line-height:1.65; }
+/* ---------- PROBLEMA ---------- */
+.problema{background:linear-gradient(160deg,var(--navy-900),var(--navy-800));color:#fff;position:relative;overflow:hidden}
+.problema::before{content:'';position:absolute;top:-120px;right:-80px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(46,155,214,.16),transparent 70%)}
+.problema-grid{display:grid;grid-template-columns:1fr 1fr;gap:54px;align-items:center;position:relative;z-index:2}
+.problema h2{font-size:clamp(30px,4.5vw,48px);font-weight:900;line-height:1.05;letter-spacing:-.5px}
+.problema h2 .roto{color:#ff6b5e}
+.problema .lead{margin-top:22px;font-size:19px;color:rgba(255,255,255,.72);line-height:1.6}
+.problema .lead b{color:#fff}
+.prob-points{margin-top:34px;display:flex;flex-direction:column;gap:16px}
+.prob-point{display:flex;gap:15px;align-items:flex-start;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:18px 20px}
+.prob-point .pp-ic{width:42px;height:42px;border-radius:11px;background:rgba(255,107,94,.16);color:#ff8b7e;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.prob-point .pp-ic.ok{background:rgba(92,187,63,.16);color:var(--green-bright)}
+.prob-point p{font-size:15.5px;color:rgba(255,255,255,.86)}
+.prob-point p b{color:#fff;font-weight:600}
+.prob-visual{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:30px}
+.prob-visual .pv-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.pv-title{font-size:13px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:600}
+.pv-tag{font-size:12px;color:#ff6b5e;font-weight:700;display:flex;align-items:center;gap:6px}
+.chart-fall{display:flex;align-items:flex-end;gap:10px;height:170px;margin-top:18px}
+.chart-fall .cf-bar{flex:1;background:linear-gradient(180deg,rgba(255,107,94,.85),rgba(255,107,94,.25));border-radius:6px 6px 0 0;position:relative;transition:height 1.1s cubic-bezier(.3,.8,.4,1)}
+.chart-fall .cf-bar span{position:absolute;bottom:-22px;left:0;right:0;text-align:center;font-size:11px;color:rgba(255,255,255,.4)}
+@media(max-width:820px){.problema-grid{grid-template-columns:1fr;gap:36px}}
 
-    /* FLOW */
-    .flow { display:flex; align-items:flex-start; flex-wrap:wrap; }
-    .flow-step { flex:1; min-width:120px; text-align:center; padding:20px 8px; position:relative; }
-    .flow-step:not(:last-child)::after {
-      content:'›'; position:absolute; top:28px; right:-6px;
-      font-size:22px; color:#CBD5E0;
-    }
-    .flow-num {
-      width:38px; height:38px; border-radius:50%;
-      background:linear-gradient(135deg,var(--blue),var(--green));
-      color:#fff; display:flex; align-items:center; justify-content:center;
-      font-size:15px; font-weight:600; margin:0 auto 12px;
-    }
-    .flow-label-title { font-size:13px; font-weight:600; margin-bottom:4px; }
-    .flow-label-sub { font-size:12px; color:var(--text-muted); line-height:1.5; }
+/* ---------- MODELO ---------- */
+.modelo-hub{display:grid;grid-template-columns:1fr auto 1fr;gap:24px;align-items:center;max-width:980px;margin:0 auto}
+.hub-col{display:flex;flex-direction:column;gap:22px}
+.hub-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow);transition:transform .25s,box-shadow .25s;position:relative;overflow:hidden}
+.hub-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--grad)}
+.hub-card:hover{transform:translateY(-5px);box-shadow:var(--shadow-lg)}
+.hub-card .hc-top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.hub-card .hc-ic{width:46px;height:46px;border-radius:12px;background:var(--bg-soft2);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.hub-card h4{font-size:16px;font-weight:800;letter-spacing:.3px}
+.hub-card .hc-n{font-size:12px;color:var(--green);font-weight:700}
+.hub-card p{font-size:13.5px;color:var(--muted);line-height:1.55}
+.hub-center{width:200px;height:200px;border-radius:50%;background:linear-gradient(160deg,var(--navy-800),var(--navy-700));display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 24px 60px rgba(10,29,68,.34),inset 0 0 0 8px rgba(126,200,236,.12);position:relative}
+.hub-center::after{content:'';position:absolute;inset:-14px;border-radius:50%;border:2px dashed rgba(46,155,214,.3);animation:spin 26s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hub-center img{height:64px;width:auto;margin-bottom:10px}
+.hub-center .hcn{font-family:'Montserrat';font-weight:900;font-size:30px;letter-spacing:5px;color:#fff;line-height:1}
+.hub-center .hcs{font-size:9px;letter-spacing:1.5px;color:var(--sky);margin-top:6px;text-transform:uppercase}
+.enablers{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:54px;max-width:980px;margin-left:auto;margin-right:auto}
+.enabler{text-align:center;padding:22px 16px;border-radius:14px;background:var(--bg-soft);border:1px solid var(--border)}
+.enabler .en-ic{width:48px;height:48px;border-radius:50%;margin:0 auto 12px;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center}
+.enabler h5{font-size:14px;font-weight:800;margin-bottom:5px}
+.enabler p{font-size:12px;color:var(--muted);line-height:1.5}
+@media(max-width:820px){
+  .modelo-hub{grid-template-columns:1fr}
+  .hub-center{margin:6px auto;width:160px;height:160px}
+  .enablers{grid-template-columns:repeat(2,1fr)}
+}
 
-    /* BENEFICIOS — lista con check */
-    .benefits-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; }
-    .benefit-row {
-      display:flex; align-items:flex-start; gap:12px;
-      padding:16px; background:var(--bg-secondary);
-      border:1px solid var(--border); border-radius:var(--radius-sm);
-    }
-    .check-circle {
-      width:28px; height:28px; border-radius:50%; flex-shrink:0;
-      background:var(--green-light); color:var(--green);
-      display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:600;
-    }
-    .benefit-text { font-size:14px; color:var(--text); line-height:1.55; }
-    .benefit-text strong { font-weight:600; }
+/* ---------- MISION / VISION ---------- */
+.mv{background:var(--bg-soft)}
+.mv-row{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;margin-bottom:40px}
+.mv-row:last-child{margin-bottom:0}
+.mv-row.rev .mv-text{order:2}
+.mv-photo{border-radius:22px;overflow:hidden;box-shadow:var(--shadow-lg);position:relative;aspect-ratio:16/11}
+.mv-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.mv-photo .mv-chip{position:absolute;left:18px;bottom:18px;background:rgba(255,255,255,.95);border-radius:12px;padding:10px 16px;font-family:'Montserrat';font-weight:800;color:var(--navy-800);font-size:14px;display:flex;align-items:center;gap:8px;box-shadow:var(--shadow)}
+.mv-text h3{font-size:clamp(26px,3.5vw,36px);font-weight:900;letter-spacing:-.5px}
+.mv-text h3 .gtext{display:inline}
+.mv-text p{margin-top:16px;font-size:16.5px;color:var(--muted);line-height:1.7}
+.mv-text p b{color:var(--ink);font-weight:600}
+.mv-vision-num{display:flex;gap:28px;margin-top:24px;flex-wrap:wrap}
+.mvn{}
+.mvn .n{font-family:'Montserrat';font-weight:900;font-size:34px;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
+.mvn .l{font-size:12.5px;color:var(--muted);margin-top:4px}
+@media(max-width:820px){.mv-row{grid-template-columns:1fr;gap:24px}.mv-row.rev .mv-text{order:0}}
 
-    /* TESTIMONIAL / QUOTE */
-    .quote-band { background:var(--bg-secondary); padding:72px 24px; text-align:center; }
-    .quote-inner { max-width:640px; margin:0 auto; }
-    .quote-mark { font-size:64px; line-height:1; color:var(--blue); opacity:.25; font-weight:700; }
-    .quote-text { font-size:20px; font-weight:500; color:var(--text); line-height:1.55; margin-top:-16px; }
-    .quote-author { margin-top:20px; font-size:14px; color:var(--text-muted); }
+/* ---------- CULTURA ---------- */
+.cultura-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.cul-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:34px 28px;box-shadow:var(--shadow);transition:transform .25s;position:relative;overflow:hidden}
+.cul-card:hover{transform:translateY(-6px)}
+.cul-card .cul-glow{position:absolute;top:-40px;right:-40px;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,rgba(46,155,214,.12),transparent 70%)}
+.cul-ic{width:60px;height:60px;border-radius:16px;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:18px}
+.cul-card h3{font-size:21px;font-weight:800;margin-bottom:14px}
+.cul-tags{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+.cul-tag{background:var(--bg-soft2);color:var(--blue);font-size:11.5px;font-weight:600;padding:5px 11px;border-radius:20px}
+.cul-card p{font-size:13.5px;color:var(--muted);line-height:1.6}
+@media(max-width:820px){.cultura-grid{grid-template-columns:1fr}}
 
-    /* CTA */
-    .cta-band {
-      background:linear-gradient(135deg,var(--blue) 0%,var(--green) 100%);
-      padding:88px 24px; text-align:center;
-    }
-    .cta-band h2 { font-size:30px; font-weight:500; color:#fff; margin-bottom:14px; }
-    .cta-band p { font-size:16px; color:rgba(255,255,255,0.78); margin-bottom:40px; max-width:500px; margin-left:auto; margin-right:auto; line-height:1.7; }
+/* ---------- FLUJO ---------- */
+.flujo-track{display:grid;grid-template-columns:repeat(4,1fr);gap:0;position:relative;margin-top:20px}
+.flujo-step{text-align:center;padding:0 16px;position:relative}
+.flujo-step:not(:last-child)::after{content:'';position:absolute;top:38px;right:-10px;width:20px;height:20px;border-top:2px solid var(--sky);border-right:2px solid var(--sky);transform:rotate(45deg)}
+.flujo-ic{width:78px;height:78px;border-radius:50%;margin:0 auto 18px;background:#fff;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--blue);box-shadow:var(--shadow);position:relative}
+.flujo-ic .fn{position:absolute;top:-8px;right:-8px;width:26px;height:26px;border-radius:50%;background:var(--grad);color:#fff;font-family:'Montserrat';font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center}
+.flujo-step h4{font-size:15.5px;font-weight:800;margin-bottom:7px}
+.flujo-step p{font-size:13px;color:var(--muted);line-height:1.55}
+@media(max-width:760px){.flujo-track{grid-template-columns:1fr 1fr;gap:36px 10px}.flujo-step:not(:last-child)::after{display:none}}
 
-    /* FOOTER */
-    footer { background:#111827; padding:52px 24px 36px; text-align:center; }
-    .footer-logo { font-size:30px; font-weight:600; letter-spacing:10px; color:#fff; }
-    .footer-sub { font-size:14px; color:rgba(255,255,255,0.45); margin-top:10px; }
-    .footer-links { display:flex; gap:28px; justify-content:center; margin-top:28px; flex-wrap:wrap; }
-    .footer-links a { font-size:13px; color:rgba(255,255,255,0.45); text-decoration:none; transition:color .2s; }
-    .footer-links a:hover { color:#fff; }
-    .footer-copy { margin-top:36px; font-size:12px; color:rgba(255,255,255,0.2); }
+/* ---------- INVERSIONISTAS ---------- */
+.inv{background:linear-gradient(165deg,var(--navy-900),var(--navy-800) 70%);color:#fff;position:relative;overflow:hidden}
+.inv::before{content:'';position:absolute;top:10%;left:-10%;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(54,169,58,.12),transparent 70%)}
+.inv .section-head h2{color:#fff}
+.inv .section-head p{color:rgba(255,255,255,.66)}
+.inv-hero-num{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:44px}
+.ihn{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:30px 24px;text-align:center;position:relative;overflow:hidden}
+.ihn .big{font-family:'Montserrat';font-weight:900;font-size:clamp(38px,6vw,56px);line-height:1;background:linear-gradient(120deg,#8AD0EE,#5cbb3f);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.ihn .big small{font-size:24px}
+.ihn .lab{margin-top:12px;font-size:14px;color:rgba(255,255,255,.74);font-weight:500}
+.inv-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.inv-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:26px;transition:transform .25s,background .25s}
+.inv-card:hover{transform:translateY(-5px);background:rgba(255,255,255,.08)}
+.inv-card .ic-h{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.inv-card .ic-ic{width:46px;height:46px;border-radius:12px;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0}
+.inv-card h4{font-size:16px;font-weight:800;color:#fff}
+.inv-card ul{list-style:none;display:flex;flex-direction:column;gap:11px}
+.inv-card li{display:flex;gap:10px;font-size:13.5px;color:rgba(255,255,255,.78);line-height:1.5}
+.inv-card li svg{width:17px;height:17px;color:var(--green-bright);flex-shrink:0;margin-top:2px}
+@media(max-width:820px){.inv-hero-num{grid-template-columns:1fr;gap:14px}.inv-cards{grid-template-columns:1fr}}
 
-    @media(max-width:640px){
-      .hero-logo { font-size:58px; letter-spacing:12px; }
-      .hero h1 { font-size:23px; }
-      .section h2 { font-size:23px; }
-      .flow-step:not(:last-child)::after { display:none; }
-    }
-  </style>
+/* ---------- FINANCIERA ---------- */
+.fin-top{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;margin-bottom:60px}
+.fin-seed{background:var(--grad);border-radius:22px;padding:38px;color:#fff;box-shadow:0 24px 60px rgba(31,126,196,.3);position:relative;overflow:hidden}
+.fin-seed::after{content:'';position:absolute;bottom:-60px;right:-40px;width:220px;height:220px;border-radius:50%;background:rgba(255,255,255,.08)}
+.fin-seed .fs-lab{font-size:13px;letter-spacing:1.5px;text-transform:uppercase;opacity:.85;font-weight:600}
+.fin-seed .fs-big{font-family:'Montserrat';font-weight:900;font-size:clamp(40px,7vw,60px);line-height:1;margin:8px 0}
+.fin-seed .fs-eq{font-size:16px;opacity:.92;font-weight:500}
+.fin-seed .fs-eq b{font-weight:800}
+.fin-seed .fs-divide{height:1px;background:rgba(255,255,255,.25);margin:22px 0}
+.fin-seed .fs-row{display:flex;justify-content:space-between;font-size:14px;padding:6px 0}
+.fin-seed .fs-row b{font-weight:800;font-family:'Montserrat'}
+.fin-points{display:flex;flex-direction:column;gap:16px}
+.fin-point{display:flex;gap:15px;align-items:flex-start}
+.fin-point .fpn{font-family:'Montserrat';font-weight:900;font-size:30px;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;line-height:1;flex-shrink:0;min-width:74px}
+.fin-point h4{font-size:15.5px;font-weight:800}
+.fin-point p{font-size:13.5px;color:var(--muted);margin-top:2px}
+/* chart */
+.fin-chart-wrap{background:var(--bg-soft);border:1px solid var(--border);border-radius:22px;padding:34px 30px;box-shadow:var(--shadow)}
+.fcw-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px;flex-wrap:wrap;gap:10px}
+.fcw-head h3{font-size:20px;font-weight:800}
+.fcw-legend{display:flex;gap:18px}
+.fcw-legend span{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)}
+.fcw-legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.chart{display:flex;align-items:flex-end;gap:14px;height:240px;margin-top:30px;padding-top:10px;border-bottom:2px solid var(--border)}
+.chart-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:0;position:relative}
+.chart-bars{display:flex;align-items:flex-end;gap:5px;height:100%;width:100%;justify-content:center}
+.bar{width:26px;border-radius:6px 6px 0 0;transition:height 1.2s cubic-bezier(.25,.8,.35,1);position:relative}
+.bar.tiendas{background:linear-gradient(180deg,var(--sky),var(--blue))}
+.bar.util{background:linear-gradient(180deg,var(--green-bright),var(--green))}
+.bar .bval{position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-size:10.5px;font-weight:700;color:var(--navy-700);white-space:nowrap;opacity:0;transition:opacity .5s .8s}
+.bar.show .bval{opacity:1}
+.chart-col .cx{margin-top:10px;font-size:12px;color:var(--muted);font-weight:600}
+.fin-foot{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:44px}
+.ff{background:#fff;border:1px solid var(--border);border-radius:14px;padding:22px 18px;text-align:center;box-shadow:var(--shadow)}
+.ff .n{font-family:'Montserrat';font-weight:900;font-size:26px;color:var(--navy-800);line-height:1}
+.ff .l{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.4}
+.fin-note{text-align:center;margin-top:30px;font-size:13px;color:var(--muted-light)}
+@media(max-width:820px){.fin-top{grid-template-columns:1fr;gap:26px}.fin-foot{grid-template-columns:repeat(2,1fr)}.bar{width:16px}.bar .bval{display:none}}
+
+/* ---------- FASES timeline ---------- */
+.fases{background:var(--bg-soft)}
+.fase-line{position:relative;max-width:880px;margin:0 auto;padding-left:6px}
+.fase-line::before{content:'';position:absolute;left:27px;top:14px;bottom:14px;width:3px;background:linear-gradient(180deg,var(--blue),var(--green))}
+.fase{position:relative;padding:0 0 30px 76px}
+.fase:last-child{padding-bottom:0}
+.fase-dot{position:absolute;left:14px;top:0;width:30px;height:30px;border-radius:50%;background:#fff;border:3px solid var(--blue);display:flex;align-items:center;justify-content:center;z-index:2}
+.fase-dot::after{content:'';width:11px;height:11px;border-radius:50%;background:var(--grad)}
+.fase.done .fase-dot{border-color:var(--green)}
+.fase-card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:22px 24px;box-shadow:var(--shadow);transition:transform .2s}
+.fase-card:hover{transform:translateX(5px)}
+.fase-card .fc-top{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.fase-card h4{font-size:17px;font-weight:800}
+.fase-card h4 .ph{color:var(--blue)}
+.fase-badge{font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;letter-spacing:.5px;text-transform:uppercase}
+.fase-badge.done{background:rgba(54,169,58,.13);color:var(--green)}
+.fase-badge.now{background:rgba(46,155,214,.13);color:var(--blue)}
+.fase-badge.next{background:var(--bg-soft2);color:var(--muted)}
+.fase-card p{font-size:14px;color:var(--muted);line-height:1.55}
+.fase-card .fc-meta{display:flex;gap:18px;margin-top:10px;flex-wrap:wrap}
+.fase-card .fc-meta span{font-size:12.5px;color:var(--navy-700);font-weight:600;display:flex;align-items:center;gap:6px}
+.fase-card .fc-meta span svg{width:15px;height:15px;color:var(--green)}
+/* capital progress */
+.cap-bar{margin-top:14px}
+.cap-bar .cb-top{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px;font-weight:600}
+.cap-bar .cb-track{height:9px;border-radius:10px;background:var(--bg-soft2);overflow:hidden}
+.cap-bar .cb-fill{height:100%;border-radius:10px;background:var(--grad);width:0;transition:width 1.4s cubic-bezier(.25,.8,.35,1)}
+
+/* ---------- EXPANSION ---------- */
+.exp-stages{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:10px}
+.exp-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:30px 26px;box-shadow:var(--shadow);position:relative;overflow:hidden;transition:transform .25s}
+.exp-card:hover{transform:translateY(-6px)}
+.exp-card .exn{position:absolute;top:14px;right:20px;font-family:'Montserrat';font-weight:900;font-size:60px;color:var(--bg-soft2);line-height:1;z-index:0}
+.exp-card .ex-tag{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--green);position:relative;z-index:1}
+.exp-card h3{font-size:21px;font-weight:800;margin:6px 0 4px;position:relative;z-index:1}
+.exp-card .ex-sub{font-size:13px;color:var(--muted-light);position:relative;z-index:1}
+.exp-card .ex-big{font-family:'Montserrat';font-weight:900;font-size:42px;background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin:18px 0 2px;line-height:1;position:relative;z-index:1}
+.exp-card .ex-big-l{font-size:13px;color:var(--muted);position:relative;z-index:1}
+.exp-card ul{list-style:none;margin-top:16px;display:flex;flex-direction:column;gap:8px;position:relative;z-index:1}
+.exp-card li{font-size:13px;color:var(--muted);display:flex;gap:8px}
+.exp-card li svg{width:15px;height:15px;color:var(--blue);flex-shrink:0;margin-top:3px}
+.exp-final{margin-top:30px;background:linear-gradient(120deg,var(--navy-800),var(--navy-700));border-radius:20px;padding:34px;display:flex;align-items:center;justify-content:center;gap:20px;flex-wrap:wrap;text-align:center;color:#fff}
+.exp-final .efn{font-family:'Montserrat';font-weight:900;font-size:clamp(40px,8vw,68px);background:linear-gradient(120deg,#8AD0EE,#5cbb3f);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
+.exp-final .efl{text-align:left;font-size:16px;color:rgba(255,255,255,.8);max-width:340px}
+.exp-final .efl b{color:#fff;font-weight:700}
+@media(max-width:820px){.exp-stages{grid-template-columns:1fr}}
+
+/* ---------- IMPACTO ---------- */
+.impacto{background:linear-gradient(160deg,var(--navy-900),var(--navy-800));color:#fff;text-align:center}
+.impacto .section-head h2{color:#fff}
+.imp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.imp-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:36px 26px}
+.imp-card .imp-ic{width:64px;height:64px;border-radius:18px;margin:0 auto 18px;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff}
+.imp-card .imp-n{font-family:'Montserrat';font-weight:900;font-size:clamp(34px,5vw,46px);background:linear-gradient(120deg,#8AD0EE,#5cbb3f);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
+.imp-card p{margin-top:12px;font-size:14.5px;color:rgba(255,255,255,.74);line-height:1.55}
+.imp-quote{margin-top:44px;font-family:'Montserrat';font-weight:700;font-size:clamp(20px,3vw,30px);line-height:1.4;max-width:760px;margin-left:auto;margin-right:auto}
+.imp-quote .gtext{background:linear-gradient(120deg,#8AD0EE,#5cbb3f);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+@media(max-width:820px){.imp-grid{grid-template-columns:1fr}}
+
+/* ---------- CTA ---------- */
+.cta{background:var(--grad);text-align:center;color:#fff;position:relative;overflow:hidden}
+.cta::before{content:'';position:absolute;top:-100px;left:-60px;width:340px;height:340px;border-radius:50%;background:rgba(255,255,255,.08)}
+.cta::after{content:'';position:absolute;bottom:-120px;right:-60px;width:400px;height:400px;border-radius:50%;background:rgba(255,255,255,.07)}
+.cta-in{position:relative;z-index:2;max-width:640px;margin:0 auto}
+.cta img{height:72px;width:auto;margin-bottom:20px;filter:drop-shadow(0 8px 20px rgba(0,0,0,.2))}
+.cta h2{font-size:clamp(30px,5vw,46px);font-weight:900;line-height:1.1;letter-spacing:-.5px}
+.cta p{margin-top:18px;font-size:17px;color:rgba(255,255,255,.88);line-height:1.6}
+.cta-btns{display:flex;gap:14px;justify-content:center;margin-top:34px;flex-wrap:wrap}
+.btn-white{background:#fff;color:var(--blue);padding:16px 34px;font-size:16px;font-weight:700;box-shadow:0 14px 34px rgba(0,0,0,.18)}
+.btn-white:hover{transform:translateY(-3px)}
+.btn-outline-w{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.4);padding:16px 32px;font-size:15px}
+.btn-outline-w:hover{background:rgba(255,255,255,.2)}
+
+/* ---------- FOOTER ---------- */
+footer{background:var(--navy-900);color:#fff;padding:60px 0 34px}
+.foot-grid{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:40px;padding-bottom:40px;border-bottom:1px solid rgba(255,255,255,.1)}
+.foot-brand .fb-top{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.foot-brand img{height:54px;width:auto}
+.foot-brand .fb-name{font-family:'Montserrat';font-weight:800;font-size:24px;letter-spacing:4px}
+.foot-brand p{font-size:14px;color:rgba(255,255,255,.55);max-width:340px;line-height:1.6}
+.foot-col h5{font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--sky);margin-bottom:16px}
+.foot-col a{display:block;font-size:14px;color:rgba(255,255,255,.6);text-decoration:none;margin-bottom:10px;transition:color .2s}
+.foot-col a:hover{color:#fff}
+.foot-bottom{display:flex;justify-content:space-between;align-items:center;padding-top:26px;flex-wrap:wrap;gap:12px}
+.foot-bottom p{font-size:12.5px;color:rgba(255,255,255,.35)}
+.foot-tags{display:flex;gap:18px}
+.foot-tags span{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.4);font-weight:600}
+@media(max-width:760px){.foot-grid{grid-template-columns:1fr;gap:30px}}
+
+/* ---------- NAV APP BUTTON ---------- */
+.nav-app{display:inline-flex;align-items:center;gap:7px;color:var(--blue)!important;font-weight:700;font-size:14px!important;padding:10px 16px;border:1.5px solid rgba(31,126,196,.35);border-radius:10px;transition:background .2s,border-color .2s,color .2s}
+.nav-app:hover{background:var(--bg-soft2);border-color:var(--blue)}
+.nav-app svg{flex-shrink:0}
+
+/* ---------- LIVE DOT ---------- */
+.live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green-bright);margin-right:6px;box-shadow:0 0 0 0 rgba(92,187,63,.6);animation:pulse 1.8s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(92,187,63,.55)}70%{box-shadow:0 0 0 7px rgba(92,187,63,0)}100%{box-shadow:0 0 0 0 rgba(92,187,63,0)}}
+
+/* ---------- SPLIT SECTIONS (Proveedores / Tiendas) ---------- */
+.split.alt{background:var(--bg-soft)}
+.split-grid{display:grid;grid-template-columns:1fr 1fr;gap:54px;align-items:center}
+.split-photo{position:relative;border-radius:22px;overflow:hidden;box-shadow:var(--shadow-lg);aspect-ratio:4/3.5}
+.split-photo img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
+.split-chip{position:absolute;left:18px;bottom:18px;background:rgba(255,255,255,.96);border-radius:12px;padding:10px 16px;font-family:'Montserrat';font-weight:800;color:var(--navy-800);font-size:13.5px;display:flex;align-items:center;gap:8px;box-shadow:var(--shadow)}
+.split-text h2{font-size:clamp(26px,3.8vw,40px);font-weight:900;letter-spacing:-.5px;line-height:1.1}
+.split-text>p{margin-top:14px;color:var(--muted);font-size:16px;line-height:1.7}
+.split-feats{margin-top:26px;display:flex;flex-direction:column;gap:16px}
+.split-feat{display:flex;gap:14px;align-items:flex-start}
+.split-feat .sf-ic{width:46px;height:46px;border-radius:12px;background:var(--bg-soft2);color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.split.alt .split-feat .sf-ic{background:#fff;border:1px solid var(--border)}
+.split-feat h4{font-size:15px;font-weight:800;margin-bottom:2px}
+.split-feat p{font-size:13.5px;color:var(--muted);line-height:1.55}
+.split-text .btn{margin-top:28px}
+@media(max-width:820px){.split-grid{grid-template-columns:1fr;gap:28px}.split-rev .split-photo{order:-1}}
+
+/* ---------- FOOTER CONTACT + SOCIAL ---------- */
+.foot-grid{grid-template-columns:1.6fr 1fr 1.3fr 1fr}
+.foot-contact a{display:flex;align-items:flex-start;gap:10px}
+.foot-contact svg{width:17px;height:17px;color:var(--sky);flex-shrink:0;margin-top:2px}
+.social-row{display:flex;gap:11px}
+.social-row a{width:42px;height:42px;border-radius:11px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.78);transition:transform .2s,background .2s,color .2s,border-color .2s}
+.social-row a:hover{background:var(--grad);color:#fff;border-color:transparent;transform:translateY(-3px)}
+@media(max-width:760px){.foot-grid{grid-template-columns:1fr}}
+
+/* ---------- NAV RESPONSIVE (app + cta visibles en móvil) ---------- */
+@media(max-width:980px){.nav-links{gap:20px}}
+@media(max-width:880px){
+  .nav-links a:not(.nav-cta):not(.nav-app){display:none}
+  .nav-links{gap:10px}
+}
+@media(max-width:600px){.brand img{height:40px}}
+@media(max-width:460px){
+  .nav-app .na-txt{display:none}
+  .nav-app{padding:10px 12px}
+  .nav-cta{padding:10px 16px}
+  .brand img{height:36px}
+}
+
+/* ---------- CONTACTO: formulario de registro ---------- */
+.cta-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;position:relative;z-index:2;max-width:1040px;margin:0 auto;text-align:left}
+.cta-info img{width:auto;height:60px;margin-bottom:18px}
+.cta-info h2{font-size:clamp(28px,4vw,40px);font-weight:900;line-height:1.1;letter-spacing:-.5px;color:#fff}
+.cta-info p{margin-top:14px;font-size:16px;color:rgba(255,255,255,.9);line-height:1.6}
+.cta-contact-list{margin-top:26px;display:flex;flex-direction:column;gap:14px}
+.cta-contact-list a,.cta-contact-list span{display:flex;align-items:center;gap:11px;color:#fff;text-decoration:none;font-size:15px;font-weight:500}
+.cta-contact-list a:hover{text-decoration:underline}
+.cta-contact-list svg{width:20px;height:20px;flex-shrink:0;opacity:.92}
+.cta-form-card{background:#fff;border-radius:20px;padding:32px;box-shadow:0 30px 70px rgba(0,0,0,.25);text-align:left}
+.cta-form-card h3{font-family:'Montserrat';font-size:23px;font-weight:800;color:var(--ink)}
+.cff-sub{font-size:14px;color:var(--muted);margin-top:4px;margin-bottom:22px}
+.ff-field{display:flex;flex-direction:column;margin-bottom:15px}
+.ff-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.ff-field label{font-size:12.5px;font-weight:700;color:var(--navy-700);margin-bottom:6px;letter-spacing:.2px}
+.ff-field input,.ff-field select,.ff-field textarea{font-family:'Inter',sans-serif;font-size:14.5px;color:var(--ink);padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg-soft);transition:border-color .2s,box-shadow .2s;width:100%}
+.ff-field input::placeholder,.ff-field textarea::placeholder{color:var(--muted-light)}
+.ff-field input:focus,.ff-field select:focus,.ff-field textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(31,126,196,.14);background:#fff}
+.ff-field textarea{resize:vertical;min-height:74px}
+.btn-form{width:100%;margin-top:8px;display:inline-flex;align-items:center;justify-content:center;gap:9px;background:var(--grad);color:#fff;border:none;border-radius:11px;padding:15px 24px;font-family:'Inter',sans-serif;font-size:15.5px;font-weight:700;cursor:pointer;box-shadow:0 12px 28px rgba(31,126,196,.3);transition:transform .15s,box-shadow .2s}
+.btn-form:hover{transform:translateY(-2px);box-shadow:0 16px 36px rgba(31,126,196,.42)}
+.ff-success{margin-top:14px;background:#e9f7ea;color:var(--green);border:1px solid rgba(54,169,58,.3);border-radius:10px;padding:12px 14px;font-size:14px;font-weight:600;text-align:center}
+.ff-legal{margin-top:14px;font-size:11.5px;color:var(--muted-light);line-height:1.5;text-align:center}
+@media(max-width:820px){
+  .cta-grid{grid-template-columns:1fr;gap:30px;text-align:center}
+  .cta-info img{margin-left:auto;margin-right:auto}
+  .cta-contact-list{align-items:center}
+}
+@media(max-width:480px){.ff-row{grid-template-columns:1fr}.cta-form-card{padding:24px}}
+</style>
 </head>
 <body>
 
-  <!-- NAV -->
-  <nav>
-    <div class="nav-logo">VIDA</div>
+<!-- NAV -->
+<nav id="nav">
+  <div class="nav-in">
+    <a href="#" class="brand">
+      <img src="assets/logo-nav.png" alt="Comercializadora VIDA" />
+    </a>
     <div class="nav-links">
-      <a href="#sistema">El sistema</a>
-      <a href="#funciones">Funciones</a>
-      <a href="#flujo">Cómo funciona</a>
-      <a href="#contacto" class="nav-cta">Contáctanos</a>
-    </div>
-  </nav>
-
-  <!-- HERO -->
-  <section class="hero">
-    <div class="hero-inner">
-      <div class="hero-logo">VIDA</div>
-      <div class="hero-tag">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4.5 8-11.8A8 8 0 0012 2a8 8 0 00-8 8.2C4 17.5 12 22 12 22z"/></svg>
-        Diseñado para el comercio latinoamericano
-      </div>
-      <h1>Tu negocio, tus clientes y tu equipo — todos en el mismo sistema</h1>
-      <p class="hero-sub">Gestiona tu punto de venta, recibe pedidos en línea, coordina entregas y acepta pagos. Todo desde un solo lugar, en tiempo real.</p>
-      <div class="hero-ctas">
-        <a href="#contacto" class="btn-white">Quiero saber más</a>
-        <a href="#sistema" class="btn-ghost">Ver el sistema</a>
-      </div>
-      <div class="pills">
-        <span class="pill">📦 Inventario en tiempo real</span>
-        <span class="pill">🚴 Delivery propio</span>
-        <span class="pill">💳 Múltiples formas de pago</span>
-        <span class="pill">📱 App para tus clientes</span>
-        <span class="pill">📊 Reportes al instante</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- NÚMEROS -->
-  <section class="section section-center">
-    <div class="label">Por qué VIDA</div>
-    <h2>Un sistema pensado para negocios reales</h2>
-    <p>Hecho para comercios que venden físicamente y también quieren vender en línea, sin tener que usar tres herramientas distintas.</p>
-    <div class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-num">3</div>
-        <div class="stat-label">Superficies integradas: web, app cliente y app repartidor</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num">1</div>
-        <div class="stat-label">Solo sistema que necesitas — todo conectado</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num">0</div>
-        <div class="stat-label">Plataformas externas de terceros para operar</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num">24/7</div>
-        <div class="stat-label">Tus clientes pueden pedir en cualquier momento</div>
-      </div>
-    </div>
-  </section>
-
-  <div class="divider"></div>
-
-  <!-- TRES SURFACES -->
-  <section class="section section-center" id="sistema">
-    <div class="label">El sistema</div>
-    <h2>Una plataforma, tres experiencias</h2>
-    <p>Tu equipo trabaja en el panel web. Tus clientes piden desde la app. Tus repartidores coordinan desde su propia pantalla. Todo sincronizado al segundo.</p>
-    <div class="apps-grid">
-      <div class="app-card">
-        <div class="app-circle blue">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-        </div>
-        <div class="app-name">Panel de gestión</div>
-        <div class="app-desc">Tu equipo cobra, gestiona el inventario, aprueba pedidos y ve reportes — todo desde el navegador, sin instalar nada.</div>
-      </div>
-      <div class="app-card">
-        <div class="app-circle green">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-        </div>
-        <div class="app-name">App para tus clientes</div>
-        <div class="app-desc">Tus clientes descubren tus productos, hacen su pedido y pagan desde su celular. Con cuenta propia o login con Google.</div>
-      </div>
-      <div class="app-card">
-        <div class="app-circle amber">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        </div>
-        <div class="app-name">App para repartidores</div>
-        <div class="app-desc">Tus repartidores ven sus entregas del día, actualizan el estado de cada pedido y coordinan con la sucursal en tiempo real.</div>
-      </div>
-    </div>
-  </section>
-
-  <div class="divider"></div>
-
-  <!-- FUNCIONES -->
-  <section class="section" id="funciones">
-    <div class="label" style="text-align:center">Funciones incluidas</div>
-    <h2 style="text-align:center">Todo lo que tu negocio necesita para operar</h2>
-    <p style="text-align:center">Cada función está pensada para reducir el tiempo que tu equipo pasa apagando incendios y darte más visibilidad sobre lo que pasa en tu negocio.</p>
-    <div class="feat-grid">
-      <div class="feat-card">
-        <div class="feat-icon blue">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-        </div>
-        <div class="feat-title">Punto de venta (POS)</div>
-        <div class="feat-desc">Cobra rápido por código de barras, nombre o categoría. Soporta múltiples cajas en el mismo local.</div>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon green">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
-        </div>
-        <div class="feat-title">Control de inventario</div>
-        <div class="feat-desc">Stock actualizado automáticamente con cada venta o pedido. Alertas de bajo inventario y movimientos trazables.</div>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon amber">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h11a2 2 0 012 2v3"/><rect x="9" y="11" width="14" height="10" rx="1"/></svg>
-        </div>
-        <div class="feat-title">Pedidos y delivery</div>
-        <div class="feat-desc">Recibe pedidos desde la app, asígnalos a un repartidor y haz seguimiento hasta la entrega final.</div>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon coral">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg>
-        </div>
-        <div class="feat-title">Pagos sin fricciones</div>
-        <div class="feat-desc">Acepta tarjeta de crédito/débito internacional y transferencias. El cliente elige cómo pagar.</div>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon teal">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        </div>
-        <div class="feat-title">Reportes y cierre de caja</div>
-        <div class="feat-desc">Resumen de ventas del día, semana o mes. Cierre de caja con detalle por forma de pago y cajero.</div>
-      </div>
-      <div class="feat-card">
-        <div class="feat-icon purple">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-        </div>
-        <div class="feat-title">Gestión de tu equipo</div>
-        <div class="feat-desc">Administra roles y permisos por persona. Cajeros, supervisores, administradores y repartidores con accesos independientes.</div>
-      </div>
-    </div>
-  </section>
-
-  <div class="divider"></div>
-
-  <!-- FLUJO -->
-  <section class="section" id="flujo">
-    <div class="label" style="text-align:center">Cómo funciona</div>
-    <h2 style="text-align:center">El pedido perfecto, paso a paso</h2>
-    <p style="text-align:center">Desde que tu cliente elige un producto hasta que lo tiene en sus manos — todo automatizado y sin llamadas.</p>
-    <div class="flow">
-      <div class="flow-step">
-        <div class="flow-num">1</div>
-        <div class="flow-label-title">Cliente elige</div>
-        <div class="flow-label-sub">Navega tu catálogo y arma su pedido desde la app</div>
-      </div>
-      <div class="flow-step">
-        <div class="flow-num">2</div>
-        <div class="flow-label-title">Paga al instante</div>
-        <div class="flow-label-sub">Con tarjeta o transferencia, en segundos</div>
-      </div>
-      <div class="flow-step">
-        <div class="flow-num">3</div>
-        <div class="flow-label-title">Tu local recibe</div>
-        <div class="flow-label-sub">El pedido aparece en el panel en tiempo real</div>
-      </div>
-      <div class="flow-step">
-        <div class="flow-num">4</div>
-        <div class="flow-label-title">Repartidor sale</div>
-        <div class="flow-label-sub">Asignado automáticamente según disponibilidad</div>
-      </div>
-      <div class="flow-step">
-        <div class="flow-num">5</div>
-        <div class="flow-label-title">Entregado</div>
-        <div class="flow-label-sub">Cliente recibe confirmación en su app</div>
-      </div>
-    </div>
-  </section>
-
-  <div class="divider"></div>
-
-  <!-- BENEFICIOS -->
-  <section class="section">
-    <div class="label" style="text-align:center">Beneficios concretos</div>
-    <h2 style="text-align:center">Lo que cambia cuando usas VIDA</h2>
-    <p style="text-align:center">No solo es tecnología — es cómo recuperas tiempo, reduces errores y vendes más sin contratar más personas.</p>
-    <div class="benefits-grid">
-      <div class="benefit-row">
-        <div class="check-circle">✓</div>
-        <div class="benefit-text"><strong>Nunca vendas algo que no tienes.</strong> El stock se reserva en el momento del pedido y se descuenta al confirmar la entrega.</div>
-      </div>
-      <div class="benefit-row">
-        <div class="check-circle">✓</div>
-        <div class="benefit-text"><strong>Tus clientes compran solos, a cualquier hora.</strong> La app funciona 24/7 sin que tu equipo tenga que atender por WhatsApp.</div>
-      </div>
-      <div class="benefit-row">
-        <div class="check-circle">✓</div>
-        <div class="benefit-text"><strong>Menos errores en el cobro.</strong> El POS calcula todo automáticamente y registra cada transacción con nombre y hora.</div>
-      </div>
-      <div class="benefit-row">
-        <div class="check-circle">✓</div>
-        <div class="benefit-text"><strong>Controla todo desde donde estés.</strong> El panel web funciona desde cualquier dispositivo con internet, sin instalar nada.</div>
-      </div>
-      <div class="benefit-row">
-        <div class="check-circle">✓</div>
-        <div class="benefit-text"><strong>Tus repartidores siempre saben qué hacer.</strong> Cada uno ve solo sus entregas, su ruta y puede actualizar el estado en tiempo real.</div>
-      </div>
-      <div class="benefit-row">
-        <div class="check-circle">✓</div>
-        <div class="benefit-text"><strong>Cierra caja en minutos, no en horas.</strong> El reporte está listo al final de cada turno, con detalle por cajero y forma de pago.</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- QUOTE -->
-  <div class="quote-band">
-    <div class="quote-inner">
-      <div class="quote-mark">"</div>
-      <p class="quote-text">Antes coordinábamos los pedidos por WhatsApp y siempre había confusión. Ahora el equipo y los repartidores ven exactamente lo que tienen que hacer sin que yo tenga que decirles nada.</p>
-      <p class="quote-author">— Comercio en prueba piloto con VIDA</p>
+      <a href="#inicio">Inicio</a>
+      <a href="#cultura">Cultura empresarial</a>
+      <a href="#expansion">Expansión</a>
+      <a href="#proveedores">Proveedores</a>
+      <a href="#tiendas">Tiendas</a>
+      <!-- reemplaza el href "#" con el enlace real de App Store / Google Play -->
+      <a href="#" class="nav-app"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg><span class="na-txt">Descarga la App</span></a>
+      <a href="#contacto" class="nav-cta">Contacto</a>
     </div>
   </div>
+</nav>
 
-  <!-- CTA -->
-  <section class="cta-band" id="contacto">
-    <h2>¿Listo para ordenar tu negocio?</h2>
-    <p>Cuéntanos sobre tu operación y te mostramos cómo VIDA se adapta a lo que necesitas. Sin compromisos.</p>
-    <div class="hero-ctas">
-      <a href="mailto:vidacomercializadorait@gmail.com" class="btn-white">Hablar con el equipo</a>
-      <a href="#sistema" class="btn-ghost">Ver el sistema</a>
+<!-- HERO -->
+<header class="hero" id="inicio">
+  <div class="hero-grid">
+    <div class="hero-text reveal in">
+      <span class="hero-badge"><span class="dot"></span>Plataforma de desarrollo empresarial · Venezuela</span>
+      <h1>Por Venezuela,<br/>sus productos<br/>y su gente
+        <span class="vida">VIDA</span>
+      </h1>
+      <p class="hero-sub">Convertimos personas comunes en <b>empresarios del comercio minorista</b>. Conectamos proveedores, transporte, emprendedores y consumidores en <b>un solo sistema</b>.</p>
+      <div class="hero-ctas">
+        <a href="#contacto" class="btn btn-primary">Contáctanos
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+        <a href="#modelo" class="btn btn-ghost">Cómo funciona</a>
+      </div>
+      <div class="hero-pillars">
+        <span class="hero-pillar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>Organización</span>
+        <span class="hero-pillar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/></svg>Estrategia</span>
+        <span class="hero-pillar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 7-7"/><path d="M17 8h4v4"/></svg>Acción</span>
+      </div>
     </div>
-  </section>
-
-  <!-- FOOTER -->
-  <footer>
-    <div class="footer-logo">VIDA</div>
-    <div class="footer-sub">Tu tienda favorita, a tu puerta.</div>
-    <div class="footer-links">
-      <a href="#sistema">El sistema</a>
-      <a href="#funciones">Funciones</a>
-      <a href="#flujo">Cómo funciona</a>
-      <a href="mailto:vidacomercializadorait@gmail.com">Contacto</a>
+    <div class="hero-visual reveal in">
+      <div class="hero-photo">
+        <img src="assets/clerk.jpg" alt="Emprendedora Tienda VIDA" />
+      </div>
+      <div class="float-card fc-1">
+        <div class="fc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg></div>
+        <div><div class="fc-num" data-count="16291">16.291</div><div class="fc-label">Tiendas VIDA para 2035</div></div>
+      </div>
+      <div class="float-card fc-2">
+        <div class="fc-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg></div>
+        <div><div class="fc-num" id="tiendasActivas" data-count="50">50</div><div class="fc-label"><span class="live-dot"></span>Tiendas activas</div></div>
+      </div>
     </div>
-    <div class="footer-copy">© 2026 VIDA. Todos los derechos reservados.</div>
-  </footer>
+  </div>
+  <div class="hero-wave">
+    <svg viewBox="0 0 1440 70" preserveAspectRatio="none"><path fill="#ffffff" d="M0,40 C360,80 720,0 1080,30 C1260,45 1380,55 1440,50 L1440,70 L0,70 Z"></path></svg>
+  </div>
+</header>
 
+<!-- STRIP STATS -->
+<section class="strip">
+  <div class="wrap strip-in">
+    <div class="strip-item"><div class="strip-num" data-count="553">553</div><div class="strip-label">Tiendas en 24 meses · Etapa Monagas</div></div>
+    <div class="strip-item"><div class="strip-num" data-count="4948">4.948</div><div class="strip-label">Tiendas en la Etapa 2 · 6 estados</div></div>
+    <div class="strip-item"><div class="strip-num" data-count="1500" data-suffix="+">1.500+</div><div class="strip-label">Empleos indirectos generados</div></div>
+  </div>
+</section>
+
+<!-- PROBLEMA -->
+<section class="problema section">
+  <div class="wrap problema-grid">
+    <div class="reveal">
+      <div class="eyebrow" style="color:var(--sky)">El problema a resolver</div>
+      <h2>El comercio minorista en Venezuela está <span class="roto">roto</span>.</h2>
+      <p class="lead">No muere por falta de clientes. <b>Muere por falta de sistema.</b></p>
+      <div class="prob-points">
+        <div class="prob-point">
+          <div class="pp-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M19 9l-5 5-4-4-3 3"/></svg></div>
+          <p>Ventas en caída, inventario sin control y compras caras a intermediarios. <b>El comerciante trabaja solo, sin datos y sin respaldo.</b></p>
+        </div>
+        <div class="prob-point">
+          <div class="pp-ic ok"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <p><b>VIDA le da lo que le falta:</b> crédito, capacitación, producto, tecnología y clientes — todo conectado en una sola plataforma.</p>
+        </div>
+      </div>
+    </div>
+    <div class="prob-visual reveal">
+      <div class="pv-top">
+        <span class="pv-title">Ventas del comercio</span>
+        <span class="pv-tag"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg> En caída</span>
+      </div>
+      <div class="chart-fall" id="fallChart">
+        <div class="cf-bar" data-h="92"><span>ENE</span></div>
+        <div class="cf-bar" data-h="78"><span>FEB</span></div>
+        <div class="cf-bar" data-h="68"><span>MAR</span></div>
+        <div class="cf-bar" data-h="50"><span>ABR</span></div>
+        <div class="cf-bar" data-h="38"><span>MAY</span></div>
+        <div class="cf-bar" data-h="24"><span>JUN</span></div>
+      </div>
+      <p style="margin-top:34px;font-size:13.5px;color:rgba(255,255,255,.55);line-height:1.55">Sin un sistema que ordene proveedores, logística y datos, cada tienda compite sola — y pierde.</p>
+    </div>
+  </div>
+</section>
+
+<!-- MODELO -->
+<section class="modelo section" id="modelo">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow center">Nuestro modelo de negocio</div>
+      <h2>Conectamos cada eslabón de la cadena</h2>
+      <p>Facilitamos y potenciamos a proveedores, transporte, emprendedores y consumidores para crear <b>valor y crecimiento sostenible</b>.</p>
+    </div>
+    <div class="modelo-hub reveal">
+      <div class="hub-col">
+        <div class="hub-card">
+          <div class="hc-top"><div class="hc-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 9l9-4 9 4-9 4-9-4z"/><path d="M3 9v6l9 4 9-4V9"/></svg></div><div><div class="hc-n">01</div><h4>Proveedores</h4></div></div>
+          <p>Productos de calidad en las mejores condiciones para toda la red.</p>
+        </div>
+        <div class="hub-card">
+          <div class="hc-top"><div class="hc-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="1" y="6" width="14" height="11" rx="1"/><path d="M15 9h4l3 3v5h-7"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg></div><div><div class="hc-n">02</div><h4>Logística</h4></div></div>
+          <p>Transporte eficiente y seguro que garantiza disponibilidad en toda la red.</p>
+        </div>
+      </div>
+      <div class="hub-center">
+        <img src="assets/symbol.png" alt="VIDA" />
+        <div class="hcn">VIDA</div>
+        <div class="hcs">El sistema integrado</div>
+      </div>
+      <div class="hub-col">
+        <div class="hub-card">
+          <div class="hc-top"><div class="hc-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg></div><div><div class="hc-n">03</div><h4>Emprendedores · Tiendas</h4></div></div>
+          <p>Profesionalizamos al comerciante con capacitación, crédito, tecnología y acompañamiento.</p>
+        </div>
+        <div class="hub-card">
+          <div class="hc-top"><div class="hc-ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6"/></svg></div><div><div class="hc-n">04</div><h4>Consumidores</h4></div></div>
+          <p>Productos de calidad cerca de casa, generando confianza, cercanía y bienestar.</p>
+        </div>
+      </div>
+    </div>
+    <div class="enablers reveal">
+      <div class="enabler"><div class="en-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1 2.7 2 6 2s6-1 6-2v-5"/></svg></div><h5>Capacitación</h5><p>Formación continua para empresarios y equipos.</p></div>
+      <div class="enabler"><div class="en-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg></div><h5>Crédito</h5><p>Financiamiento accesible para crecer y expandirse.</p></div>
+      <div class="enabler"><div class="en-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div><h5>Tecnología</h5><p>Herramientas digitales que simplifican y conectan.</p></div>
+      <div class="enabler"><div class="en-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20"/></svg></div><h5>Plataforma</h5><p>Un sistema integrado que hace todo posible.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- MISION / VISION -->
+<section class="mv section" id="mision">
+  <div class="wrap">
+    <div class="mv-row reveal">
+      <div class="mv-text">
+        <div class="eyebrow">Misión</div>
+        <h3>Convertimos personas comunes en <span class="gtext">empresarios</span></h3>
+        <p>Somos una plataforma de desarrollo empresarial que conecta proveedores, transportistas, emprendedores y consumidor final en un solo sistema que da <b>crédito, capacitación, producto y clientes</b> — para que cada Tienda VIDA genere <b>ingresos dignos y sostenibles</b> en su comunidad.</p>
+      </div>
+      <div class="mv-photo">
+        <img src="assets/shopkeeper.jpg" alt="Empresario Tienda VIDA" />
+        <span class="mv-chip"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Negocio llave en mano</span>
+      </div>
+    </div>
+    <div class="mv-row rev reveal">
+      <div class="mv-text">
+        <div class="eyebrow">Visión 2035</div>
+        <h3>La red de distribución <span class="gtext">inteligente</span> más importante de Venezuela</h3>
+        <p>Donde antes había una oportunidad de crecer, hoy hay una <b>Tienda VIDA</b> conectada con proveedores excelentes, transporte enrutado y una plataforma que te enseña, te capacita y ejecuta contigo.</p>
+        <div class="mv-vision-num">
+          <div class="mvn"><div class="n" data-count="16291">16.291</div><div class="l">Tiendas VIDA activas</div></div>
+          <div class="mvn"><div class="n">2035</div><div class="l">Cobertura nacional</div></div>
+          <div class="mvn"><div class="n">24</div><div class="l">Estados conectados</div></div>
+        </div>
+      </div>
+      <div class="mv-photo">
+        <img src="assets/logistics.jpg" alt="Logística VIDA" />
+        <span class="mv-chip"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2.2"><rect x="1" y="6" width="14" height="11" rx="1"/><path d="M15 9h4l3 3v5h-7"/></svg>Rutas optimizadas por estado</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CULTURA -->
+<section class="cultura section" id="cultura">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow center">Cultura empresarial</div>
+      <h2>Lo que nos define y nos guía</h2>
+      <p>Creencias, ejes y reglas innegociables sobre los que construimos y operamos la empresa.</p>
+    </div>
+    <div class="cultura-grid">
+      <div class="cul-card reveal">
+        <div class="cul-glow"></div>
+        <div class="cul-ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.6l-1-1a5.5 5.5 0 00-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 000-7.8z"/></svg></div>
+        <h3>Valores</h3>
+        <div class="cul-tags"><span class="cul-tag">Lealtad</span><span class="cul-tag">Unión</span><span class="cul-tag">Integración</span><span class="cul-tag">Respeto</span><span class="cul-tag">Honestidad</span></div>
+        <p>Creencias y cualidades humanas que definen nuestra cultura. Guían el comportamiento diario y se viven con el ejemplo.</p>
+      </div>
+      <div class="cul-card reveal">
+        <div class="cul-glow"></div>
+        <div class="cul-ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg></div>
+        <h3>Pilares</h3>
+        <div class="cul-tags"><span class="cul-tag">Innovación</span><span class="cul-tag">Pureza</span><span class="cul-tag">Capacitación</span><span class="cul-tag">Crecimiento</span></div>
+        <p>Ejes estructurales y estratégicos sobre los que operamos. Se pueden mejorar, actualizar y modernizar con el tiempo.</p>
+      </div>
+      <div class="cul-card reveal">
+        <div class="cul-glow"></div>
+        <div class="cul-ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div>
+        <h3>Principios</h3>
+        <div class="cul-tags"><span class="cul-tag">Primero la gente</span><span class="cul-tag">Transparencia radical</span><span class="cul-tag">Perseverancia</span></div>
+        <p>Reglas innegociables que rigen nuestras decisiones. Éticos, absolutos y no se negocian.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FLUJO -->
+<section class="flujo section" style="background:var(--bg-soft)">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow center">Flujo de operación y actores</div>
+      <h2>Del proveedor al consumidor, sin fricción</h2>
+    </div>
+    <div class="flujo-track reveal">
+      <div class="flujo-step">
+        <div class="flujo-ic"><span class="fn">1</span><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="6"/><path d="M9 8l2 2 4-4"/><path d="M8.5 14L7 22l5-3 5 3-1.5-8"/></svg></div>
+        <h4>Proveedor certificado</h4>
+        <p>Entrega productos de primera necesidad con garantía de origen.</p>
+      </div>
+      <div class="flujo-step">
+        <div class="flujo-ic"><span class="fn">2</span><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg></div>
+        <h4>Tienda VIDA</h4>
+        <p>El emprendedor vende al consumidor final usando el sistema.</p>
+      </div>
+      <div class="flujo-step">
+        <div class="flujo-ic"><span class="fn">3</span><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="1" y="6" width="14" height="11" rx="1"/><path d="M15 9h4l3 3v5h-7"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg></div>
+        <h4>Transportista</h4>
+        <p>Distribuye a los puntos de venta con rutas optimizadas.</p>
+      </div>
+      <div class="flujo-step">
+        <div class="flujo-ic"><span class="fn">4</span><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 01-8 0"/></svg></div>
+        <h4>Consumidor final</h4>
+        <p>Compra en tienda o por app, genera datos de recompra y recibe garantía.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROVEEDORES -->
+<section class="split section" id="proveedores">
+  <div class="wrap split-grid reveal">
+    <div class="split-photo">
+      <img src="assets/logistics.jpg" alt="Proveedores y aliados VIDA" />
+      <span class="split-chip"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2.2"><path d="M3 9l9-4 9 4-9 4-9-4z"/><path d="M3 9v6l9 4 9-4V9"/></svg>Red de distribución activa</span>
+    </div>
+    <div class="split-text">
+      <div class="eyebrow">Para proveedores y aliados</div>
+      <h2>Vende a toda la red <span class="gtext">VIDA</span></h2>
+      <p>Conecta tu producto con cientos de Tiendas VIDA a través de un solo canal. Demanda agregada, pagos confiables y logística coordinada por estado.</p>
+      <div class="split-feats">
+        <div class="split-feat"><div class="sf-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></div><div><h4>Demanda agregada</h4><p>Un solo canal que abastece a toda una red de tiendas en crecimiento.</p></div></div>
+        <div class="split-feat"><div class="sf-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg></div><div><h4>Pagos confiables</h4><p>Reglas claras y pagos puntuales respaldados por el sistema VIDA.</p></div></div>
+        <div class="split-feat"><div class="sf-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="1" y="6" width="14" height="11" rx="1"/><path d="M15 9h4l3 3v5h-7"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg></div><div><h4>Logística incluida</h4><p>Transporte enrutado por estado: tu producto llega a cada punto de venta.</p></div></div>
+        <div class="split-feat"><div class="sf-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20"/></svg></div><div><h4>Compra local</h4><p>Mínimo 70% de las compras a proveedores registrados localmente.</p></div></div>
+      </div>
+      <a href="#contacto" class="btn btn-primary">Quiero ser proveedor
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- TIENDAS -->
+<section class="split alt section" id="tiendas">
+  <div class="wrap split-grid split-rev reveal">
+    <div class="split-text">
+      <div class="eyebrow">Para emprendedores</div>
+      <h2>Abre tu <span class="gtext">Tienda VIDA</span></h2>
+      <p>Un negocio llave en mano. Te damos crédito, capacitación, tecnología, producto y clientes — y te acompañamos en cada paso.</p>
+      <div class="split-feats">
+        <div class="split-feat"><div class="sf-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg></div><div><h4>Crédito para crecer</h4><p>Financiamiento accesible para arrancar y expandir tu tienda.</p></div></div>
+        <div class="split-feat"><div class="sf-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c0 1 2.7 2 6 2s6-1 6-2v-5"/></svg></div><div><h4>Capacitación continua</h4><p>Formación para ti y tu equipo: vendes mejor y administras con datos.</p></div></div>
+        <div class="split-feat"><div class="sf-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div><div><h4>Tecnología y sistema</h4><p>Punto de venta, inventario y reportes en una sola plataforma.</p></div></div>
+        <div class="split-feat"><div class="sf-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 002 1.6h9.7a2 2 0 002-1.6L23 6H6"/></svg></div><div><h4>Producto y clientes</h4><p>Surtido garantizado y demanda conectada a la red VIDA.</p></div></div>
+      </div>
+      <a href="#contacto" class="btn btn-primary">Quiero mi Tienda VIDA
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+    </div>
+    <div class="split-photo">
+      <img src="assets/clerk.jpg" alt="Emprendedora Tienda VIDA" />
+      <span class="split-chip"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Negocio llave en mano</span>
+    </div>
+  </div>
+</section>
+
+<!-- EXPANSION -->
+<section class="expansion section" id="expansion">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow center">Plan de expansión</div>
+      <h2>De un estado a todo el país</h2>
+      <p>Modelo descentralizado: cada estado con sus proveedores, transportistas y equipo VIDA. <b>Margen + velocidad + relación local.</b></p>
+    </div>
+    <div class="exp-stages">
+      <div class="exp-card reveal">
+        <div class="exn">1</div>
+        <div class="ex-tag">Etapa 1 · 2026–2028</div>
+        <h3>Monagas</h3>
+        <div class="ex-sub">El estado de arranque</div>
+        <div class="ex-big" data-count="553">553</div>
+        <div class="ex-big-l">Tiendas VIDA en 24 meses</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>914.045 habitantes · 1 tienda por cada 1.637</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Maturín: 403 tiendas (capital + zonas urbanas)</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Modelo operativo + financiero validado</li>
+        </ul>
+      </div>
+      <div class="exp-card reveal">
+        <div class="exn">2</div>
+        <div class="ex-tag">Etapa 2 · 2028–2030</div>
+        <h3>Centro-Oriente</h3>
+        <div class="ex-sub">6 estados + Distrito Capital</div>
+        <div class="ex-big" data-count="4948">4.948</div>
+        <div class="ex-big-l">Tiendas · 8,1 millones de habitantes</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Anzoátegui, Sucre, Bolívar, Guárico, Aragua, Dtto. Capital</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>4.948 microempresarios formados</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Economía circular en cada estado</li>
+        </ul>
+      </div>
+      <div class="exp-card reveal">
+        <div class="exn">3</div>
+        <div class="ex-tag">Etapa 3 · 2031–2035</div>
+        <h3>Resto del país</h3>
+        <div class="ex-sub">Cobertura nacional</div>
+        <div class="ex-big" data-count="10780">10.780</div>
+        <div class="ex-big-l">Tiendas · 22 millones de habitantes</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Zulia, Carabobo, Lara, Miranda y más</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>18 estados restantes en 5 años</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>La red de distribución más grande del país</li>
+        </ul>
+      </div>
+    </div>
+    <div class="exp-final reveal">
+      <div class="efn" data-count="16291">16.291</div>
+      <div class="efl"><b>Tiendas VIDA activas para 2035.</b> Una red nacional, conectada y rentable — construida estado por estado.</div>
+    </div>
+  </div>
+</section>
+
+<!-- IMPACTO -->
+<section class="impacto section">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow center" style="color:var(--sky)">Compromiso e impacto</div>
+      <h2>Prosperidad en cada estado, desde cada estado</h2>
+    </div>
+    <div class="imp-grid">
+      <div class="imp-card reveal">
+        <div class="imp-ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
+        <div class="imp-n" data-count="1500" data-suffix="+">1.500+</div>
+        <p>Empleos indirectos generados en la primera etapa.</p>
+      </div>
+      <div class="imp-card reveal">
+        <div class="imp-ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
+        <div class="imp-n">70%</div>
+        <p>Mínimo de compras a proveedores registrados localmente.</p>
+      </div>
+      <div class="imp-card reveal">
+        <div class="imp-ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 9l9-4 9 4-9 4-9-4zM3 9v6l9 4 9-4V9"/></svg></div>
+        <div class="imp-n" data-count="4948">4.948</div>
+        <p>Microempresarios formados en la Etapa 2.</p>
+      </div>
+    </div>
+    <p class="imp-quote reveal">Formalización del comercio, empleo formal y desarrollo económico local: <span class="gtext">dinero que circula en cada municipio.</span></p>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta section" id="contacto">
+  <div class="wrap cta-grid">
+    <div class="cta-info reveal">
+      <img src="assets/symbol.png" alt="VIDA" />
+      <h2>Construyamos el futuro juntos</h2>
+      <p>Organización, estrategia y acción para crecer juntos. Déjanos tus datos y te mostramos cómo ser parte de la red Comercializadora VIDA.</p>
+      <div class="cta-contact-list">
+        <a href="mailto:contacto@comercializadoravida.com"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 6L2 7"/></svg>contacto@comercializadoravida.com</a>
+        <a href="https://wa.me/0000000000" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>WhatsApp · +58 000 000 0000</a>
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>Maturín, Monagas · Venezuela</span>
+      </div>
+    </div>
+
+    <div class="cta-form-card reveal">
+      <h3>Regístrate</h3>
+      <p class="cff-sub">Completa el formulario y nuestro equipo te contactará.</p>
+      <!-- Formulario de registro (aún no envía a ningún servidor). Conecta aquí tu backend / correo cuando esté listo. -->
+      <form id="registroForm" novalidate>
+        <!-- Campo trampa: las personas no lo ven; si viene lleno, el servidor lo descarta como robot -->
+        <div aria-hidden="true" style="position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden"><label for="rSitio">No llenar</label><input type="text" id="rSitio" name="sitio_web" tabindex="-1" autocomplete="off" /></div>
+        <div class="ff-field">
+          <label for="rNombre">Nombre completo</label>
+          <input type="text" id="rNombre" name="nombre" placeholder="Tu nombre" autocomplete="name" required />
+        </div>
+        <div class="ff-row">
+          <div class="ff-field">
+            <label for="rEmail">Correo electrónico</label>
+            <input type="email" id="rEmail" name="email" placeholder="tucorreo@ejemplo.com" autocomplete="email" required />
+          </div>
+          <div class="ff-field">
+            <label for="rTel">Teléfono / WhatsApp</label>
+            <input type="tel" id="rTel" name="telefono" placeholder="+58 000 000 0000" autocomplete="tel" />
+          </div>
+        </div>
+        <div class="ff-field">
+          <label for="rInteres">¿Qué te interesa?</label>
+          <select id="rInteres" name="interes">
+            <option value="" selected disabled>Selecciona una opción</option>
+            <option value="tienda">Abrir una Tienda VIDA</option>
+            <option value="proveedor">Ser proveedor o aliado</option>
+            <option value="inversion">Invertir / asociarme</option>
+            <option value="info">Información general</option>
+          </select>
+        </div>
+        <div class="ff-field">
+          <label for="rMensaje">Mensaje (opcional)</label>
+          <textarea id="rMensaje" name="mensaje" rows="3" placeholder="Cuéntanos brevemente sobre tu interés o tu negocio"></textarea>
+        </div>
+        <button type="submit" class="btn-form">Enviar registro
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+        <p class="ff-success" id="registroOk" hidden>✓ ¡Gracias! Recibimos tus datos y te contactaremos pronto.</p>
+        <p id="registroError" role="alert" hidden style="color:#b42318;font-weight:600;margin-top:10px"></p>
+        <p class="ff-legal">Al registrarte aceptas que Comercializadora VIDA te contacte con información del proyecto.</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <div class="fb-top"><img src="assets/symbol.png" alt="VIDA" /><span class="fb-name">VIDA</span></div>
+        <p>Plataforma de desarrollo empresarial. Por Venezuela, sus productos y su gente. Convertimos personas comunes en empresarios del comercio minorista.</p>
+      </div>
+      <div class="foot-col">
+        <h5>Proyecto</h5>
+        <a href="#modelo">Modelo de negocio</a>
+        <a href="#cultura">Cultura empresarial</a>
+        <a href="#proveedores">Proveedores</a>
+        <a href="#tiendas">Tiendas</a>
+        <a href="#expansion">Plan de expansión</a>
+      </div>
+      <div class="foot-col foot-contact" id="contacto-footer">
+        <h5>Contacto</h5>
+        <a href="mailto:contacto@comercializadoravida.com"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 6L2 7"/></svg>contacto@comercializadoravida.com</a>
+        <a href="https://wa.me/0000000000" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>WhatsApp · +58 000 000 0000</a>
+        <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>Maturín, Monagas · Venezuela</a>
+      </div>
+      <div class="foot-col">
+        <h5>Síguenos</h5>
+        <p style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:14px;line-height:1.5">Conéctate con la red VIDA en redes sociales.</p>
+        <div class="social-row">
+          <!-- reemplaza los href "#" con los enlaces reales de tus redes -->
+          <a href="#" aria-label="Instagram" target="_blank" rel="noopener"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg></a>
+          <a href="#" aria-label="Facebook" target="_blank" rel="noopener"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg></a>
+          <a href="#" aria-label="WhatsApp" target="_blank" rel="noopener"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg></a>
+          <a href="#" aria-label="TikTok" target="_blank" rel="noopener"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3v3.2a5 5 0 003 1.1V10a8 8 0 01-3-.6V15a6 6 0 11-6-6v3a3 3 0 103 3V3z"/></svg></a>
+        </div>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <p>© 2026 Comercializadora VIDA. Todos los derechos reservados.</p>
+      <div class="foot-tags"><span>Organización</span><span>Estrategia</span><span>Acción</span></div>
+    </div>
+  </div>
+</footer>
+
+<script>
+// nav shadow
+const nav=document.getElementById('nav');
+addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>10));
+
+// reveal on scroll
+const ro=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');ro.unobserve(e.target);}})},{threshold:.12});
+document.querySelectorAll('.reveal').forEach(el=>ro.observe(el));
+
+// count up
+function animateCount(el){
+  const target=+el.dataset.count;
+  const suffix=el.dataset.suffix||'';
+  const dur=1500;let start=null;
+  function step(ts){
+    if(!start)start=ts;
+    const p=Math.min((ts-start)/dur,1);
+    const eased=1-Math.pow(1-p,3);
+    const val=Math.floor(eased*target);
+    el.textContent=val.toLocaleString('es-VE')+suffix;
+    if(p<1)requestAnimationFrame(step);
+    else el.textContent=target.toLocaleString('es-VE')+suffix;
+  }
+  requestAnimationFrame(step);
+}
+const co=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){animateCount(e.target);co.unobserve(e.target);}})},{threshold:.5});
+document.querySelectorAll('[data-count]').forEach(el=>co.observe(el));
+
+// bar charts (problema + financiera)
+function fillBars(container,sel){
+  const bars=container.querySelectorAll(sel);
+  bars.forEach((b,i)=>{setTimeout(()=>{b.style.height=b.dataset.h+'%';b.classList.add('show');},120*i);});
+}
+const fallC=document.getElementById('fallChart');
+const finC=document.getElementById('finChart');
+const capB=document.getElementById('capBar');
+document.querySelectorAll('#fallChart .cf-bar,#finChart .bar').forEach(b=>b.style.height='0%');
+const chartObs=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){
+  if(e.target===fallC)fillBars(fallC,'.cf-bar');
+  if(e.target===finC)fillBars(finC,'.bar');
+  if(e.target===capB){const f=capB.querySelector('.cb-fill');setTimeout(()=>f.style.width=f.dataset.w+'%',200);}
+  chartObs.unobserve(e.target);
+}})},{threshold:.35});
+[fallC,finC,capB].forEach(c=>c&&chartObs.observe(c));
+
+// ---- Tiendas activas EN VIVO (conectar a tu sistema vía endpoint) ----
+// Coloca aquí la URL de tu endpoint. Debe devolver un número o un JSON
+// como {"tiendasActivas": 123}. Si se deja vacío, se muestra el valor por defecto.
+const TIENDAS_ENDPOINT = '';
+async function cargarTiendasActivas(){
+  if(!TIENDAS_ENDPOINT) return;
+  try{
+    const r=await fetch(TIENDAS_ENDPOINT,{cache:'no-store'});
+    const data=await r.json();
+    const n=(typeof data==='number')?data:(data.tiendasActivas ?? data.activas ?? data.count ?? data.total);
+    const el=document.getElementById('tiendasActivas');
+    if(el && n!=null){ el.dataset.count=n; el.textContent=Number(n).toLocaleString('es-VE'); }
+  }catch(e){ /* se mantiene el valor por defecto */ }
+}
+cargarTiendasActivas();
+
+// ---- Formulario de registro (DEMO: no envía a ningún servidor todavía) ----
+const REGISTRO_ENDPOINT='https://api.comercializadoravida.com/api/prospectos';
+const regForm=document.getElementById('registroForm');
+if(regForm){
+  regForm.addEventListener('submit',async function(e){
+    e.preventDefault();
+    if(!regForm.checkValidity()){ regForm.reportValidity(); return; }
+    const ok=document.getElementById('registroOk'), err=document.getElementById('registroError');
+    const boton=regForm.querySelector('button[type="submit"]');
+    if(ok) ok.hidden=true; if(err) err.hidden=true;
+    const textoBoton=boton?boton.innerHTML:'';
+    if(boton){ boton.disabled=true; boton.textContent='Enviando…'; }
+    try{
+      const datos=Object.fromEntries(new FormData(regForm).entries());
+      const r=await fetch(REGISTRO_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(datos)});
+      const resp=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(resp.error||(r.status===429?'Enviaste varios registros seguidos. Espera unos minutos.':'No pudimos enviar tu registro.'));
+      if(ok) ok.hidden=false;
+      regForm.reset();
+    }catch(ex){
+      if(err){ err.textContent=(ex&&ex.message&&ex.message!=='Failed to fetch')?ex.message:'No pudimos enviar tu registro. Revisa tu conexión e intenta de nuevo.'; err.hidden=false; }
+    }finally{
+      if(boton){ boton.disabled=false; boton.innerHTML=textoBoton; }
+    }
+  });
+}
+</script>
 </body>
 </html>

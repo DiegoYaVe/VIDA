@@ -24,6 +24,7 @@ import { promocionesRoutes } from './routes/promociones.routes.js';
 import { matrizRoutes }      from './routes/matriz.routes.js';
 import { reabastoVidaRoutes } from './routes/reabastoVida.routes.js';
 import { suscripcionRoutes } from './routes/suscripcion.routes.js';
+import { prospectosRoutes } from './routes/prospectos.routes.js';
 import { generarCargosSuscripcion } from './services/suscripcionDatos.service.js';
 import { corporativoRoutes } from './routes/corporativo.routes.js';
 import { paisesRoutes }     from './routes/paises.routes.js';
@@ -90,6 +91,9 @@ const origensPermitidos = [
   'http://localhost:5173',
   'http://localhost:5174',
   process.env.FRONTEND_URL,
+  // La página web pública envía su formulario "Regístrate" (POST /api/prospectos)
+  'https://comercializadoravida.com',
+  'https://www.comercializadoravida.com',
   // Solo en desarrollo: las apps móviles corriendo en modo web (Expo web)
   ...(ES_PRODUCCION ? [] : ['http://localhost:8081', 'http://localhost:8082', 'http://localhost:8090', 'http://localhost:8091']),
 ].filter(Boolean);
@@ -208,6 +212,7 @@ fastify.register(promocionesRoutes, { prefix: '/api' });
 fastify.register(matrizRoutes,      { prefix: '/api' });
 fastify.register(reabastoVidaRoutes, { prefix: '/api' });
 fastify.register(suscripcionRoutes, { prefix: '/api' });
+fastify.register(prospectosRoutes, { prefix: '/api' });
 fastify.register(corporativoRoutes, { prefix: '/api' });
 fastify.register(paisesRoutes,     { prefix: '/api' });
 fastify.register(estadosRoutes,    { prefix: '/api' });

@@ -12,6 +12,7 @@ import {
 import api from '../services/api.js';
 import { useAuthStore } from '../store/authStore.js';
 import SuscripcionesVida from '../components/SuscripcionesVida.jsx';
+import RegistrosWeb from '../components/RegistrosWeb.jsx';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 const NUM = (v) => Number(v || 0).toLocaleString('es-VE');
@@ -334,7 +335,7 @@ export default function Corporativo() {
       {operaMatriz && (
         <div className="bg-white border-b border-gray-100 px-6">
           <div className="flex gap-1 overflow-x-auto">
-            {[['red', 'Red de tiendas'], ['suscripciones', 'Afiliación y mensualidades']].map(([k, label]) => (
+            {[['red', 'Red de tiendas'], ['suscripciones', 'Afiliación y mensualidades'], ['web', 'Registros de la web']].map(([k, label]) => (
               <button key={k} onClick={() => setVista(k)} aria-pressed={vista === k}
                 className={`px-4 py-3.5 text-sm font-semibold border-b-2 whitespace-nowrap transition-all ${vista === k ? 'border-vida-blue text-vida-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                 {label}
@@ -346,6 +347,8 @@ export default function Corporativo() {
 
       {vista === 'suscripciones' && operaMatriz ? (
         <div className="p-6"><SuscripcionesVida /></div>
+      ) : vista === 'web' && operaMatriz ? (
+        <div className="p-6"><RegistrosWeb /></div>
       ) : cargando ? <Spinner /> : (
         <div className="p-6 space-y-5">
           {/* Fila superior: meta + estados */}
