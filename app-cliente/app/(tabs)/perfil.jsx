@@ -9,7 +9,7 @@ import { Text } from '../../components/Texto';
 import { Icono, Invitado } from '../../components/ui';
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
-import { API_URL } from '../../constants/config';
+import { API_URL, CLUB_PROXIMAMENTE } from '../../constants/config';
 import { colores, fuentes } from '../../constants/tema';
 
 const API_BASE = API_URL.replace('/api', '');
@@ -21,8 +21,8 @@ const GRUPOS = [
   ] },
   { titulo: 'Club VIDA', items: [
     { nombre: 'Mi hidratación', icono: 'water-outline', ruta: '/mi-consumo' },
-    { nombre: 'Puntos y premios', icono: 'gift-outline', ruta: '/mis-puntos' },
-    { nombre: 'Academia VIDA', icono: 'school-outline', ruta: '/academia' },
+    { nombre: 'Puntos y premios', icono: 'gift-outline', ruta: '/mis-puntos', pronto: CLUB_PROXIMAMENTE },
+    { nombre: 'Academia VIDA', icono: 'school-outline', ruta: '/academia', pronto: CLUB_PROXIMAMENTE },
   ] },
   { titulo: 'Ajustes', items: [
     { nombre: 'Editar perfil', icono: 'person-outline', ruta: '/perfil-editar' },
@@ -41,7 +41,7 @@ export default function PerfilScreen() {
 
   useFocusEffect(useCallback(() => {
     if (!token) return;
-    api.get('/delivery/cliente/puntos').then((r) => setResumen((s) => ({ ...s, puntos: r.data?.saldo ?? 0 }))).catch(() => {});
+    if (!CLUB_PROXIMAMENTE) api.get('/delivery/cliente/puntos').then((r) => setResumen((s) => ({ ...s, puntos: r.data?.saldo ?? 0 }))).catch(() => {});
     api.get('/delivery/cliente/pedidos').then((r) => setResumen((s) => ({ ...s, pedidos: Array.isArray(r.data) ? r.data.length : 0 }))).catch(() => {});
     api.get('/delivery/cliente/hidratacion').then((r) => setResumen((s) => ({ ...s, racha: r.data?.activa ? Number(r.data.racha) || 0 : null }))).catch(() => {});
     api.get('/delivery/cliente/perfil').then((r) => setFoto(r.data?.FotoURL || null)).catch(() => {});
@@ -63,10 +63,10 @@ export default function PerfilScreen() {
   const nombre = [cliente?.Nombre, cliente?.Apellidos].filter(Boolean).join(' ') || 'Cliente VIDA';
   const iniciales = `${String(cliente?.Nombre || '').trim()[0] || ''}${String(cliente?.Apellidos || '').trim()[0] || ''}`.toUpperCase() || 'V';
   const accesos = [
-    { icono: 'gift', valor: resumen.puntos != null ? Number(resumen.puntos).toLocaleString('es-VE') : '—', etiqueta: 'Puntos', ruta: '/(tabs)/puntos', fondo: colores.verdeClaro },
+    CLUB_PROXIMAMENTE ? null : { icono: 'gift', valor: resumen.puntos != null ? Number(resumen.puntos).toLocaleString('es-VE') : '—', etiqueta: 'Puntos', ruta: '/(tabs)/puntos', fondo: colores.verdeClaro },
     { icono: 'receipt', valor: resumen.pedidos != null ? String(resumen.pedidos) : '—', etiqueta: 'Pedidos', ruta: '/(tabs)/pedidos', fondo: colores.superficie },
     { icono: 'water', valor: resumen.racha != null ? `${resumen.racha} d` : '—', etiqueta: 'Racha de agua', ruta: '/mi-consumo', fondo: colores.celesteClaro },
-  ];
+  ].filter(Boolean);
 
   const salir = () => Alert.alert('Cerrar sesión', '¿Seguro que quieres salir?', [
     { text: 'Cancelar', style: 'cancel' },
@@ -112,6 +112,7 @@ export default function PerfilScreen() {
               <TouchableOpacity key={m.nombre} style={styles.fila} onPress={() => router.push(m.ruta)}>
                 <Icono nombre={m.icono} tam={22} />
                 <Text style={styles.filaTexto}>{m.nombre}</Text>
+                {m.pronto ? <View style={styles.pronto}><Text style={styles.prontoTexto}>Próximamente</Text></View> : null}
                 <Icono nombre="chevron-forward" tam={18} color={colores.textoTenue} />
               </TouchableOpacity>
             ))}
@@ -148,6 +149,8 @@ const styles = StyleSheet.create({
   grupoTitulo: { fontFamily: fuentes.titulo, fontSize: 16, color: colores.marino, marginBottom: 4 },
   fila: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 52, borderBottomWidth: 1, borderBottomColor: colores.separador },
   filaTexto: { flex: 1, fontWeight: '700', fontSize: 15, color: colores.marino },
+  pronto: { backgroundColor: colores.celesteClaro, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  prontoTexto: { fontSize: 11, fontWeight: '800', color: colores.marino },
 
   salir: { flexDirection: 'row', gap: 8, height: 52, borderRadius: 16, backgroundColor: colores.errorClaro, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   salirTexto: { fontWeight: '800', fontSize: 15, color: colores.error },

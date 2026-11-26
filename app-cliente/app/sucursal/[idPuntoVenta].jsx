@@ -21,13 +21,19 @@ import { obtenerUbicacion, kmEntre, textoDistancia } from '../../services/cercan
 
 const ALTO_PORTADA = 190;
 
-// Fila deslizable de productos destacados ("Productos PLUS", "Lo más pedido")
-function Carrusel({ titulo, estrella, lista, tasa, cantidadDe, mas, menos, onAbrir }) {
+// Fila deslizable de productos destacados ("Productos PLUS", "Promociones
+// especiales", "Lo más pedido")
+function Carrusel({ titulo, estrella, oferta, lista, tasa, cantidadDe, mas, menos, onAbrir }) {
   return (
     <View style={{ gap: 12, paddingTop: 18 }}>
       {estrella ? (
         <View style={styles.tituloFila}>
           <View style={styles.plusSello}><Text style={styles.plusSelloTexto}>PLUS</Text></View>
+          <Text style={styles.h2Plus}>{titulo}</Text>
+        </View>
+      ) : oferta ? (
+        <View style={styles.tituloFila}>
+          <View style={styles.ofertaSello}><Icono nombre="pricetags" tam={14} color={colores.blanco} /></View>
           <Text style={styles.h2Plus}>{titulo}</Text>
         </View>
       ) : <Text style={styles.h2Pad}>{titulo}</Text>}
@@ -122,11 +128,10 @@ export default function TiendaScreen() {
   }, [filtrados]);
   // Productos PLUS de la tienda: los de mayor ganancia, en su propio espacio
   const plus = useMemo(() => productos.filter((p) => p.EsProductoPlus), [productos]);
-  // Lo más pedido: primero las ofertas, luego los primeros del catálogo
-  const destacados = useMemo(() => {
-    const conPromo = productos.filter((p) => p.PromoBadge || p.PromoNombre);
-    return [...conPromo, ...productos.filter((p) => !conPromo.includes(p))].slice(0, 8);
-  }, [productos]);
+  // Promociones especiales de la tienda: todo lo que tiene oferta, junto
+  const promociones = useMemo(() => productos.filter((p) => p.PromoBadge || p.PromoNombre), [productos]);
+  // Lo más pedido: los primeros del catálogo que no están ya en promoción
+  const destacados = useMemo(() => productos.filter((p) => !promociones.includes(p)).slice(0, 8), [productos, promociones]);
 
   const irACategoria = (k) => {
     setCategoria(k);
@@ -238,6 +243,9 @@ export default function TiendaScreen() {
             {!busqueda && plus.length > 0 ? (
               <Carrusel titulo="Productos PLUS" estrella lista={plus} tasa={tasa} cantidadDe={cantidadDe} mas={mas} menos={menos} onAbrir={setAbierto} />
             ) : null}
+            {!busqueda && promociones.length > 0 ? (
+              <Carrusel titulo="Promociones especiales" oferta lista={promociones} tasa={tasa} cantidadDe={cantidadDe} mas={mas} menos={menos} onAbrir={setAbierto} />
+            ) : null}
             {!busqueda && destacados.length > 2 ? (
               <Carrusel titulo="Lo más pedido" lista={destacados} tasa={tasa} cantidadDe={cantidadDe} mas={mas} menos={menos} onAbrir={setAbierto} />
             ) : null}
@@ -315,6 +323,7 @@ const styles = StyleSheet.create({
   tituloFila: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20 },
   h2Plus: { fontFamily: fuentes.tituloFuerte, fontSize: 20, color: colores.marino },
   plusSello: { backgroundColor: '#F2B705', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  ofertaSello: { backgroundColor: colores.marino, borderRadius: 6, width: 24, height: 22, alignItems: 'center', justifyContent: 'center' },
   plusSelloTexto: { color: '#FFFFFF', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
   h2: { paddingHorizontal: 20, fontFamily: fuentes.tituloFuerte, fontSize: 20, color: colores.marino, marginBottom: 2 },
 

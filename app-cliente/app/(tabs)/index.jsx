@@ -13,7 +13,7 @@ import { obtenerUbicacion, ordenarPorCercania, textoDistancia } from '../../serv
 import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import useCarritoStore from '../../store/carritoStore';
-import { absImg } from '../../constants/config';
+import { absImg, CLUB_PROXIMAMENTE } from '../../constants/config';
 import { colores, fuentes } from '../../constants/tema';
 import DetalleProducto from '../../components/DetalleProducto';
 import Anillo from '../../components/Anillo';
@@ -134,7 +134,7 @@ export default function HomeScreen() {
       const r = await api.post('/delivery/cliente/hidratacion/vaso');
       setHidra((d) => ({ ...d, vasosHoy: r.data.vasosHoy, mlHoy: r.data.mlHoy, racha: r.data.racha }));
       if (Number(r.data.vasosHoy) >= Number(hidra?.meta || 8)) reprogramarRecordatorios({ activa: true, metaCumplidaHoy: true });
-      if (r.data.bonus > 0) Alert.alert('¡Racha completada!', `Llevas ${r.data.racha} días cumpliendo tu meta. Ganaste ${r.data.bonus} puntos VIDA.`);
+      if (r.data.bonus > 0) Alert.alert('¡Racha completada!', `Llevas ${r.data.racha} días cumpliendo tu meta.${CLUB_PROXIMAMENTE ? '' : ` Ganaste ${r.data.bonus} puntos VIDA.`}`);
     } catch {} finally { setVasoOcupado(false); }
   };
 
@@ -202,7 +202,7 @@ export default function HomeScreen() {
             <Text style={styles.hidraTitulo}>
               {!hidra.activa ? 'Mide tu agua del día' : faltan === 0 ? '¡Meta de agua cumplida!' : `Te faltan ${faltan} vaso${faltan === 1 ? '' : 's'}`}
             </Text>
-            <Text style={styles.hidraSub}>{hidra.activa ? `Racha de ${Number(hidra.racha) || 0} día${Number(hidra.racha) === 1 ? '' : 's'}` : 'Gana puntos VIDA por racha'}</Text>
+            <Text style={styles.hidraSub}>{hidra.activa ? `Racha de ${Number(hidra.racha) || 0} día${Number(hidra.racha) === 1 ? '' : 's'}` : (CLUB_PROXIMAMENTE ? 'Cuida tu racha de agua' : 'Gana puntos VIDA por racha')}</Text>
           </View>
           {hidra.activa ? (
             <TouchableOpacity style={styles.hidraBtn} onPress={tomarVaso} disabled={vasoOcupado} accessibilityLabel="Sumar un vaso de agua">

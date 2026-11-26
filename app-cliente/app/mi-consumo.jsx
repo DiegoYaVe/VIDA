@@ -15,6 +15,7 @@ import { agregarConTienda } from '../services/carrito';
 import { fmtUSD } from '../services/moneda';
 import { colores, fuentes } from '../constants/tema';
 import { leerPreferencia, activarRecordatorios, reprogramarRecordatorios } from '../services/recordatorios';
+import { CLUB_PROXIMAMENTE } from '../constants/config';
 
 const DIAS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
@@ -56,7 +57,7 @@ export default function MiHidratacion() {
     try {
       const r = await api.post('/delivery/cliente/hidratacion/vaso');
       setData((d) => ({ ...d, vasosHoy: r.data.vasosHoy, mlHoy: r.data.mlHoy, racha: r.data.racha }));
-      if (r.data.bonus > 0) Alert.alert('¡Racha completada!', `Llevas ${r.data.racha} días cumpliendo tu meta. Ganaste ${r.data.bonus} puntos VIDA.`);
+      if (r.data.bonus > 0) Alert.alert('¡Racha completada!', `Llevas ${r.data.racha} días cumpliendo tu meta.${CLUB_PROXIMAMENTE ? '' : ` Ganaste ${r.data.bonus} puntos VIDA.`}`);
       cargar();
     } catch {} finally { setOcupado(false); }
   };
@@ -158,7 +159,7 @@ export default function MiHidratacion() {
               <Text style={styles.metaValor}>{meta} vasos</Text>
               <TouchableOpacity style={[styles.metaPaso, { backgroundColor: colores.marino }]} onPress={() => guardar({ meta: Math.min(20, meta + 1) })} accessibilityLabel="Subir meta"><Text style={[styles.metaPasoTexto, { color: colores.blanco }]}>+</Text></TouchableOpacity>
             </View>
-            <Text style={styles.nota}>Cada vaso son {data.mlVaso || 250} ml. Cumple la meta 7 días seguidos y ganas {data.bonoRacha ?? 50} puntos.</Text>
+            <Text style={styles.nota}>Cada vaso son {data.mlVaso || 250} ml. Cumple la meta 7 días seguidos{CLUB_PROXIMAMENTE ? ' y arma tu racha.' : ` y ganas ${data.bonoRacha ?? 50} puntos.`}</Text>
             <TouchableOpacity style={styles.recordar} onPress={cambiarRecordar} accessibilityRole="switch" accessibilityState={{ checked: recordar }}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.recordarTitulo}>Recordarme tomar agua</Text>

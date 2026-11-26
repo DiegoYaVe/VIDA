@@ -10,7 +10,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { WebView } from 'react-native-webview';
 import api from '../services/api';
-import { absImg } from '../constants/config';
+import { absImg, CLUB_PROXIMAMENTE } from '../constants/config';
+import Proximamente from '../components/Proximamente';
 
 const { width } = Dimensions.get('window');
 const TIPO_ICON = { VIDEO: 'play-circle', TEXTO: 'document-text', PDF: 'document', QUIZ: 'help-circle' };
@@ -24,7 +25,13 @@ function toEmbed(url) {
   return url;
 }
 
-export default function AcademiaScreen() {
+export default function Academia() {
+  if (CLUB_PROXIMAMENTE) return <Proximamente icono="school-outline" titulo="Academia VIDA"
+    texto="Muy pronto: cursos cortos para aprender, con tu constancia al terminar." />;
+  return <AcademiaScreen />;
+}
+
+function AcademiaScreen() {
   const router = useRouter();
   const [cursos, setCursos] = useState([]);
   const [resumen, setResumen] = useState({ total: 0, completados: 0, puntos: 0 });

@@ -12,7 +12,8 @@ import { Invitado } from './ui';
 import { BotonAtras } from './Cabecera';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
-import { absImg } from '../constants/config';
+import { absImg, CLUB_PROXIMAMENTE } from '../constants/config';
+import Proximamente from './Proximamente';
 import { colores, fuentes } from '../constants/tema';
 
 const FONDOS = ['#EADCCB', '#F6E1C6', '#DDF2F8', '#F5E7B8'];
@@ -34,6 +35,12 @@ function fechaEvento(f) {
 }
 
 export default function PantallaPuntos({ conAtras = false }) {
+  if (CLUB_PROXIMAMENTE) return <Proximamente icono="gift-outline" titulo="Puntos y premios VIDA" conAtras={conAtras}
+    texto="Muy pronto acumularás puntos en cada compra y los canjearás por premios." />;
+  return <PuntosYPremios conAtras={conAtras} />;
+}
+
+function PuntosYPremios({ conAtras }) {
   const router = useRouter();
   const token = useAuthStore((s) => s.token);
   const [saldo, setSaldo] = useState(0);

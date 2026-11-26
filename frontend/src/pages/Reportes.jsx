@@ -28,6 +28,7 @@ import {
 import { useAuthStore } from '../store/authStore.js';
 import { hoyCaracas } from '../utils/fechas.js';
 
+import ComentariosClientes from '../components/ComentariosClientes.jsx';
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const USD  = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const FMT  = (v) => Number(v || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -1459,6 +1460,9 @@ function TabDelivery({ filtros }) {
             </div>
           </div>
         </>
+
+          {/* Comentarios y sugerencias que dejan los clientes en la app */}
+          <ComentariosClientes comentarios={datos.comentarios || []} />
       )}
     </div>
   );

@@ -567,9 +567,33 @@ export async function reporteDelivery(request, reply) {
         ${geoCanc}
     `);
 
+    // ── Comentarios y sugerencias de los clientes (al calificar la entrega) ─
+    const { r: reqCom, geo: geoCom } = mkReq();
+    const comentarios = await reqCom.query(`
+      SELECT TOP 100
+        cal.idPedido, cal.Estrellas, cal.Comentario, cal.FechaAlta,
+        pv.NomComercial AS Tienda, rep.Nombre AS Repartidor,
+        LTRIM(RTRIM(c.Nombre + ISNULL(' ' + LEFT(NULLIF(LTRIM(c.Apellidos),''),1) + '.', ''))) AS Cliente
+      FROM VIDA_REPARTIDORES_CALIFICACIONES cal
+      JOIN VIDA_PEDIDOS p
+        ON p.idBranch = cal.idBranch AND p.idCuenta = cal.idCuenta AND p.idPedido = cal.idPedido
+      JOIN VIDA_CUENTA_PUNTOS_VENTA pv
+        ON pv.idBranch = p.idBranch AND pv.idCuenta = p.idCuenta
+       AND pv.idPuntoVenta = p.idPuntoVenta
+      LEFT JOIN VIDA_REPARTIDORES rep
+        ON rep.idBranch = cal.idBranch AND rep.idCuenta = cal.idCuenta AND rep.idRepartidor = cal.idRepartidor
+      LEFT JOIN VIDA_APP_CLIENTES c
+        ON c.idBranch = cal.idBranch AND c.idCuenta = cal.idCuenta AND c.idCliente = cal.idCliente
+      WHERE cal.idBranch = @idBranch AND cal.idCuenta = @idCuenta
+        AND NULLIF(LTRIM(RTRIM(cal.Comentario)), '') IS NOT NULL
+        AND CAST(DATEADD(HOUR,-4,p.FechaAlta) AS DATE) BETWEEN @fechaInicio AND @fechaFin
+        ${geoCom}
+      ORDER BY cal.FechaAlta DESC
+    `);
+
     const reps = porRepartidor.recordset;
     const totales = {
-      NumEntregas:      reps.reduce((s, r) => s + (r.Entregas || 0), 0),
+      NumEntregas:     reps.reduce((s, r) => s + (r.Entregas || 0), 0),
       MontoGenerado:    reps.reduce((s, r) => s + (r.MontoGenerado || 0), 0),
       Comisiones:       reps.reduce((s, r) => s + (r.Comisiones || 0), 0),
       EfectivoRecaudado: reps.reduce((s, r) => s + (r.EfectivoRecaudado || 0), 0),
@@ -581,6 +605,7 @@ export async function reporteDelivery(request, reply) {
       graficaDiaria: grafica.recordset,
       porRepartidor: reps,
       porMetodo:     porMetodo.recordset,
+      comentarios:   comentarios.recordset,
       totales,
     });
   } catch (err) {

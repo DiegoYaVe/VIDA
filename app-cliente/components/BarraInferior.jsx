@@ -7,14 +7,17 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { Text } from './Texto';
 import { Icono, BarraCarrito } from './ui';
 import { colores } from '../constants/tema';
+import { CLUB_PROXIMAMENTE } from '../constants/config';
 
-const PESTANAS = [
+const TODAS = [
   { ruta: 'index', etiqueta: 'Inicio', icono: 'home' },
   { ruta: 'tiendas', etiqueta: 'Tiendas', icono: 'storefront' },
   { ruta: 'pedidos', etiqueta: 'Pedidos', icono: 'receipt' },
   { ruta: 'puntos', etiqueta: 'Puntos', icono: 'gift' },
   { ruta: 'perfil', etiqueta: 'Cuenta', icono: 'person' },
 ];
+// Mientras puntos y canjes son "Próximamente", sin pestaña de Puntos
+const PESTANAS = CLUB_PROXIMAMENTE ? TODAS.filter((p) => p.ruta !== 'puntos') : TODAS;
 const CON_CARRITO = ['index', 'tiendas'];
 
 export function IconoCarrito({ tam = 24, color = colores.marino }) {

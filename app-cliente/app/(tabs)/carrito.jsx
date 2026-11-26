@@ -14,7 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import api from '../../services/api';
 import useCarritoStore from '../../store/carritoStore';
 import useAuthStore from '../../store/authStore';
-import { absImg } from '../../constants/config';
+import { absImg, CLUB_PROXIMAMENTE } from '../../constants/config';
 import SelectorUbicacion from '../../components/SelectorUbicacion';
 import { Icono, ControlCantidad } from '../../components/ui';
 import { colores, fuentes } from '../../constants/tema';
@@ -118,7 +118,7 @@ export default function CarritoScreen() {
       setDirecciones(lista);
       if (lista[0] && !direccion) usarDireccion(lista[0]);
     }).catch(() => {});
-    api.get('/delivery/cliente/puntos').then((r) => setPuntosData(r.data)).catch(() => {});
+    if (!CLUB_PROXIMAMENTE) api.get('/delivery/cliente/puntos').then((r) => setPuntosData(r.data)).catch(() => {});
   }, [token]);
 
   const usarDireccion = (d) => {
@@ -447,6 +447,7 @@ export default function CarritoScreen() {
               ))}
             </ScrollView>
           )}
+          {CLUB_PROXIMAMENTE ? null : (
           <TouchableOpacity style={styles.opcion} disabled={!saldoPuntos} onPress={() => setUsarPuntos((v) => !v)}
             accessibilityRole="switch" accessibilityState={{ checked: usarPuntos }}>
             <View style={[styles.opcionIcono, { backgroundColor: colores.verdeClaro }]}><Icono nombre="gift" tam={19} color={colores.verdeTexto} /></View>
@@ -456,6 +457,7 @@ export default function CarritoScreen() {
             </View>
             <View style={[styles.interruptor, usarPuntos && styles.interruptorOn]}><View style={styles.interruptorBola} /></View>
           </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.division} />

@@ -6,8 +6,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import api from '../services/api';
+import { CLUB_PROXIMAMENTE } from '../constants/config';
+import Proximamente from '../components/Proximamente';
 
-export default function MiClubScreen() {
+export default function MiClub() {
+  if (CLUB_PROXIMAMENTE) return <Proximamente icono="ribbon-outline" titulo="Club VIDA"
+    texto="Muy pronto: niveles y beneficios según tus puntos." />;
+  return <MiClubScreen />;
+}
+
+function MiClubScreen() {
   const router = useRouter();
   const [data, setData] = useState(null);
   const [cargando, setCargando] = useState(true);

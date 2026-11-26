@@ -67,6 +67,8 @@ export default function SeguimientoScreen() {
   const [verDetalle, setVerDetalle] = useState(false);
   const [calificacion, setCalificacion] = useState(0);
   const [calificado, setCalificado] = useState(false);
+  const [comentario, setComentario] = useState('');
+  const [calificando, setCalificando] = useState(false);
   const [accion, setAccion] = useState(false);
   // Pago Móvil
   const [datosPM, setDatosPM] = useState(null);
@@ -146,11 +148,13 @@ export default function SeguimientoScreen() {
     catch (e) { Alert.alert('No se pudo', e.response?.data?.error || 'Intenta de nuevo.'); fetchEstado(); }
     finally { setAccion(false); }
   };
-  const calificar = async (n) => {
-    if (calificado) return;
-    setCalificacion(n);
-    try { await api.post(`/delivery/pedido/${idPedido}/calificar`, { Estrellas: n }); setCalificado(true); }
-    catch { Alert.alert('No se pudo enviar', 'Intenta de nuevo.'); setCalificacion(0); }
+  // Estrellas + comentario o sugerencia opcional; VIDA los ve en el panel
+  const calificar = async () => {
+    if (calificado || !calificacion) return;
+    setCalificando(true);
+    try { await api.post(`/delivery/pedido/${idPedido}/calificar`, { Estrellas: calificacion, Comentario: comentario.trim() }); setCalificado(true); }
+    catch { Alert.alert('No se pudo enviar', 'Intenta de nuevo.'); }
+    finally { setCalificando(false); }
   };
   const elegirCaptura = async () => {
     const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.75 });
@@ -364,11 +368,20 @@ export default function SeguimientoScreen() {
               {!calificado && (
                 <View style={{ flexDirection: 'row', gap: 6 }}>
                   {[1, 2, 3, 4, 5].map((n) => (
-                    <TouchableOpacity key={n} onPress={() => calificar(n)} style={[styles.estrella, n <= calificacion && { backgroundColor: colores.celeste }]} accessibilityLabel={`${n} estrellas`}>
+                    <TouchableOpacity key={n} onPress={() => setCalificacion(n)} style={[styles.estrella, n <= calificacion && { backgroundColor: colores.celeste }]} accessibilityLabel={`${n} estrellas`}>
                       <Text style={styles.estrellaTexto}>{n}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
+              )}
+              {!calificado && calificacion > 0 && (
+                <>
+                  <TextInput style={[styles.campo, styles.comentario]} placeholder="¿Algún comentario o sugerencia? (opcional)" placeholderTextColor={colores.textoTenue}
+                    value={comentario} onChangeText={setComentario} maxLength={500} multiline accessibilityLabel="Comentario o sugerencia" />
+                  <TouchableOpacity style={styles.enviarCalif} onPress={calificar} disabled={calificando}>
+                    {calificando ? <ActivityIndicator color={colores.blanco} /> : <Text style={styles.enviarCalifTexto}>Enviar</Text>}
+                  </TouchableOpacity>
+                </>
               )}
             </View>
           )}
@@ -473,6 +486,9 @@ const styles = StyleSheet.create({
   repNombre: { fontWeight: '800', fontSize: 15, color: colores.marino },
   llamar: { width: 46, height: 46, borderRadius: 15, backgroundColor: colores.celeste, alignItems: 'center', justifyContent: 'center' },
   calificar: { gap: 10, alignItems: 'flex-start' },
+  comentario: { alignSelf: 'stretch', height: 88, textAlignVertical: 'top', paddingTop: 12 },
+  enviarCalif: { alignSelf: 'stretch', height: 50, borderRadius: 16, backgroundColor: colores.marino, alignItems: 'center', justifyContent: 'center' },
+  enviarCalifTexto: { color: colores.blanco, fontWeight: '800', fontSize: 15 },
   estrella: { width: 44, height: 44, borderRadius: 14, backgroundColor: colores.fondo, alignItems: 'center', justifyContent: 'center' },
   estrellaTexto: { fontWeight: '800', fontSize: 16, color: colores.marino },
   cobro: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, borderColor: colores.borde, borderRadius: 20, padding: 14 },

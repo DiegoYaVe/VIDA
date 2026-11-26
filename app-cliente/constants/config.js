@@ -36,3 +36,8 @@ export const absImg = (ruta) =>
 // (Client ID es un identificador público, no un secreto)
 export const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
   || '519799220858-b6343va28ho5bhuqonhtevein9d3hamc.apps.googleusercontent.com';
+
+// Puntos, canjes de premios y Academia VIDA aún no arrancan (pedido de Lila):
+// mientras esto sea true, la app los muestra como "Próximamente" (sin pestaña
+// de Puntos, sin canje en el carrito). Ponlo en false para activarlos.
+export const CLUB_PROXIMAMENTE = true;
