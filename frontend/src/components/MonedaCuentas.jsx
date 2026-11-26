@@ -43,7 +43,7 @@ export default function MonedaCuentas() {
         <div className="rounded-xl border border-gray-200 p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">1. Monedas permitidas</p>
           <select disabled={busy} value={cfg.Modo} onChange={e=>guardar('/cuentas/config-moneda',{Modo:e.target.value,FuenteTasa:cfg.FuenteTasa},'put',`Modo ${e.target.value} guardado`)} className="w-full border border-gray-300 rounded-xl px-3 py-2.5 bg-white font-semibold">
-            <option value="USD">Solo dólares (USD)</option><option value="VES">Solo bolívares (VES)</option><option value="AMBAS">Dólares y bolívares (AMBAS)</option>
+            <option value="USD">Solo dólares (USD)</option><option value="VES">Solo bolívares (Bs)</option><option value="AMBAS">Dólares y bolívares (mixto)</option>
           </select><p className="text-xs text-gray-500 mt-2">Actual: <b>{cfg.Modo}</b></p>
         </div>
         <div className="rounded-xl border border-gray-200 p-4">
@@ -63,7 +63,7 @@ export default function MonedaCuentas() {
       </section> : <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
         <p className="font-bold text-slate-800">Registrar tasa manual</p><p className="text-xs text-gray-500 mt-1 mb-3">Solo se utiliza porque seleccionaste fuente Manual. Fecha efectiva de Venezuela; máximo 4 días de antigüedad.</p>
         <div className="grid gap-2 md:grid-cols-[1fr_170px_1.4fr_auto]">
-          <input aria-label="Bolívares por dólar" type="number" min="0" step="0.00000001" value={t} onChange={e=>setT(e.target.value)} placeholder="VES por USD" className="border border-gray-300 p-2.5 rounded-xl bg-white"/>
+          <input aria-label="Bolívares por dólar" type="number" min="0" step="0.00000001" value={t} onChange={e=>setT(e.target.value)} placeholder="Bs por USD" className="border border-gray-300 p-2.5 rounded-xl bg-white"/>
           <input aria-label="Fecha valor" type="date" value={fecha} onChange={e=>setFecha(e.target.value)} className="border border-gray-300 p-2.5 rounded-xl bg-white"/>
           <input aria-label="Fuente de la tasa" value={fuente} maxLength={200} onChange={e=>setFuente(e.target.value)} placeholder="Fuente verificable" className="border border-gray-300 p-2.5 rounded-xl bg-white"/>
           <button disabled={busy||!t||!fuente} onClick={()=>guardar('/cuentas/tasas',{VESporUSD:Number(t),FechaValor:fecha,Fuente:fuente},'post','Tasa manual registrada correctamente')} className="bg-vida-blue text-white rounded-xl px-4 py-2.5 font-semibold disabled:opacity-50">Registrar</button>

@@ -116,7 +116,7 @@ function ModalAbono({ cuenta, onCerrar, onHecho }) {
             {(cfg?.Modo==='AMBAS'?['USD','VES']:[cfg?.Modo||'USD']).map(m=><option key={m}>{m}</option>)}
           </select>
         </label>
-        <p className="text-xs mb-3">{tc ? `1 USD = ${tc} VES. Fecha: ${String(cfg.tasa.FechaValor).slice(0,10)}. Fuente: ${cfg.tasa.Fuente}` : 'Sin tasa verificada: actualiza antes de cobrar.'} Equivalente del abono: {fmt(montoNum)} USD.</p>
+        <p className="text-xs mb-3">{tc ? `1 USD = ${tc} Bs. Fecha: ${String(cfg.tasa.FechaValor).slice(0,10)}. Fuente: ${cfg.tasa.Fuente}` : 'Sin tasa verificada: actualiza antes de cobrar.'} Equivalente del abono: {fmt(montoNum)} USD.</p>
         <label className="flex items-center gap-2.5 mb-4 cursor-pointer">
           <input type="checkbox" checked={liquidar} onChange={(e) => setLiquidar(e.target.checked)}
                  className="w-4 h-4 accent-vida-green"/>

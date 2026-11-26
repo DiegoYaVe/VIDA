@@ -17,6 +17,7 @@ import api from '../services/api.js';
 import ModalCierre, {ArqueoHistorial} from '../components/ArqueoCaja.jsx';
 import ResumenMoneda from '../components/ResumenMoneda.jsx';
 import { useToast } from '../components/Toast.jsx';
+import {simbolo} from '../utils/monedas.js';
 
 // ── Utilidades ─────────────────────────────────────────────────────────────
 
@@ -165,7 +166,7 @@ function ModalVentasTurno({ turno, onClose }) {
         {data?.tardias?.NumTransacciones>0&&<div className="px-6 py-3 border-b bg-amber-50 text-sm text-amber-800">
           <p className="font-semibold">{data.tardias.NumTransacciones} venta(s) sincronizada(s) después del cierre · {fmt(data.tardias.TotalUSD)}</p>
           <p className="text-xs">No están en las cifras guardadas del turno. Su efectivo ya estaba en la caja al contarla: {Number(data.tardias.EfectivoUSD).toFixed(2)} USD y {Number(data.tardias.EfectivoVES).toFixed(2)} VES.
-            {data.tardias.DiferenciaConciliadaUSD!=null&&<> Diferencia conciliada: <b>{Number(data.tardias.DiferenciaConciliadaUSD).toFixed(2)} USD</b> · <b>{Number(data.tardias.DiferenciaConciliadaVES).toFixed(2)} VES</b>.</>}</p>
+            {data.tardias.DiferenciaConciliadaUSD!=null&&<> Diferencia conciliada: <b>{Number(data.tardias.DiferenciaConciliadaUSD).toFixed(2)} USD</b> · <b>{Number(data.tardias.DiferenciaConciliadaVES).toFixed(2)} Bs</b>.</>}</p>
         </div>}
         <div className="px-6 py-3 border-b bg-white flex items-center gap-3">
           <div className="relative flex-1">
@@ -231,7 +232,7 @@ function ModalMovimiento({ turno, onClose, onSaved }) {
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl p-6 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
         <h2 className="text-xl font-bold">Registrar movimiento</h2>
-        <p className="text-sm text-gray-500">Egresos, ingresos, retiros o devoluciones de efectivo. Ajustan el efectivo esperado de su moneda en el arqueo, sin mezclar USD con VES.</p>
+        <p className="text-sm text-gray-500">Egresos, ingresos, retiros o devoluciones de efectivo. Ajustan el efectivo esperado de su moneda en el arqueo, sin mezclar dólares con bolívares.</p>
         <label className="block text-sm font-medium">Tipo
           <select className="input-field" value={tipo} onChange={e => setTipo(e.target.value)} disabled={loading}>
             <option value="EGRESO">Egreso (gasto pagado de caja)</option>
@@ -242,11 +243,11 @@ function ModalMovimiento({ turno, onClose, onSaved }) {
         </label>
         <label className="block text-sm font-medium">Moneda
           <select className="input-field" value={moneda} onChange={e => setMoneda(e.target.value)} disabled={loading}>
-            <option value="USD">USD</option>
-            <option value="VES">VES</option>
+            <option value="USD">Dólares (USD)</option>
+            <option value="VES">Bolívares (Bs)</option>
           </select>
         </label>
-        <label className="block text-sm font-medium">Monto ({moneda})
+        <label className="block text-sm font-medium">Monto ({simbolo(moneda)})
           <input type="number" min="0" step="0.01" className="input-field" value={monto} onChange={e => setMonto(e.target.value)} disabled={loading} placeholder="0.00" />
         </label>
         <label className="block text-sm font-medium">Motivo (opcional)
@@ -565,7 +566,7 @@ export default function CierreCaja() {
                         onChange={(e) => setMontoApertura(e.target.value)}
                       />
                     </div>
-                    <label className="block text-sm font-medium">Monto inicial en caja (VES efectivo)
+                    <label className="block text-sm font-medium">Monto inicial en caja (bolívares en efectivo)
                       <input type="number" min="0" step="0.01" className="input-field" value={aperturaVES} onChange={e=>setAperturaVES(e.target.value)}/>
                     </label>
                     <div>
@@ -699,10 +700,10 @@ export default function CierreCaja() {
                     const mov = Number(movPorMoneda[m]||0);
                     const esp = espMoneda[m]!=null ? Number(espMoneda[m]) : ap+ven+mov;
                     return <div key={m} className="text-sm space-y-1 border-t pt-2">
-                      <Row label={'Apertura '+m} value={ap.toFixed(2)+' '+m}/>
-                      <Row label={'Ventas efectivo neto '+m} value={ven.toFixed(2)+' '+m}/>
-                      {mov!==0 && <Row label={'Movimientos '+m} value={(mov>0?'+':'')+mov.toFixed(2)+' '+m} valueColor={mov<0?'text-red-600':'text-green-700'}/>}
-                      <Row bold label={'Esperado '+m} value={esp.toFixed(2)+' '+m}/>
+                      <Row label={'Apertura '+simbolo(m)} value={ap.toFixed(2)+' '+simbolo(m)}/>
+                      <Row label={'Ventas efectivo neto '+simbolo(m)} value={ven.toFixed(2)+' '+simbolo(m)}/>
+                      {mov!==0 && <Row label={'Movimientos '+simbolo(m)} value={(mov>0?'+':'')+mov.toFixed(2)+' '+simbolo(m)} valueColor={mov<0?'text-red-600':'text-green-700'}/>}
+                      <Row bold label={'Esperado '+simbolo(m)} value={esp.toFixed(2)+' '+simbolo(m)}/>
                     </div>;
                   })}
                 </div>
@@ -849,7 +850,7 @@ export default function CierreCaja() {
                         </td>
                         <td className="px-4 py-3 text-gray-800">{t.NombreUsuario || '—'}</td>
                         <td className="px-4 py-3 text-gray-600">{t.NombreSucursal || '—'}</td>
-                        <td className="px-4 py-3 text-right">{fmt(t.MontoApertura)} USD<br/>{Number(t.MontoAperturaVES||0).toFixed(2)} VES</td>
+                        <td className="px-4 py-3 text-right">{fmt(t.MontoApertura)} USD<br/>{Number(t.MontoAperturaVES||0).toFixed(2)} Bs</td>
                         <td className="px-4 py-3 text-right font-medium">{fmt(t.TotalVentas)}</td>
                         <td className="px-4 py-3 text-right"><ArqueoHistorial turno={t} campo="Contado"/></td>
                         <td className={`px-4 py-3 text-right font-medium ${

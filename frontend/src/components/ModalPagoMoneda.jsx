@@ -1,6 +1,11 @@
 import {useState,useEffect} from 'react';
 import api from '../services/api.js';
 import {calcularPagoPos,PCT_IGTF} from '../../../backend/src/domain/pagoPos.mjs';
+import {simbolo,conMoneda,NOMBRE_MONEDA} from '../utils/monedas.js';
+
+// Cobro en el punto de venta: dólares, bolívares o mixto (según el modo de
+// moneda de la cuenta, Cuentas → Moneda). Por dentro el bolívar es "VES"; en
+// pantalla se muestra "Bs".
 export default function ModalPagoMoneda({total,usuario,idPuntoVenta,onConfirmar,onCerrar,procesando}) {
  const [cot,setCot]=useState(null),[moneda,setMoneda]=useState('USD'),[metodo,setMetodo]=useState('EFECTIVO');
  const [ef,setEf]=useState(''),[tar,setTar]=useState(''),[error,setError]=useState(''),[cargando,setCargando]=useState(false),[offline,setOffline]=useState(false);
@@ -45,25 +50,70 @@ export default function ModalPagoMoneda({total,usuario,idPuntoVenta,onConfirmar,
     PagoMoneda:{...pago,idCotizacion:nueva.idCotizacion},resumen:confirmado});
   }catch(e){setError(e.message);}finally{setCargando(false);}
  }
- return <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"><div className="bg-white rounded-2xl p-6 max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto">
- <h2 className="font-bold text-xl">Cobrar venta</h2>
- <p className="text-xs">{offline?'Sin red: tasa autorizada previamente.':'Tasa verificada con el servidor.'} Vigencia: {cot?new Date(cot.ExpiraEn).toLocaleString():'consultando…'}</p>
- {cot&&<><p>1 USD = {tc} VES · {String(cot.tasa.FechaValor).slice(0,10)}</p>
- <label className="block">Moneda <select disabled={cargando||procesando} className="border rounded p-2" value={moneda} onChange={e=>{setMoneda(e.target.value);setEf('');setTar('');}}>{(cot.Modo==='AMBAS'?['USD','VES','MIXTA']:[cot.Modo]).map(m=><option key={m} value={m}>{m==='MIXTA'?'USD + bolívares':m}</option>)}</select></label>
- <p className="text-2xl font-bold">{importe.toFixed(2)} {moneda==='MIXTA'?'USD':moneda}</p><p className="text-xs">Equivalente: {total.toFixed(2)} USD · {red(total*tc).toFixed(2)} VES</p>
+
+ const monedas=cot?(cot.Modo==='AMBAS'?['USD','VES','MIXTA']:[cot.Modo]):[];
+ const elegirMoneda=m=>{setMoneda(m);setEf('');setTar('');};
+ const boton=(activo)=>`flex-1 min-w-0 rounded-xl px-3 py-2.5 text-sm font-bold border-2 transition ${activo?'border-vida-blue bg-vida-blue text-white':'border-gray-200 bg-white text-gray-700 hover:border-gray-300'}`;
+ const campo='w-full border border-gray-200 rounded-xl px-3 py-2.5 text-base bg-white';
+
+ return <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 sm:p-4" role="dialog" aria-modal="true" aria-label="Cobrar venta">
+ <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 max-w-lg w-full space-y-4 max-h-[92vh] overflow-y-auto">
+ <div className="flex items-start justify-between gap-3">
+  <h2 className="font-black text-xl text-gray-900">Cobrar venta</h2>
+  {cot&&<p className="text-xs text-gray-500 text-right">1 USD = {tc.toLocaleString('es-VE',{maximumFractionDigits:4})} Bs<br/>{offline?'Sin red: tasa autorizada':'Tasa BCV'} · {String(cot.tasa.FechaValor).slice(0,10)}</p>}
+ </div>
+ {!cot&&cargando&&<p className="text-sm text-gray-500">Consultando la tasa…</p>}
+ {cot&&<>
+ {/* Moneda */}
+ <div>
+  <p className="text-xs font-semibold text-gray-500 mb-1.5">¿En qué moneda paga?</p>
+  <div className="flex gap-2" role="radiogroup" aria-label="Moneda">
+   {monedas.map(m=><button key={m} type="button" role="radio" aria-checked={moneda===m} disabled={cargando||procesando} onClick={()=>elegirMoneda(m)} className={boton(moneda===m)}>
+    {NOMBRE_MONEDA[m]}{m!=='MIXTA'&&<span className="block text-[11px] font-semibold opacity-80">{simbolo(m)}</span>}{m==='MIXTA'&&<span className="block text-[11px] font-semibold opacity-80">$ y Bs</span>}
+   </button>)}
+  </div>
+  {cot.Modo!=='AMBAS'&&<p className="text-[11px] text-gray-400 mt-1.5">Esta cuenta solo cobra en {cot.Modo==='VES'?'bolívares':'dólares'}. Para cobrar en las dos monedas, VIDA lo activa en Cuentas → Moneda.</p>}
+ </div>
+
+ {/* Total */}
+ <div className="rounded-2xl bg-gray-50 px-4 py-3">
+  <p className="text-xs text-gray-500">Total a cobrar</p>
+  {moneda==='MIXTA'
+   ?<p className="text-2xl font-black text-gray-900">{conMoneda(total,'USD')} <span className="text-base font-semibold text-gray-500">· {conMoneda(red(total*tc),'VES')}</span></p>
+   :<p className="text-3xl font-black text-gray-900">{conMoneda(importe,moneda)}</p>}
+  {moneda!=='MIXTA'&&<p className="text-xs text-gray-500 mt-0.5">Equivale a {moneda==='VES'?conMoneda(total,'USD'):conMoneda(red(total*tc),'VES')}</p>}
+ </div>
  {igtf&&<p className="text-xs rounded-lg bg-amber-50 p-2 text-amber-800">Tienda contribuyente especial: se cobra IGTF {PCT_IGTF}% sobre lo pagado en divisas{resumen?.IGTFUSD?` (${resumen.IGTFUSD.toFixed(2)} USD; total a cobrar ${resumen.TotalCobradoUSD.toFixed(2)} USD)`:''}. En bolívares no aplica.</p>}
- <fieldset disabled={cargando||procesando}>
- {moneda==='MIXTA'?<div className="space-y-3">{['USD','VES'].map(m=><div key={m} className="rounded-xl bg-gray-50 p-3"><h3 className="font-semibold">Recibido en {m}</h3><div className="grid grid-cols-2 gap-2">{['Efectivo','Tarjeta'].map(k=><label key={k} className="text-sm">{k} ({m})<input type="number" min="0" step="0.01" className="border rounded p-2 w-full" placeholder="0.00" value={partes[m][k]} onChange={e=>setPartes(prev=>({...prev,[m]:{...prev[m],[k]:e.target.value}}))}/></label>)}</div></div>)}
- <label>Devolver cambio en <select className="border p-2 rounded" value={monedaCambio} onChange={e=>setMonedaCambio(e.target.value)}><option>USD</option><option>VES</option></select></label>
- <p className="text-xs text-gray-500">El cambio no puede superar el efectivo recibido en la moneda elegida.</p>
- {resumen&&<p className="font-semibold">Cambio: {resumen.Desglose[monedaCambio].Cambio.toFixed(2)} {monedaCambio}</p>}
- </div>:<>
- <select aria-label="Método de pago" className="border rounded p-2 w-full" value={metodo} onChange={e=>{setMetodo(e.target.value);setEf('');setTar('');}}><option value="EFECTIVO">Efectivo</option><option value="TARJETA">Tarjeta</option><option value="MIXTO">Efectivo + tarjeta</option></select>
- {metodo!=='TARJETA'&&<label className="block">Efectivo recibido ({moneda})<input className="border p-2 w-full" type="number" min="0" step="0.01" value={ef} placeholder={metodo==='EFECTIVO'?importe.toFixed(2):'0.00'} onChange={e=>setEf(e.target.value)}/></label>}
- {metodo==='MIXTO'&&<label className="block">Tarjeta ({moneda})<input className="border p-2 w-full" type="number" min="0" step="0.01" value={tar} onChange={e=>setTar(e.target.value)}/></label>}
- <p>{cambio<0?'Falta':'Cambio'}: {Math.abs(cambio).toFixed(2)} {moneda}</p></>}
- </fieldset>{validacion&&<p className="text-amber-700 text-sm" role="status">{validacion}</p>}</>}
- {error&&<p role="alert" className="text-red-600">{error}</p>}
- <div className="flex gap-3"><button disabled={procesando||cargando} onClick={onCerrar}>Cerrar</button><button disabled={procesando||cargando} onClick={cargar}>Actualizar tasa</button><button disabled={!valido||cargando||procesando} onClick={confirmar} className="bg-vida-green text-white rounded p-3 disabled:opacity-40">{procesando||cargando?'Procesando…':'Confirmar cobro'}</button></div>
+
+ <fieldset disabled={cargando||procesando} className="space-y-3">
+ {moneda==='MIXTA'?<>
+  {['USD','VES'].map(m=><div key={m} className="rounded-xl border border-gray-100 p-3">
+   <h3 className="font-bold text-sm text-gray-800 mb-2">Recibido en {NOMBRE_MONEDA[m].toLowerCase()} ({simbolo(m)})</h3>
+   <div className="grid grid-cols-2 gap-2">{['Efectivo','Tarjeta'].map(k=><label key={k} className="text-xs font-semibold text-gray-500">{k}
+    <input type="number" inputMode="decimal" min="0" step="0.01" className={`${campo} mt-1`} placeholder="0.00" value={partes[m][k]} onChange={e=>setPartes(prev=>({...prev,[m]:{...prev[m],[k]:e.target.value}}))}/></label>)}</div>
+  </div>)}
+  <label className="block text-xs font-semibold text-gray-500">Devolver el cambio en
+   <select className={`${campo} mt-1`} value={monedaCambio} onChange={e=>setMonedaCambio(e.target.value)}><option value="USD">Dólares (USD)</option><option value="VES">Bolívares (Bs)</option></select></label>
+  <p className="text-[11px] text-gray-400">El cambio no puede superar el efectivo recibido en esa moneda.</p>
+  {resumen&&<p className="font-bold text-gray-800">Cambio: {conMoneda(resumen.Desglose[monedaCambio].Cambio,monedaCambio)}</p>}
+ </>:<>
+  <div className="flex gap-2" role="radiogroup" aria-label="Forma de pago">
+   {[['EFECTIVO','Efectivo'],['TARJETA','Tarjeta'],['MIXTO','Efectivo + tarjeta']].map(([v,l])=><button key={v} type="button" role="radio" aria-checked={metodo===v} onClick={()=>{setMetodo(v);setEf('');setTar('');}} className={boton(metodo===v)}>{l}</button>)}
+  </div>
+  {metodo!=='TARJETA'&&<label className="block text-xs font-semibold text-gray-500">Efectivo recibido ({simbolo(moneda)})
+   <input className={`${campo} mt-1`} type="number" inputMode="decimal" min="0" step="0.01" value={ef} placeholder={metodo==='EFECTIVO'?importe.toFixed(2):'0.00'} onChange={e=>setEf(e.target.value)}/></label>}
+  {metodo==='MIXTO'&&<label className="block text-xs font-semibold text-gray-500">Con tarjeta ({simbolo(moneda)})
+   <input className={`${campo} mt-1`} type="number" inputMode="decimal" min="0" step="0.01" value={tar} onChange={e=>setTar(e.target.value)}/></label>}
+  <p className={`font-bold ${cambio<0?'text-red-600':'text-gray-800'}`}>{cambio<0?'Falta':'Cambio'}: {conMoneda(Math.abs(cambio),moneda)}</p>
+ </>}
+ </fieldset>
+ {validacion&&<p className="text-amber-700 text-sm" role="status">{validacion}</p>}
+ </>}
+ {error&&<p role="alert" className="text-red-600 text-sm">{error}</p>}
+ <div className="flex flex-wrap gap-2 pt-1">
+  <button disabled={procesando||cargando} onClick={onCerrar} className="px-4 py-3 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200">Cerrar</button>
+  <button disabled={procesando||cargando} onClick={cargar} className="px-4 py-3 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200">Actualizar tasa</button>
+  <button disabled={!valido||cargando||procesando} onClick={confirmar} className="flex-1 min-w-[10rem] bg-vida-green text-white font-bold rounded-xl px-4 py-3 disabled:opacity-40">{procesando||cargando?'Procesando…':'Confirmar cobro'}</button>
+ </div>
  </div></div>;
 }

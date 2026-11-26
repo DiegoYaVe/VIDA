@@ -4,6 +4,7 @@ import {useToast} from './Toast.jsx';
 import {getQueue} from '../services/offlineQueue.js';
 import {useAuthStore} from '../store/authStore.js';
 import {useVentasEnRevision} from './VentasOfflineRevision.jsx';
+import {simbolo} from '../utils/monedas.js';
 
 export default function ArqueoCaja({turno,ventas,esperado:espProp,onClose,onCerrado}) {
  const toast=useToast();
@@ -35,9 +36,9 @@ export default function ArqueoCaja({turno,ventas,esperado:espProp,onClose,onCerr
    const esperado=espProp?.[m]!=null?Number(espProp[m]):Number(m==='USD'?turno.MontoApertura:turno.MontoAperturaVES||0)+Number(ventas?.['EfectivoOriginal'+m]||0);
    const diferencia=guardado?.[m]?.Diferencia??(conteo[m]!==''?Number(conteo[m])-esperado:null);
    return <div key={m} className="bg-gray-50 rounded-xl p-4 space-y-2">
-    <h3 className="font-bold">{m}</h3><p>Esperado: {Number(guardado?.[m]?.Esperado??esperado).toFixed(2)} {m}</p>
-    {cerrado?<p>Contado: {Number(guardado?.[m]?.Contado).toFixed(2)} {m}</p>:<label className="block">Efectivo contado ({m})<input disabled={loading} type="number" min="0" step="0.01" className="input-field" placeholder="0.00" value={conteo[m]} onChange={e=>setConteo(v=>({...v,[m]:e.target.value}))}/></label>}
-    {diferencia!==null&&<p className={diferencia<0?'text-red-600 font-semibold':'text-green-700 font-semibold'}>Diferencia: {diferencia.toFixed(2)} {m}</p>}
+    <h3 className="font-bold">{m==='VES'?'Bolívares (Bs)':'Dólares (USD)'}</h3><p>Esperado: {Number(guardado?.[m]?.Esperado??esperado).toFixed(2)} {simbolo(m)}</p>
+    {cerrado?<p>Contado: {Number(guardado?.[m]?.Contado).toFixed(2)} {simbolo(m)}</p>:<label className="block">Efectivo contado ({simbolo(m)})<input disabled={loading} type="number" min="0" step="0.01" className="input-field" placeholder="0.00" value={conteo[m]} onChange={e=>setConteo(v=>({...v,[m]:e.target.value}))}/></label>}
+    {diferencia!==null&&<p className={diferencia<0?'text-red-600 font-semibold':'text-green-700 font-semibold'}>Diferencia: {diferencia.toFixed(2)} {simbolo(m)}</p>}
    </div>;
   })}
   {!cerrado&&<label className="block">Observaciones<textarea disabled={loading} className="input-field" value={observaciones} onChange={e=>setObservaciones(e.target.value)}/></label>}
@@ -47,7 +48,7 @@ export default function ArqueoCaja({turno,ventas,esperado:espProp,onClose,onCerr
 
 export function ArqueoHistorial({turno,campo}) {
  let a;try {a=JSON.parse(turno.ArqueoMonedasJSON||'null');}catch{}
- if(a) return <div>{['USD','VES'].map(m=><div key={m} className={campo==='Diferencia'&&a[m][campo]<0?'text-red-600':''}>{Number(a[m][campo]).toFixed(2)} {m}</div>)}</div>;
+ if(a) return <div>{['USD','VES'].map(m=><div key={m} className={campo==='Diferencia'&&a[m][campo]<0?'text-red-600':''}>{Number(a[m][campo]).toFixed(2)} {simbolo(m)}</div>)}</div>;
  const valor=turno[campo==='Contado'?'MontoCierre':'Diferencia'];
  return valor==null?'—':<span>{Number(valor).toFixed(2)} USD<small className="block text-gray-400">Equivalente · histórico</small></span>;
 }

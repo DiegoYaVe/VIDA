@@ -427,7 +427,7 @@ function TabCaja({ filtros }) {
               <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm space-y-3">
                 <div>
                   <h3 className="font-bold text-gray-800">Arqueo por moneda</h3>
-                  <p className="text-xs text-gray-500">Importes originales del cierre: USD y VES no se convierten ni se suman entre sí. Los faltantes y sobrantes se acumulan aparte, para que el sobrante de un turno no tape el faltante de otro.</p>
+                  <p className="text-xs text-gray-500">Importes originales del cierre: dólares y bolívares no se convierten ni se suman entre sí. Los faltantes y sobrantes se acumulan aparte, para que el sobrante de un turno no tape el faltante de otro.</p>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -504,7 +504,7 @@ function TabCaja({ filtros }) {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-gray-50">
-                        {['Sucursal','Turnos','Con dif.','Esperado USD','Contado USD','Dif. USD','Esperado VES','Contado VES','Dif. VES'].map(h => (
+                        {['Sucursal','Turnos','Con dif.','Esperado USD','Contado USD','Dif. USD','Esperado Bs','Contado Bs','Dif. Bs'].map(h => (
                           <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap ${h === 'Sucursal' ? 'text-left' : 'text-right'}`}>{h}</th>
                         ))}
                       </tr>
@@ -545,7 +545,7 @@ function TabCaja({ filtros }) {
                   <table className="w-full text-sm">
                     <thead className="sticky top-0">
                       <tr className="bg-gray-50">
-                        {['Cierre','Sucursal','Cajero','Esperado USD','Contado USD','Dif. USD','Esperado VES','Contado VES','Dif. VES'].map(h => (
+                        {['Cierre','Sucursal','Cajero','Esperado USD','Contado USD','Dif. USD','Esperado Bs','Contado Bs','Dif. Bs'].map(h => (
                           <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap ${['Cierre','Sucursal','Cajero'].includes(h) ? 'text-left' : 'text-right'}`}>{h}</th>
                         ))}
                       </tr>
@@ -798,8 +798,8 @@ function TabPagoMovil({ filtros }) {
                 <table className="w-full text-sm">
                   <thead className="sticky top-0">
                     <tr className="bg-gray-50">
-                      {['Pedido', 'Sucursal', 'Cliente', 'Estado', 'Monto VES', 'Total USD', 'Referencia'].map(h => (
-                        <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap ${['Monto VES', 'Total USD'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
+                      {['Pedido', 'Sucursal', 'Cliente', 'Estado', 'Monto Bs', 'Total USD', 'Referencia'].map(h => (
+                        <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap ${['Monto Bs', 'Total USD'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
