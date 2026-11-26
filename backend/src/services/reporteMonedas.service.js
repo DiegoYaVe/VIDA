@@ -2,7 +2,7 @@ import {fechaCaracas} from './fechas.service.js';
 // Agrega snapshots históricos, sin consultar tipos de cambio nuevos.
 export function construirReporteVentas(ventas) {
  const tiendas=new Map(),dias=new Map(),detalleMonedas=[];
- const monedas={USD:{Efectivo:0,Tarjeta:0,Cambio:0,NetoEfectivo:0},VES:{Efectivo:0,Tarjeta:0,Cambio:0,NetoEfectivo:0}};
+ const monedas={USD:{Efectivo:0,Tarjeta:0,Electronico:0,Cambio:0,NetoEfectivo:0},VES:{Efectivo:0,Tarjeta:0,Electronico:0,Cambio:0,NetoEfectivo:0}};
  let sinTasa=0;
  for(const v of ventas) {
   const key=String(v.idPuntoVenta),fecha=fechaCaracas(new Date(v.FechaAlta));
@@ -16,10 +16,11 @@ export function construirReporteVentas(ventas) {
   if(!partes||p?.Moneda==='MIXTA'&&(!partes.USD||!partes.VES)) throw new Error('Desglose histórico incompleto');
   for(const [moneda,m] of Object.entries(partes)) {
    if(!monedas[moneda]) throw new Error('Moneda histórica desconocida');
-   const ef=Number(m.Efectivo),tar=Number(m.Tarjeta),cambio=Number(m.Cambio);
-   if(![ef,tar,cambio].every(Number.isFinite)) throw new Error('Importe histórico inválido');
-   monedas[moneda].Efectivo+=ef;monedas[moneda].Tarjeta+=tar;monedas[moneda].Cambio+=cambio;monedas[moneda].NetoEfectivo+=ef-cambio;
-   detalleMonedas.push({idPedido:v.idPedido,Fecha:fecha,Tienda:v.NombrePuntoVenta,Moneda:moneda,Efectivo:ef,Tarjeta:tar,Cambio:cambio,NetoEfectivo:ef-cambio,Tasa:p?.TasaVESporUSD??null,FechaTasa:p?.FechaTasa??null,Fuente:p?.Fuente??'Histórico USD sin tasa'});
+   // Electronico: Pago Móvil, transferencia, Biopago o Zelle (no es efectivo)
+   const ef=Number(m.Efectivo),tar=Number(m.Tarjeta),cambio=Number(m.Cambio),elec=Number(m.Electronico||0);
+   if(![ef,tar,cambio,elec].every(Number.isFinite)) throw new Error('Importe histórico inválido');
+   monedas[moneda].Efectivo+=ef;monedas[moneda].Tarjeta+=tar;monedas[moneda].Electronico+=elec;monedas[moneda].Cambio+=cambio;monedas[moneda].NetoEfectivo+=ef-cambio;
+   detalleMonedas.push({idPedido:v.idPedido,Fecha:fecha,Tienda:v.NombrePuntoVenta,Moneda:moneda,Efectivo:ef,Tarjeta:tar,Electronico:elec,Forma:m.Forma||null,Referencia:m.Referencia||null,Cambio:cambio,NetoEfectivo:ef-cambio,Tasa:p?.TasaVESporUSD??null,FechaTasa:p?.FechaTasa??null,Fuente:p?.Fuente??'Histórico USD sin tasa'});
   }
  }
  const filas=[...tiendas.values()],totales={NumVentas:0,TotalUSD:0,TotalEfectivo:0,TotalTarjeta:0,TotalCambio:0};

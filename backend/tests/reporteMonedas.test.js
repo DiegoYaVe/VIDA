@@ -10,7 +10,7 @@ test('reporte no suma las monedas ni aplica una tasa actual al histórico',()=>{
  assert.equal(r.totales.TotalUSD,20);assert.equal(r.monedas.USD.NetoEfectivo,2);assert.equal(r.monedas.VES.NetoEfectivo,820);
  assert.deepEqual(r.detalleMonedas.map(d=>d.Tasa),[40,40,50]);
  assert.equal(r.totales.NumVentas,2);assert.equal(r.detalleMonedas.length,3);
- assert.equal(tablasMonedas(r)[1].datos[1][8],40);
+ assert.equal(tablasMonedas(r)[1].datos[1][11],40);   // columna TC (tras Pago electrónico, Forma y Referencia)
 });
 test('sin tasa se identifica legado USD y no se fabrica TC',()=>{
  const r=construirReporteVentas([base]);assert.equal(r.sinTasa,1);assert.equal(r.detalleMonedas[0].Tasa,null);
@@ -23,4 +23,11 @@ test('agrupa tienda y día sin duplicar ventas mixtas',()=>{
 test('vacío retorna ceros y snapshot corrupto rechaza reporte',()=>{
  assert.equal(construirReporteVentas([]).totales.TotalUSD,0);
  assert.throws(()=>construirReporteVentas([{...base,PagoMonedaJSON:'{'}]));
+});
+test('los pagos electrónicos se reportan aparte del efectivo y la tarjeta',()=>{
+ const r=construirReporteVentas([{...base,MontoEfectivo:0,MontoTarjeta:0,MontoCambio:0,
+  PagoMonedaJSON:JSON.stringify({Moneda:'VES',TasaVESporUSD:40,Efectivo:0,Tarjeta:0,Cambio:0,Electronico:400,Forma:'PAGO_MOVIL',Referencia:'123456'})}]);
+ assert.equal(r.monedas.VES.Electronico,400);assert.equal(r.monedas.VES.NetoEfectivo,0);
+ assert.equal(r.detalleMonedas[0].Referencia,'123456');
+ const fila=tablasMonedas(r)[1].datos[1];assert.equal(fila[6],400);assert.equal(fila[7],'PAGO_MOVIL');
 });

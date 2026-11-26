@@ -708,6 +708,18 @@ export default function CierreCaja() {
                   })}
                 </div>
 
+                {/* Pagos electrónicos: no entran al efectivo de la caja; se concilian con el banco */}
+                {ventas?.Electronicos?.length > 0 && (
+                  <div className="card p-5 space-y-2">
+                    <h3 className="font-semibold text-gray-700">Pagos electrónicos del turno</h3>
+                    <p className="text-xs text-gray-500">No están en la caja: revisa que hayan llegado al banco o a Zelle.</p>
+                    {ventas.Electronicos.map(e => (
+                      <Row key={e.Forma} label={`${e.Nombre} (${e.Operaciones} ${e.Operaciones === 1 ? 'operación' : 'operaciones'})`}
+                        value={Number(e.Monto).toFixed(2) + ' ' + simbolo(e.Moneda)}/>
+                    ))}
+                  </div>
+                )}
+
                 {/* Movimientos de caja */}
                 <div className="card p-5 space-y-3">
                   <div className="flex items-center justify-between">

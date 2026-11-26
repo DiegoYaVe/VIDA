@@ -1,1 +1,1 @@
-export {centavos, importeCaja, calcularPagoPos, validarVigenciaCotizacion} from '../domain/pagoPos.mjs';
+export {centavos, importeCaja, calcularPagoPos, validarVigenciaCotizacion, electronicosPorForma, FORMAS_ELECTRONICAS} from '../domain/pagoPos.mjs';

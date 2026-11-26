@@ -1,4 +1,5 @@
 import ModalPagoMoneda from '../components/ModalPagoMoneda.jsx';
+import { FORMAS_ELECTRONICAS } from '../../../backend/src/domain/pagoPos.mjs';
 import ResumenMoneda from '../components/ResumenMoneda.jsx';
 // src/pages/POS.jsx
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -81,6 +82,12 @@ function Ticket({ venta, onCerrar }) {
               <span>${venta.total.toFixed(2)}</span>
             </div>
           )}
+          {FORMAS_ELECTRONICAS[pago.metodo] && (
+            <div className="flex justify-between text-xs">
+              <span>{FORMAS_ELECTRONICAS[pago.metodo].Nombre}{pago.resumen?.Referencia ? ` · ref. ${pago.resumen.Referencia}` : ''}</span>
+              <span>${venta.total.toFixed(2)}</span>
+            </div>
+          )}
           {pago.metodo === 'MIXTO' && (
             <>
               <div className="flex justify-between text-xs">
@@ -91,6 +98,12 @@ function Ticket({ venta, onCerrar }) {
                 <span>Tarjeta</span>
                 <span>${pago.tarjeta.toFixed(2)}</span>
               </div>
+              {pago.resumen?.ElectronicoUSD > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span>Pago electrónico</span>
+                  <span>${Number(pago.resumen.ElectronicoUSD).toFixed(2)}</span>
+                </div>
+              )}
               {pago.cambio > 0 && (
                 <div className="flex justify-between text-xs font-bold text-green-600">
                   <span>Cambio</span>

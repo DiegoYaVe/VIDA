@@ -2,7 +2,7 @@
 import { getPool, sql } from '../db/sqlserver.js';
 import { registrarAuditoria } from '../services/audit.service.js';
 import {efectivoPorMoneda,calcularArqueo,efectoMovimientos,conciliarTardias} from '../services/arqueo.service.js';
-import {importeCaja} from '../services/pagoPos.service.js';
+import {importeCaja,electronicosPorForma} from '../services/pagoPos.service.js';
 import { tiendaEnAlcance, filtroTiendasRed } from '../services/alcance.service.js';
 
 // ── Helper ──────────────────────────────────────────────────────────────────
@@ -79,11 +79,14 @@ export async function calcularTotales(pool, idBranch, idCuenta, idPuntoVenta, fe
       ${condicionTurno(fechaCondicion)};
     SELECT p.TotalUSD,p.MetodoPago,p.MontoEfectivo,p.MontoCambio,p.PagoMonedaJSON FROM VIDA_PEDIDOS p
       WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.idPuntoVenta=@idPuntoVenta
-      AND p.Canal='POS' AND p.Status='ENTREGADO' AND p.MetodoPago IN ('EFECTIVO','MIXTO') ${condicionTurno(fechaCondicion)}
+      AND p.Canal='POS' AND p.Status='ENTREGADO' ${condicionTurno(fechaCondicion)}
   `);
 
+  // efectivoPorMoneda solo cuenta las ventas en efectivo o mixtas; el resto
+  // (tarjeta, Pago Móvil, Zelle…) solo entra al resumen de pagos electrónicos.
   const originales=efectivoPorMoneda(r.recordsets[1] || []);
-  return {...r.recordset[0],EfectivoOriginalUSD:originales.USD,EfectivoOriginalVES:originales.VES};
+  return {...r.recordset[0],EfectivoOriginalUSD:originales.USD,EfectivoOriginalVES:originales.VES,
+    Electronicos:electronicosPorForma(r.recordsets[1] || [])};
 }
 
 // ── Movimientos de caja del turno (egresos/ingresos/retiros/devoluciones) ───

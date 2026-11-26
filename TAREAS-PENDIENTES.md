@@ -26,7 +26,7 @@ Cada una indica de dónde salió y su estado.
 | 19 | Carga del inventario de una tienda desde un archivo Excel | Audios de WhatsApp | Anotada |
 | 20 | Video tutorial para empresarios y guía para instalar el sistema en las tiendas | Mensajes de WhatsApp | Anotada |
 | 21 | Responder las dudas del empresario sobre la plataforma | Audios y mensajes de WhatsApp | Respuestas listas (abajo) · faltan las comerciales |
-| 22 | Pago Móvil, transferencia y Zelle como formas de pago en el punto de venta de la tienda | Preguntas del empresario (tarea 21) | Anotada |
+| 22 | Pago Móvil, transferencia y Zelle como formas de pago en el punto de venta de la tienda | Preguntas del empresario (tarea 21) | **Programada** (26 nov), junto con **Biopago**: se cobran con su referencia; la conexión directa con el banco queda fuera (requiere convenio) |
 | 23 | Conexión directa con la máquina fiscal o la imprenta digital (número de control automático) | Preguntas del empresario (tarea 21) | Anotada |
 | 24 | **Pedido de la tienda al proveedor por su API, con cobro en línea y seguimiento GPS hasta la tienda** (flujo que propone Israel; reúne las tareas 2, 3, 5 y 17) | Audio de Israel (28 oct 2026) + decisiones de Diego | **Fase 1 programada** (28 oct, sin subir): pedido a VIDA, pago, paquetes por proveedor, Portal de proveedores, recepción · falta: app del repartidor de proveedores |
 | 25 | Activar Google Routes (rutas por las calles en los mapas de las apps) | Diego (28 oct 2026) | **Código listo** · falta la llave de la API |

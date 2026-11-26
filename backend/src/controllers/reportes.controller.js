@@ -216,7 +216,7 @@ export async function reportePagoMovil(request, reply) {
     const base = `FROM VIDA_PEDIDOS p
       JOIN VIDA_CUENTA_PUNTOS_VENTA pv
         ON pv.idBranch=p.idBranch AND pv.idCuenta=p.idCuenta AND pv.idPuntoVenta=p.idPuntoVenta
-      WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.MetodoPago='PAGO_MOVIL'
+      WHERE p.idBranch=@idBranch AND p.idCuenta=@idCuenta AND p.MetodoPago='PAGO_MOVIL' AND p.Canal='APP'
         AND p.FechaAlta>=DATEADD(HOUR,4,CAST(@fechaInicio AS DATETIME)) AND p.FechaAlta<DATEADD(HOUR,4,DATEADD(day,1,CAST(@fechaFin AS DATETIME))) ${geoFilter}`;
 
     const r = await req.query(`

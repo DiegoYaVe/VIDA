@@ -1,15 +1,16 @@
 import {useState,useEffect} from 'react';
 import api from '../services/api.js';
-import {calcularPagoPos,PCT_IGTF} from '../../../backend/src/domain/pagoPos.mjs';
+import {calcularPagoPos,PCT_IGTF,FORMAS_ELECTRONICAS,formasDeMoneda} from '../../../backend/src/domain/pagoPos.mjs';
 import {simbolo,conMoneda,NOMBRE_MONEDA} from '../utils/monedas.js';
 
 // Cobro en el punto de venta: dólares, bolívares o mixto (según el modo de
 // moneda de la cuenta, Cuentas → Moneda). Por dentro el bolívar es "VES"; en
-// pantalla se muestra "Bs".
+// pantalla se muestra "Bs". Además de efectivo y tarjeta: Pago Móvil,
+// transferencia y Biopago (en Bs) y Zelle (en $), siempre con su referencia.
 export default function ModalPagoMoneda({total,usuario,idPuntoVenta,onConfirmar,onCerrar,procesando}) {
  const [cot,setCot]=useState(null),[moneda,setMoneda]=useState('USD'),[metodo,setMetodo]=useState('EFECTIVO');
- const [ef,setEf]=useState(''),[tar,setTar]=useState(''),[error,setError]=useState(''),[cargando,setCargando]=useState(false),[offline,setOffline]=useState(false);
- const [partes,setPartes]=useState({USD:{Efectivo:'',Tarjeta:''},VES:{Efectivo:'',Tarjeta:''}});
+ const [ef,setEf]=useState(''),[tar,setTar]=useState(''),[ref,setRef]=useState(''),[error,setError]=useState(''),[cargando,setCargando]=useState(false),[offline,setOffline]=useState(false);
+ const [partes,setPartes]=useState({USD:{Efectivo:'',Tarjeta:'',Electronico:'',Forma:'ZELLE',Referencia:''},VES:{Efectivo:'',Tarjeta:'',Electronico:'',Forma:'PAGO_MOVIL',Referencia:''}});
  const [monedaCambio,setMonedaCambio]=useState('USD');
  const clave=`vida.tc.pos.${usuario.idBranch}.${usuario.idCuenta}.${usuario.idUsuario}.${idPuntoVenta}`;
  const red=v=>Math.round((v+Number.EPSILON)*100)/100;
@@ -31,10 +32,13 @@ export default function ModalPagoMoneda({total,usuario,idPuntoVenta,onConfirmar,
  // Contribuyente especial: IGTF (3%) sobre lo pagado en divisas
  const igtf=!!cot?.AplicaIGTF;
  const importe=red((total+(igtf&&moneda==='USD'?red(total*PCT_IGTF/100):0))*(moneda==='VES'?tc:1));
- const efectivo=metodo==='TARJETA'?0:ef===''?(metodo==='EFECTIVO'?importe:0):Number(ef);
- const tarjeta=metodo==='TARJETA'?importe:metodo==='EFECTIVO'?0:Number(tar)||0;
- const cambio=red(efectivo+tarjeta-importe);
- const pago=moneda==='MIXTA'?{Moneda:'MIXTA',MonedaCambio:monedaCambio,Desglose:Object.fromEntries(['USD','VES'].map(m=>[m,{Efectivo:Number(partes[m].Efectivo||0),Tarjeta:Number(partes[m].Tarjeta||0)}]))}:{Moneda:moneda,Metodo:metodo,Efectivo:efectivo,Tarjeta:tarjeta};
+ const electronico=!!FORMAS_ELECTRONICAS[metodo];
+ const efectivo=metodo==='TARJETA'||electronico?0:ef===''?(metodo==='EFECTIVO'?importe:0):Number(ef);
+ const tarjeta=metodo==='TARJETA'?importe:metodo==='MIXTO'?Number(tar)||0:0;
+ const cambio=electronico?0:red(efectivo+tarjeta-importe);
+ const desglose=m=>{const d=partes[m];const e=Number(d.Electronico||0);return {Efectivo:Number(d.Efectivo||0),Tarjeta:Number(d.Tarjeta||0),...(e>0?{Electronico:e,Forma:d.Forma,Referencia:d.Referencia}:{})};};
+ const pago=moneda==='MIXTA'?{Moneda:'MIXTA',MonedaCambio:monedaCambio,Desglose:Object.fromEntries(['USD','VES'].map(m=>[m,desglose(m)]))}
+  :{Moneda:moneda,Metodo:metodo,Efectivo:efectivo,Tarjeta:tarjeta,...(electronico?{Referencia:ref}:{})};
  let resumen=null,validacion='';
  if(cot) {try {resumen=calcularPagoPos(total,pago,cot.tasa,cot.Modo,igtf);}catch(e){validacion=e.message;}}
  const valido=!!resumen;
@@ -52,7 +56,9 @@ export default function ModalPagoMoneda({total,usuario,idPuntoVenta,onConfirmar,
  }
 
  const monedas=cot?(cot.Modo==='AMBAS'?['USD','VES','MIXTA']:[cot.Modo]):[];
- const elegirMoneda=m=>{setMoneda(m);setEf('');setTar('');};
+ // Formas de pago según la moneda: las electrónicas solo en la suya
+ const metodos=moneda==='MIXTA'?[]:[['EFECTIVO','Efectivo'],['TARJETA','Tarjeta'],['MIXTO','Efectivo + tarjeta'],...formasDeMoneda(moneda).map(f=>[f,FORMAS_ELECTRONICAS[f].Nombre])];
+ const elegirMoneda=m=>{setMoneda(m);setMetodo('EFECTIVO');setEf('');setTar('');setRef('');};
  const boton=(activo)=>`flex-1 min-w-0 rounded-xl px-3 py-2.5 text-sm font-bold border-2 transition ${activo?'border-vida-blue bg-vida-blue text-white':'border-gray-200 bg-white text-gray-700 hover:border-gray-300'}`;
  const campo='w-full border border-gray-200 rounded-xl px-3 py-2.5 text-base bg-white';
 
@@ -91,20 +97,33 @@ export default function ModalPagoMoneda({total,usuario,idPuntoVenta,onConfirmar,
    <h3 className="font-bold text-sm text-gray-800 mb-2">Recibido en {NOMBRE_MONEDA[m].toLowerCase()} ({simbolo(m)})</h3>
    <div className="grid grid-cols-2 gap-2">{['Efectivo','Tarjeta'].map(k=><label key={k} className="text-xs font-semibold text-gray-500">{k}
     <input type="number" inputMode="decimal" min="0" step="0.01" className={`${campo} mt-1`} placeholder="0.00" value={partes[m][k]} onChange={e=>setPartes(prev=>({...prev,[m]:{...prev[m],[k]:e.target.value}}))}/></label>)}</div>
+   {/* Pago electrónico en esta moneda: Pago Móvil, transferencia o Biopago en Bs; Zelle en $ */}
+   <div className="grid grid-cols-2 gap-2 mt-2">
+    <label className="text-xs font-semibold text-gray-500">{formasDeMoneda(m).length>1?
+      <select aria-label={`Pago electrónico en ${simbolo(m)}`} className="block w-full bg-transparent font-semibold text-gray-500 -ml-1" value={partes[m].Forma} onChange={e=>setPartes(prev=>({...prev,[m]:{...prev[m],Forma:e.target.value}}))}>
+       {formasDeMoneda(m).map(f=><option key={f} value={f}>{FORMAS_ELECTRONICAS[f].Nombre}</option>)}</select>
+      :FORMAS_ELECTRONICAS[formasDeMoneda(m)[0]].Nombre}
+     <input type="number" inputMode="decimal" min="0" step="0.01" className={`${campo} mt-1`} placeholder="0.00" value={partes[m].Electronico} onChange={e=>setPartes(prev=>({...prev,[m]:{...prev[m],Electronico:e.target.value}}))}/></label>
+    {Number(partes[m].Electronico)>0&&<label className="text-xs font-semibold text-gray-500">Referencia
+     <input className={`${campo} mt-1`} maxLength={40} autoComplete="off" placeholder="N.º de operación" value={partes[m].Referencia} onChange={e=>setPartes(prev=>({...prev,[m]:{...prev[m],Referencia:e.target.value}}))}/></label>}
+   </div>
   </div>)}
   <label className="block text-xs font-semibold text-gray-500">Devolver el cambio en
    <select className={`${campo} mt-1`} value={monedaCambio} onChange={e=>setMonedaCambio(e.target.value)}><option value="USD">Dólares (USD)</option><option value="VES">Bolívares (Bs)</option></select></label>
   <p className="text-[11px] text-gray-400">El cambio no puede superar el efectivo recibido en esa moneda.</p>
   {resumen&&<p className="font-bold text-gray-800">Cambio: {conMoneda(resumen.Desglose[monedaCambio].Cambio,monedaCambio)}</p>}
  </>:<>
-  <div className="flex gap-2" role="radiogroup" aria-label="Forma de pago">
-   {[['EFECTIVO','Efectivo'],['TARJETA','Tarjeta'],['MIXTO','Efectivo + tarjeta']].map(([v,l])=><button key={v} type="button" role="radio" aria-checked={metodo===v} onClick={()=>{setMetodo(v);setEf('');setTar('');}} className={boton(metodo===v)}>{l}</button>)}
+  <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Forma de pago">
+   {metodos.map(([v,l])=><button key={v} type="button" role="radio" aria-checked={metodo===v} onClick={()=>{setMetodo(v);setEf('');setTar('');setRef('');}} className={boton(metodo===v)}>{l}</button>)}
   </div>
-  {metodo!=='TARJETA'&&<label className="block text-xs font-semibold text-gray-500">Efectivo recibido ({simbolo(moneda)})
+  {electronico&&<label className="block text-xs font-semibold text-gray-500">Referencia de {FORMAS_ELECTRONICAS[metodo].Nombre}
+   <input className={`${campo} mt-1`} value={ref} maxLength={40} autoComplete="off" placeholder="Número de la operación" onChange={e=>setRef(e.target.value)}/>
+   <span className="block text-[11px] font-normal text-gray-400 mt-1">Cobra {conMoneda(importe,moneda)} exactos{metodo==='BIOPAGO'?' en el equipo Biopago del banco':''} y anota el número que da la operación.</span></label>}
+  {metodo!=='TARJETA'&&!electronico&&<label className="block text-xs font-semibold text-gray-500">Efectivo recibido ({simbolo(moneda)})
    <input className={`${campo} mt-1`} type="number" inputMode="decimal" min="0" step="0.01" value={ef} placeholder={metodo==='EFECTIVO'?importe.toFixed(2):'0.00'} onChange={e=>setEf(e.target.value)}/></label>}
   {metodo==='MIXTO'&&<label className="block text-xs font-semibold text-gray-500">Con tarjeta ({simbolo(moneda)})
    <input className={`${campo} mt-1`} type="number" inputMode="decimal" min="0" step="0.01" value={tar} onChange={e=>setTar(e.target.value)}/></label>}
-  <p className={`font-bold ${cambio<0?'text-red-600':'text-gray-800'}`}>{cambio<0?'Falta':'Cambio'}: {conMoneda(Math.abs(cambio),moneda)}</p>
+  {!electronico&&<p className={`font-bold ${cambio<0?'text-red-600':'text-gray-800'}`}>{cambio<0?'Falta':'Cambio'}: {conMoneda(Math.abs(cambio),moneda)}</p>}
  </>}
  </fieldset>
  {validacion&&<p className="text-amber-700 text-sm" role="status">{validacion}</p>}
