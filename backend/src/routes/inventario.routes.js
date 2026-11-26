@@ -9,6 +9,7 @@ import {
   registrarMovimiento, listarMovimientos,
   subirImagenProducto,
 } from '../controllers/inventario.controller.js';
+import { cargarLayout } from '../controllers/inventarioLayout.controller.js';
 
 // Roles que pueden escribir (alta/edición)
 const ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO', 'ADMIN'];
@@ -43,6 +44,10 @@ export async function inventarioRoutes(fastify) {
 
   fastify.post('/inventario/productos',
     { preHandler: [requireRole(...ESCRITURA)] }, crearProducto);
+
+  // Carga de productos por layout (Excel) a una tienda: revisar y confirmar
+  fastify.post('/inventario/layout',
+    { preHandler: [requireRole(...ESCRITURA)] }, cargarLayout);
 
   fastify.put('/inventario/productos/precios',
     { preHandler: [requireRole(...ESCRITURA)] }, actualizarPreciosLote);

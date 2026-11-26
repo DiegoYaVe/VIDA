@@ -23,7 +23,7 @@ Cada una indica de dónde salió y su estado.
 | 16 | Cobro de la suscripción: activar o suspender la tienda según su pago, con multa al reactivar | Audios de WhatsApp | **Programada** (19 nov): corte y multa configurables, nacen apagados |
 | 17 | Ingreso de VIDA: porcentaje sobre lo que los proveedores le venden a las tiendas | Audios de WhatsApp | Anotada |
 | 18 | Metas de la Matriz por ventas y por número de tiendas, y pago al personal en Finanzas | Audios de WhatsApp | Anotada |
-| 19 | Carga del inventario de una tienda desde un archivo Excel | Audios de WhatsApp | Anotada |
+| 19 | Carga del inventario de una tienda desde un archivo Excel | Audios de WhatsApp | **Programada** (26 nov): Inventario → Productos → Carga por layout |
 | 20 | Video tutorial para empresarios y guía para instalar el sistema en las tiendas | Mensajes de WhatsApp | Anotada |
 | 21 | Responder las dudas del empresario sobre la plataforma | Audios y mensajes de WhatsApp | Respuestas listas (abajo) · faltan las comerciales |
 | 22 | Pago Móvil, transferencia y Zelle como formas de pago en el punto de venta de la tienda | Preguntas del empresario (tarea 21) | **Programada** (26 nov), junto con **Biopago**: se cobran con su referencia; la conexión directa con el banco queda fuera (requiere convenio) |
@@ -424,6 +424,12 @@ Cada una indica de dónde salió y su estado.
 - Crear los productos nuevos, actualizar los existentes (por SKU o código de barras) y cargar el stock de la tienda elegida, con su movimiento de entrada.
 
 **Por definir:** quién puede importar (la Matriz para cualquier tienda, el empresario para la suya); si el Excel puede crear categorías nuevas; qué hacer si un producto ya existe (actualizar precio o ignorar).
+
+**Programada (26 nov 2026):** en Inventario → Productos, botón **Carga por layout**.
+- **Descargar layout (.xlsx):** hoja «Productos» (con los productos que ya tiene la tienda, si se marca), listas desplegables para categoría, unidad, IVA y PLUS, hoja «Categorías» y hoja «Instrucciones».
+- **Subirlo ya lleno:** se revisa cada fila antes de guardar (nuevo, se actualiza, solo existencia, sin cambios o error con el motivo). Con un solo error no se carga nada; se guarda todo o nada.
+- **Quién:** la tienda carga en la suya; VIDA y los roles de red eligen la tienda, y pueden mandar los productos nuevos al catálogo de VIDA.
+- **Decisiones tomadas:** el producto se busca por SKU (o por código de barras si no trae SKU) y se **actualiza**; lo que la fila trae vacío no borra lo que ya había. Solo VIDA puede crear categorías nuevas desde el Excel. Un producto del catálogo de VIDA solo carga su existencia en la tienda. «Existencia en tienda» deja el stock en ese número, con su movimiento (Entrada si es nuevo, Ajuste si ya existía, motivo «Carga por layout»). Máximo 500 productos por archivo.
 
 ---
 

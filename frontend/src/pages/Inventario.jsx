@@ -6,8 +6,9 @@ import { useToast } from '../components/Toast.jsx';
 import {
   Plus, Search, Package, Tag, ArrowDownCircle, ArrowUpCircle,
   SlidersHorizontal, X, AlertTriangle,
-  Pencil, PowerOff, CheckCircle, LayoutGrid,
+  Pencil, PowerOff, CheckCircle, LayoutGrid, FileSpreadsheet,
 } from 'lucide-react';
+import CargaLayout from '../components/CargaLayout.jsx';
 import * as Icons from 'lucide-react';
 import TablaDatos, { usePreferencia, ordenarLocal } from '../components/TablaDatos.jsx';
 
@@ -739,6 +740,7 @@ function TabProductos({ puedeEscribir, usuario }) {
   const [catFiltro,   setCatFiltro]   = useState('');
   const [loading,     setLoading]     = useState(true);
   const [modal,       setModal]       = useState(null);
+  const [layout,      setLayout]      = useState(false);
   const [orden,       setOrden]       = useState({ col: 'Nombre', dir: 'asc' });
   const [porPagina,   setPorPagina]   = usePreferencia('vida_inventario_filas', 25);
 
@@ -800,6 +802,12 @@ function TabProductos({ puedeEscribir, usuario }) {
           <option value="">Catálogo VIDA y propios</option>
           <option value="1">{puedeFijarSuministro ? 'Solo propios de las tiendas' : 'Solo mis productos'}</option>
         </select>
+        {puedeEscribir && (
+          <button onClick={() => setLayout(true)}
+            className="flex items-center gap-2 text-sm font-bold text-vida-blue border-2 border-vida-blue px-4 py-2 rounded-xl transition hover:bg-vida-blue/5">
+            <FileSpreadsheet size={16} /> Carga por layout
+          </button>
+        )}
         {puedeEscribir && (
           <button onClick={() => setModal({})}
             className="flex items-center gap-2 text-sm font-bold text-white px-4 py-2 rounded-xl transition"
@@ -878,6 +886,15 @@ function TabProductos({ puedeEscribir, usuario }) {
           idPuntoVenta={usuario?.idPuntoVenta ?? null}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); cargar(); }}
+        />
+      )}
+
+      {layout && (
+        <CargaLayout
+          esVida={puedeFijarSuministro || ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'].includes(usuario?.TipoUsuario)}
+          idPuntoVentaUsuario={usuario?.idPuntoVenta ?? null}
+          onClose={() => setLayout(false)}
+          onCargado={() => { cargar(); cargarCats(); }}
         />
       )}
     </div>
