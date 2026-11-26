@@ -44,7 +44,7 @@ export default function MonedaCuentas() {
           <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">1. Monedas permitidas</p>
           <select disabled={busy} value={cfg.Modo} onChange={e=>guardar('/cuentas/config-moneda',{Modo:e.target.value,FuenteTasa:cfg.FuenteTasa},'put',`Modo ${e.target.value} guardado`)} className="w-full border border-gray-300 rounded-xl px-3 py-2.5 bg-white font-semibold">
             <option value="USD">Solo dólares (USD)</option><option value="VES">Solo bolívares (Bs)</option><option value="AMBAS">Dólares y bolívares (mixto)</option>
-          </select><p className="text-xs text-gray-500 mt-2">Actual: <b>{cfg.Modo}</b></p>
+          </select><p className="text-xs text-gray-500 mt-2">Actual: <b>{({USD:'Solo dólares',VES:'Solo bolívares',AMBAS:'Dólares y bolívares'})[cfg.Modo]||cfg.Modo}</b></p>
         </div>
         <div className="rounded-xl border border-gray-200 p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">2. Fuente de la tasa</p>
@@ -57,7 +57,7 @@ export default function MonedaCuentas() {
       {automatica ? <section className="rounded-xl border border-sky-200 bg-sky-50/70 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3"><div>
           <p className="flex items-center gap-2 font-bold text-slate-800"><ShieldCheck size={18} className="text-sky-700"/> Tasa automática vigente</p>
-          {cfg.tasa ? <><p className="text-2xl font-black text-vida-blue mt-1">1 USD = {Number(cfg.tasa.VESporUSD).toLocaleString('es-VE',{maximumFractionDigits:8})} VES</p><p className="text-xs text-gray-500 mt-1">Fecha efectiva: {String(cfg.tasa.FechaValor).slice(0,10)} · Fuente: {cfg.tasa.Fuente}{cfg.tasa.Vigente?'':' · VENCIDA'}</p></> : <p className="text-sm text-amber-700 mt-1">Todavía no hay una tasa registrada.</p>}
+          {cfg.tasa ? <><p className="text-2xl font-black text-vida-blue mt-1">1 USD = {Number(cfg.tasa.VESporUSD).toLocaleString('es-VE',{maximumFractionDigits:8})} Bs</p><p className="text-xs text-gray-500 mt-1">Fecha efectiva: {String(cfg.tasa.FechaValor).slice(0,10)} · Fuente: {cfg.tasa.Fuente}{cfg.tasa.Vigente?'':' · VENCIDA'}</p></> : <p className="text-sm text-amber-700 mt-1">Todavía no hay una tasa registrada.</p>}
         </div><button disabled={busy} onClick={()=>guardar('/cuentas/tasas/actualizar',{},'post','Tasa actualizada y guardada correctamente')} className="inline-flex items-center gap-2 bg-vida-blue text-white rounded-xl px-4 py-2.5 font-semibold disabled:opacity-50"><RefreshCw size={16} className={busy?'animate-spin':''}/> {busy?'Actualizando…':'Actualizar tasa'}</button></div>
         {cfg.Advertencia && <p role="alert" className="mt-3 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-800">{cfg.Advertencia}. La tasa guardada se muestra como referencia y no se utilizará silenciosamente.</p>}
       </section> : <section className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
