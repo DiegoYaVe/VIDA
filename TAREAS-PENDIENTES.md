@@ -30,6 +30,8 @@ Cada una indica de dónde salió y su estado.
 | 23 | Conexión directa con la máquina fiscal o la imprenta digital (número de control automático) | Preguntas del empresario (tarea 21) | Anotada |
 | 24 | **Pedido de la tienda al proveedor por su API, con cobro en línea y seguimiento GPS hasta la tienda** (flujo que propone Israel; reúne las tareas 2, 3, 5 y 17) | Audio de Israel (28 oct 2026) + decisiones de Diego | **Fase 1 programada** (28 oct, sin subir): pedido a VIDA, pago, paquetes por proveedor, Portal de proveedores, recepción · falta: app del repartidor de proveedores |
 | 25 | Activar Google Routes (rutas por las calles en los mapas de las apps) | Diego (28 oct 2026) | **Código listo** · falta la llave de la API |
+| 26 | **Catálogo del proveedor por layout de Excel** (costos, precios y productos), para los proveedores que no tienen API | Diego (27 nov 2026) | **Programada** (27 nov): Proveedores → Lista de precios (Excel) y Productos por aprobar |
+| 27 | **Ajuste del flujo de reabasto:** sin días de crédito, VIDA valida el pedido y genera la orden de compra al proveedor; se define si la tienda recoge o va un repartidor de la app. Actualizar el flujograma | Diego (27 nov 2026) | **Anotada · se empieza** |
 
 ---
 
@@ -609,3 +611,91 @@ Cada una indica de dónde salió y su estado.
 - Un repartidor puede activar los dos tipos.
 
 Diagrama actualizado: `pos-venezuela-deploy/reabasto-vida.html` y https://claude.ai/artifact/UFD7hfPM9jJbsd7eZqPmYj
+
+---
+
+## 26. Catálogo del proveedor por layout de Excel
+
+**Origen:** Diego, 27 nov 2026.
+
+**Qué se pide:** la conexión por API con cadenas grandes (los ejemplos eran Walmart o Bodega Aurrerá en México, o cadenas de Colombia) no es viable por ahora: la mayoría de los supermercados y proveedores no tiene API. En su lugar, **el proveedor nos manda un layout de Excel** con sus productos, precios y costos; VIDA lo carga en el sistema y así, al hacer las órdenes de compra, el catálogo del proveedor está al día: qué productos tiene y cuánto nos cuesta cada uno.
+
+**Lo que ya existe:**
+- Cada proveedor tiene una lista de productos con su costo y su código propio (`VIDA_PROVEEDORES_PRODUCTOS`), pero se llena a mano.
+- La carga por layout de Excel del inventario de una tienda (tarea 19) sirve de modelo: descargar plantilla, llenarla, revisar antes de guardar.
+- El proveedor puede tener canal **PORTAL** o **API** (tarea 24); el layout sería la tercera forma de mantener su catálogo.
+
+**Columnas propuestas del layout** (* obligatorias):
+
+| Columna | Para qué |
+|---|---|
+| Código del proveedor * | Su SKU; con él se hacen las órdenes de compra |
+| Código de barras | Relacionar con el mismo producto del catálogo VIDA y comparar proveedores |
+| Nombre del producto * | |
+| Marca · Categoría | Ordenar y crear el producto en VIDA si es nuevo |
+| Unidad de compra * (pieza, caja, bulto) · Unidades por empaque | Saber cuántas piezas llegan por cada unidad pedida |
+| Costo para VIDA * · Moneda (USD o Bs) | Lo que nos cuesta |
+| Precio de venta sugerido al público | Calcular el margen de la tienda |
+| IVA (% o exento) | Factura y costo real |
+| Pedido mínimo | No pedir menos de lo que vende |
+| Peso por unidad (kg) | Elegir el repartidor cuyo vehículo lo aguanta (tarea 24) |
+| Disponible (sí/no) o existencia | Ofrecer solo lo que hay |
+| Días de entrega | Planear el reabasto |
+| Vigencia de la lista (desde / hasta), en el encabezado | Saber cuándo pedir la lista nueva |
+
+**Cómo funcionaría:**
+1. VIDA descarga la plantilla del proveedor, ya llena con lo que tenemos de él, y se la manda.
+2. El proveedor la devuelve con sus precios y productos.
+3. VIDA la sube y el sistema muestra antes de guardar: productos nuevos, cambios de costo (con alerta si sube más de cierto %), productos que ya no vienen y errores.
+4. VIDA aprueba: se actualiza el catálogo del proveedor y se guarda el historial de costos.
+
+**Qué más podemos hacer con esa información:**
+- **Comparar proveedores** del mismo producto (por código de barras) y partir cada pedido con el más barato o el más rápido.
+- **Historial de costos y alertas de aumento**, para renegociar a tiempo.
+- **Margen real por producto** (costo del proveedor contra el precio de la tienda): detectar productos que dejan de ser rentables y ajustar precios piso y techo.
+- **Proponer PLUS y producto estrella** con base en el margen real (tareas 7 y 13).
+- **Reabasto sugerido** (tarea 4) con costo, pedido mínimo y días de entrega reales.
+- **Ofrecer a las tiendas solo lo disponible**, con su peso para el envío.
+- **Avisar cuando una lista vence**, para pedir la actualización al proveedor.
+
+**Cómo quedó (27 nov 2026, programado):**
+- **Proveedores → botón «Lista de precios» (ícono de Excel)** en cada proveedor: se baja el layout ya lleno con lo que tenemos de él (con hoja de instrucciones para el proveedor), se sube el que devuelve, se revisa y se carga todo o nada. Se puede poner hasta cuándo vale la lista.
+- **Revisión antes de cargar:** qué se actualiza, qué precio sube o baja (en naranja si cambia más de 15%), qué productos se ligan solos a uno de VIDA por código de barras, cuáles son nuevos, cuáles ya no vienen (se marcan como no disponibles, no se borran) y el margen que le queda a la tienda (en rojo si perdería).
+- **Pestaña «Productos por aprobar»:** lo nuevo de cada proveedor no se ofrece hasta que VIDA lo aprueba: «Crear en el catálogo» (categoría, precio de venta en tiendas y margen) o «Ya lo tenemos» (se liga a un producto existente). También se puede rechazar con motivo.
+- Se guarda el **historial de cada cambio de precio**. El catálogo que ven las tiendas y el pedido a VIDA dejan fuera lo no disponible.
+- La lista de proveedores muestra cuándo se cargó la lista, si está vencida y cuántos productos esperan aprobación.
+- Decisión tomada: el precio del layout es el **precio de lista por unidad** (lo que paga la tienda), igual que hoy; VIDA le descuenta su comisión al pagarle al proveedor. Solo en USD.
+- Base de datos: migración 66 (aplicada el 27 nov).
+
+**Por definir:**
+- Si el layout trae **precio de lista y costo para VIDA** (la comisión sale de la diferencia), o solo el costo y VIDA le suma su comisión (hoy: VIDA le paga al proveedor el precio de lista menos su comisión).
+- ~~Si un producto nuevo del proveedor se crea solo en el catálogo VIDA o espera aprobación.~~ Decidido: **VIDA lo aprueba**.
+- Cada cuánto debe mandar el proveedor su lista (mensual).
+
+---
+
+## 27. Ajuste del flujo de reabasto: sin crédito y con orden de compra
+
+**Origen:** Diego, 27 nov 2026.
+
+**Qué se pide (flujo nuevo):**
+1. Los proveedores reabastecen **directo a la tienda**; la Matriz no guarda mercancía.
+2. **Ya no hay días de crédito.**
+3. La tienda hace su pedido y **VIDA es el intermediario**.
+4. Cuando **VIDA lo valida**, se genera la **orden de compra** a ese proveedor.
+5. Se define **cómo se recoge** el pedido: va la tienda (el empresario) o se contrata un **repartidor por la app** que lo lleve.
+6. Actualizar el **flujograma** con este flujo.
+
+**Lo que ya existe (tarea 24):** la tienda le pide a VIDA; paga; VIDA valida el pago; el pedido se parte en uno por proveedor; el proveedor lo ve en su portal o por API; la entrega es **Envío VIDA** (repartidor de proveedores de la app) o **Recojo** (la tienda recoge con código QR); la tienda confirma la recepción y sube su inventario.
+
+**Lo que cambia:**
+- **Quitar los días de crédito** del flujo de reabasto: hoy existen en la tienda (cuenta por cobrar del reabasto de la Matriz) y en el proveedor (cuenta por pagar).
+- **Orden de compra formal** con folio al validar: documento (PDF) para el proveedor, con su código de producto y su costo (tarea 26). Para el proveedor sin portal ni API, se le manda por WhatsApp o correo.
+- **Elegir la forma de recoger** al validar o al pedir, según se decida.
+- **Flujograma:** actualizar los diagramas del panel (`flujograma-vida.html`, `diagrama-flujo-vida-futuro.html`) quitando el crédito y el almacén de la Matriz.
+
+**Por definir:**
+- ¿Sin crédito también entre VIDA y el proveedor (VIDA le paga de contado), o solo para la tienda?
+- ¿Quién elige la forma de recoger y cuándo: la tienda al pedir, o VIDA al validar?
+- ¿VIDA valida solo el pago, o también confirma con el proveedor que tiene el producto antes de cobrarle a la tienda?
+

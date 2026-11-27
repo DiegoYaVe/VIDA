@@ -5,10 +5,12 @@ import api from '../services/api.js';
 import {
   Plus, Search, Edit2, Power, Package, ShoppingCart,
   X, Check, AlertCircle,
-  Truck, ClipboardList, Eye, ArrowRight, FileText, Link2,
+  Truck, ClipboardList, Eye, ArrowRight, FileText, Link2, FileSpreadsheet, ListChecks,
 } from 'lucide-react';
 import TablaDatos, { usePreferencia } from '../components/TablaDatos.jsx';
 import ModalProveedorReabasto from '../components/ProveedorReabasto.jsx';
+import ListaProveedor from '../components/ListaProveedor.jsx';
+import ProductosPorAprobar from '../components/ProductosPorAprobar.jsx';
 
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN'];
 
@@ -713,7 +715,7 @@ function ModalDetalleOrden({ orden, onClose, onCambioEstado }) {
 // ══════════════════════════════════════════════════════════════════════════
 // TAB: Proveedores
 // ══════════════════════════════════════════════════════════════════════════
-function TabProveedores({ puedeEscribir }) {
+function TabProveedores({ puedeEscribir, onIrAprobar, onCambioAprobar }) {
   const [data, setData]         = useState([]);
   const [total, setTotal]       = useState(0);
   const [page, setPage]         = useState(1);
@@ -782,6 +784,16 @@ function TabProveedores({ puedeEscribir }) {
               {p.Telefono && <p className="text-xs text-gray-400">{p.Telefono}</p>}
             </div>) },
           { id: 'Ciudad', titulo: 'Ciudad', ordenable: true, render: p => <span className="text-gray-600">{p.Ciudad || '—'}</span> },
+          { id: 'lista', titulo: 'Lista de precios', render: p => {
+            const vence = p.ListaVigenteHasta ? String(p.ListaVigenteHasta).slice(0, 10) : null;
+            const vencida = vence && vence < new Date().toISOString().slice(0, 10);
+            const f = (v) => new Date(v).toLocaleDateString('es-VE', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+            return (
+              <div className="whitespace-nowrap text-xs">
+                {p.ListaFechaCarga ? <p className="text-gray-700">Cargada {f(p.ListaFechaCarga)}</p> : <p className="text-gray-300">Sin cargar</p>}
+                {vence && <p className={vencida ? 'text-red-600 font-semibold' : 'text-gray-400'}>{vencida ? 'Vencida' : 'Vence'} {f(vence)}</p>}
+                {p.porAprobar > 0 && <button onClick={onIrAprobar} className="mt-0.5 bg-amber-100 text-amber-700 font-semibold px-2 py-0.5 rounded-full">{p.porAprobar} por aprobar</button>}
+              </div>); } },
           { id: 'totalProductos', titulo: 'Productos', ordenable: true, alinear: 'center', render: p => (
             <span className="tabular-nums text-gray-700">{p.totalProductos}</span>) },
           { id: 'ordenesActivas', titulo: 'OC activas', ordenable: true, alinear: 'center', render: p => (
@@ -790,6 +802,11 @@ function TabProveedores({ puedeEscribir }) {
               : <span className="text-gray-300">0</span>) },
           ...(puedeEscribir ? [{ id: 'acciones', titulo: '', render: p => (
             <div className="flex items-center gap-1 justify-end">
+              <button onClick={() => setModal({ tipo: 'lista', proveedor: p })}
+                title="Lista de precios (Excel)" aria-label={`Lista de precios de ${p.Nombre}`}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-vida-green">
+                <FileSpreadsheet size={16}/>
+              </button>
               <button onClick={() => setModal({ tipo: 'productos', proveedor: p })}
                 title="Productos del proveedor"
                 className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-vida-blue">
@@ -835,6 +852,11 @@ function TabProveedores({ puedeEscribir }) {
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); cargar(page); }}
         />
+      )}
+      {modal?.tipo === 'lista' && (
+        <ListaProveedor proveedor={modal.proveedor} onClose={() => setModal(null)}
+          onCargado={() => { cargar(page); onCambioAprobar?.(); }}
+          onIrAprobar={() => { setModal(null); onIrAprobar?.(); }} />
       )}
       {modal?.tipo === 'reabasto' && (
         <ModalProveedorReabasto proveedor={modal.proveedor} onClose={() => setModal(null)} />
@@ -988,8 +1010,16 @@ export default function Proveedores() {
       .finally(() => setCargandoMatriz(false));
   }, []);
 
+  // Productos nuevos de las listas de precios que esperan aprobación (tarea 26)
+  const [porAprobar, setPorAprobar] = useState(0);
+  const contarPorAprobar = useCallback(() => {
+    api.get('/proveedores/productos-nuevos').then(r => setPorAprobar(Array.isArray(r.data) ? r.data.length : 0)).catch(() => {});
+  }, []);
+  useEffect(() => { if (operaMatriz) contarPorAprobar(); }, [operaMatriz, contarPorAprobar]);
+
   const tabs = [
     { key: 'proveedores', label: 'Proveedores',      icon: Truck },
+    { key: 'aprobar', label: 'Productos por aprobar', icon: ListChecks, cuenta: porAprobar },
     { key: 'ordenes', label: 'Órdenes de compra', icon: ClipboardList },
   ];
 
@@ -1023,12 +1053,14 @@ export default function Proveedores() {
                       : 'text-gray-500 hover:text-gray-700'
                   }`}>
                   <Icon size={16}/> {t.label}
+                  {t.cuenta > 0 && <span className="bg-amber-500 text-white text-[10px] font-black rounded-full px-1.5 py-0.5 tabular-nums">{t.cuenta}</span>}
                 </button>
               );
             })}
           </div>
 
-          {tab === 'proveedores' && <TabProveedores puedeEscribir={puedeEscribir}/>}
+          {tab === 'proveedores' && <TabProveedores puedeEscribir={puedeEscribir} onIrAprobar={() => setTab('aprobar')} onCambioAprobar={contarPorAprobar}/>}
+          {tab === 'aprobar' && <ProductosPorAprobar onCambio={contarPorAprobar}/>}
           {tab === 'ordenes' && <TabOrdenes puedeEscribir={puedeEscribir} matriz={matriz}/>}
         </>
       )}

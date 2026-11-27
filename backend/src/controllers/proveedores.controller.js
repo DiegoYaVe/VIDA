@@ -80,6 +80,10 @@ export async function listarProveedores(request, reply) {
     const r = await req.query(`
       SELECT p.idProveedor, p.Nombre, p.RIF, p.Contacto, p.Email,
              p.Telefono, p.Direccion, p.Ciudad, p.Notas, p.Status, p.FechaAlta,
+             p.ListaFechaCarga, p.ListaVigenteHasta,
+             (SELECT COUNT(*) FROM VIDA_PROVEEDORES_PRODUCTOS_NUEVOS n
+              WHERE n.idBranch = p.idBranch AND n.idCuenta = p.idCuenta
+                AND n.idProveedor = p.idProveedor AND n.Status = 'PENDIENTE') AS porAprobar,
              (SELECT COUNT(*) FROM VIDA_PROVEEDORES_PRODUCTOS pp
               WHERE pp.idBranch = p.idBranch AND pp.idCuenta = p.idCuenta
                 AND pp.idProveedor = p.idProveedor) AS totalProductos,

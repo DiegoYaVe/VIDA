@@ -11,6 +11,9 @@ import {
   configurarReabastoProveedor, generarPortalProveedor, verPortalProveedor,
   listarSucursalesProveedor, crearSucursalProveedor, editarSucursalProveedor,
 } from '../controllers/proveedores.controller.js';
+import {
+  verListaProveedor, cargarListaProveedor, listarProductosNuevos, aprobarProductoNuevo, rechazarProductoNuevo,
+} from '../controllers/listaProveedor.controller.js';
 
 export async function proveedoresRoutes(fastify) {
   const vida = { preHandler: [authenticate, requireMatriz] };
@@ -26,6 +29,13 @@ export async function proveedoresRoutes(fastify) {
   fastify.get('/proveedores/:idProveedor/productos', vida, listarProductosProveedor);
   fastify.post('/proveedores/:idProveedor/productos', vida, agregarProductoProveedor);
   fastify.delete('/proveedores/:idProveedor/productos/:idProducto', vida, quitarProductoProveedor);
+
+  // ── Lista de precios por layout de Excel y productos nuevos por aprobar (tarea 26) ──
+  fastify.get('/proveedores/productos-nuevos', vida, listarProductosNuevos);
+  fastify.post('/proveedores/productos-nuevos/:idNuevo/aprobar', vida, aprobarProductoNuevo);
+  fastify.post('/proveedores/productos-nuevos/:idNuevo/rechazar', vida, rechazarProductoNuevo);
+  fastify.get('/proveedores/:idProveedor/lista', vida, verListaProveedor);
+  fastify.post('/proveedores/:idProveedor/lista', { ...vida, bodyLimit: 5 * 1024 * 1024 }, cargarListaProveedor);
 
   // ── Reabasto con VIDA como intermediario ──────────────────────────────
   fastify.put('/proveedores/:idProveedor/reabasto', vida, configurarReabastoProveedor);

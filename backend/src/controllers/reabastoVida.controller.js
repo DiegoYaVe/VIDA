@@ -107,7 +107,7 @@ export async function catalogoVida(request, reply) {
              cat.Nombre AS NombreCategoria, MIN(pp.PrecioCosto) AS PrecioVidaUSD
       FROM VIDA_INVENTARIO_PRODUCTOS p
       JOIN VIDA_PROVEEDORES_PRODUCTOS pp
-        ON pp.idBranch=p.idBranch AND pp.idCuenta=p.idCuenta AND pp.idProducto=p.idProducto AND pp.PrecioCosto > 0
+        ON pp.idBranch=p.idBranch AND pp.idCuenta=p.idCuenta AND pp.idProducto=p.idProducto AND pp.PrecioCosto > 0 AND pp.Disponible=1
       JOIN VIDA_PROVEEDORES pr
         ON pr.idBranch=pp.idBranch AND pr.idCuenta=pp.idCuenta AND pr.idProveedor=pp.idProveedor AND pr.Status='ACTIVO'
       LEFT JOIN VIDA_INVENTARIO_CATEGORIAS cat
@@ -161,7 +161,7 @@ export async function crearPedidoVida(request, reply) {
       FROM VIDA_PROVEEDORES_PRODUCTOS pp
       JOIN VIDA_PROVEEDORES pr ON pr.idBranch=pp.idBranch AND pr.idCuenta=pp.idCuenta AND pr.idProveedor=pp.idProveedor AND pr.Status='ACTIVO'
       JOIN VIDA_INVENTARIO_PRODUCTOS p ON p.idBranch=pp.idBranch AND p.idCuenta=pp.idCuenta AND p.idProducto=pp.idProducto AND p.Status='ACTIVO'
-      WHERE pp.idBranch=@idBranch AND pp.idCuenta=@idCuenta AND pp.idProducto IN (${ids.map((_, i) => `@p${i}`).join(',')})`);
+      WHERE pp.idBranch=@idBranch AND pp.idCuenta=@idCuenta AND pp.Disponible=1 AND pp.idProducto IN (${ids.map((_, i) => `@p${i}`).join(',')})`);
     const elegido = elegirProveedores(oR.recordset);
     if (ids.some(id => !elegido.has(String(id))))
       return reply.code(400).send({ error: 'Algún producto ya no está disponible en VIDA; actualiza el catálogo' });
