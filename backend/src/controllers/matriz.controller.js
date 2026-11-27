@@ -523,13 +523,6 @@ export async function cambiarEstadoPedidoMatriz(request, reply) {
       const legado = Number(totR.recordset[0].SinPrecio) > 0;
       const total = legado ? +(costo * (1 + margenPct / 100)).toFixed(4) : Number(totR.recordset[0].TotalSuministro);
 
-      const plazoR = await new sql.Request(transaction)
-        .input('idBranch', sql.BigInt, idBranch)
-        .input('idCuenta', sql.BigInt, idCuenta)
-        .input('idPuntoVenta', sql.BigInt, ped.idPuntoVentaSolicita)
-        .query(`SELECT ISNULL(DiasCredito,0) AS DiasCredito FROM VIDA_CUENTA_PUNTOS_VENTA
-                WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPuntoVenta=@idPuntoVenta`);
-
       await emitirCuenta(transaction, {
         idBranch, idCuenta,
         Tipo: 'CXC',
@@ -538,7 +531,7 @@ export async function cambiarEstadoPedidoMatriz(request, reply) {
         idPuntoVenta: ped.idPuntoVentaSolicita,
         idPuntoVentaEmisor: ped.idPuntoVentaMatriz,
         TotalUSD: total,
-        DiasPlazo: parseInt(plazoR.recordset[0]?.DiasCredito) || 0,
+        DiasPlazo: 0,   // tarea 27: sin días de crédito, de contado
         Notas: !legado ? `Suministro #${idPedidoMatriz} · precio pactado en el pedido` : margenPct > 0
           ? `Traspaso #${idPedidoMatriz} · costo $${costo.toFixed(2)} + ${margenPct}% de margen`
           : `Traspaso #${idPedidoMatriz} · al costo`,

@@ -386,7 +386,7 @@ classDef nauto fill:#F8F4FD,stroke:#7C3AED,stroke-width:1.5px,stroke-dasharray:5
 </pre></div>
     </article>
     <article class="lienzo" id="panel-compras">
-      <h3>8 · Reabasto de las tiendas (cómo va a funcionar)</h3><p>Reemplaza el flujo de hoy. La Matriz ya no guarda mercancía: VIDA es el intermediario y la tienda nunca sabe quién es el proveedor. La tienda le paga a VIDA y VIDA al proveedor.</p>
+      <h3>8 · Reabasto de las tiendas (cómo va a funcionar)</h3><p>Reemplaza el flujo de hoy. La Matriz ya no guarda mercancía: los proveedores surten directo a la tienda y VIDA es el intermediario; la tienda nunca sabe quién es el proveedor. <b>Sin días de crédito:</b> la tienda le paga a VIDA antes y VIDA le paga al proveedor de contado. Al validar el pago nace la orden de compra.</p>
       <div class="scroll"><pre class="mermaid">%%{init: {&quot;theme&quot;:&quot;base&quot;,&quot;themeVariables&quot;:{&quot;fontFamily&quot;:&quot;Arial, Helvetica, sans-serif&quot;,&quot;fontSize&quot;:&quot;14px&quot;,&quot;lineColor&quot;:&quot;#4A5B73&quot;,&quot;primaryColor&quot;:&quot;#E7F0FA&quot;,&quot;primaryBorderColor&quot;:&quot;#3B6E9C&quot;,&quot;primaryTextColor&quot;:&quot;#123A5E&quot;,&quot;edgeLabelBackground&quot;:&quot;#FFFFFF&quot;,&quot;tertiaryColor&quot;:&quot;#FFFFFF&quot;},&quot;flowchart&quot;:{&quot;curve&quot;:&quot;basis&quot;,&quot;htmlLabels&quot;:true,&quot;nodeSpacing&quot;:38,&quot;rankSpacing&quot;:52,&quot;padding&quot;:14,&quot;useMaxWidth&quot;:false}}}%%
 flowchart TD
 F([&quot;Cada día&quot;]):::ini --&gt; F1[&quot;El sistema arma por tienda la lista de productos&lt;br/&gt;bajo su mínimo, con cantidad sugerida&quot;]:::nauto --&gt; F2[&quot;VIDA la revisa con el empresario:&lt;br/&gt;espacio, dinero y que el faltante sea real&quot;]:::nuevo --&gt; F3{&quot;¿El empresario&lt;br/&gt;la acepta?&quot;}:::nuevo
@@ -397,11 +397,13 @@ T([&quot;La tienda necesita mercancía&quot;]):::ini --&gt; CAR[&quot;Le pido a 
 CAR --&gt; MODO{&quot;¿Cómo lo&lt;br/&gt;recibo?&quot;}:::nuevo
 MODO --&gt;|Envío VIDA| ENV[&quot;Lo trae un repartidor de proveedores&quot;]:::nuevo --&gt; PAG
 MODO --&gt;|Recojo yo| REC[&quot;Lo recojo yo o mi repartidor propio&quot;]:::nuevo --&gt; PAG
-PAG[&quot;Le pago a VIDA en línea&quot;]:::nuevo
-PAG -.-&gt; PAGD[&quot;Por definir: Pago Móvil, tarjeta,&lt;br/&gt;pasarela o crédito con VIDA&quot;]:::nota
-PAG --&gt; ASG[&quot;El sistema asigna el proveedor de cada producto&lt;br/&gt;y la sucursal más cercana que lo tenga&quot;]:::nauto --&gt; API{&quot;¿El proveedor&lt;br/&gt;tiene API?&quot;}:::nuevo
+PAG[&quot;Le pago a VIDA de contado:&lt;br/&gt;Pago Móvil o transferencia&quot;]:::nuevo
+PAG -.-&gt; PAGD[&quot;Sin días de crédito: no se le pide nada&lt;br/&gt;al proveedor hasta que VIDA valida el pago&quot;]:::nota
+PAG --&gt; VAL[&quot;VIDA valida el pago y define cómo se recoge:&lt;br/&gt;la tienda va o un repartidor de la app&quot;]:::nuevo --&gt; ASG[&quot;El sistema asigna el proveedor de cada producto&lt;br/&gt;y la sucursal más cercana que lo tenga&quot;]:::nauto
+LP[&quot;Catálogo y precios de cada proveedor:&lt;br/&gt;su lista de Excel o su API&quot;]:::nauto -.-&gt; ASG
+ASG --&gt; OC[&quot;Nace la orden de compra de cada proveedor:&lt;br/&gt;folio de VIDA, sus códigos y su precio de lista&quot;]:::nuevo --&gt; API{&quot;¿El proveedor&lt;br/&gt;tiene API?&quot;}:::nuevo
 API --&gt;|Sí| AP1[&quot;Se le manda el pedido por su API&quot;]:::nauto --&gt; CONF
-API --&gt;|No| AP2[&quot;Lo ve en el Portal de proveedores&quot;]:::nauto --&gt; CONF
+API --&gt;|No| AP2[&quot;La ve en su Portal de proveedores, o VIDA&lt;br/&gt;se la manda en PDF por WhatsApp&quot;]:::nauto --&gt; CONF
 CONF[&quot;Pedido con folio de VIDA y sin datos de la tienda:&lt;br/&gt;el proveedor confirma y prepara&quot;]:::nuevo --&gt; SAL{&quot;¿Envío VIDA&lt;br/&gt;o recojo yo?&quot;}:::nuevo
 SAL --&gt;|Envío VIDA| V1[&quot;Se ofrece solo a repartidores con&lt;br/&gt;un vehículo donde quepa el pedido&quot;]:::nauto --&gt; V2{&quot;¿Alguien&lt;br/&gt;lo tomó?&quot;}:::nuevo
 V2 --&gt;|No| V3[&quot;VIDA lo asigna a mano&lt;br/&gt;o lo divide en varios viajes&quot;]:::nuevo --&gt; V4
@@ -411,7 +413,7 @@ SAL --&gt;|Recojo yo| R1[&quot;La tienda ve solo el punto de retiro:&lt;br/&gt;d
 V4 --&gt; LLE
 R2 --&gt; LLE[&quot;La tienda revisa y marca «Recibido»&quot;]:::acc
 LLE --&gt; INV[&quot;Sube el inventario de la tienda&quot;]:::auto --&gt; FAC[&quot;VIDA le factura a la tienda;&lt;br/&gt;el proveedor le factura a VIDA&quot;]:::nauto
-FAC --&gt; PP[&quot;VIDA le paga al proveedor el precio de lista&lt;br/&gt;menos su comisión (ejemplo: $10 − 8 % = $9,20)&quot;]:::nuevo --&gt; FIN([&quot;VIDA se queda su comisión ($0,80)&lt;br/&gt;y la tienda nunca supo del proveedor&quot;]):::fin
+FAC --&gt; PP[&quot;VIDA le paga al proveedor de contado: precio de lista&lt;br/&gt;menos su comisión (ejemplo: $10 − 8 % = $9,20)&quot;]:::nuevo --&gt; FIN([&quot;VIDA se queda su comisión ($0,80)&lt;br/&gt;y la tienda nunca supo del proveedor&quot;]):::fin
 
 classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
 classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38
@@ -436,7 +438,7 @@ MQ --&gt;|Sí| T6
 MQ --&gt;|No| SUS([&quot;Suspendida sola; al pagar se reactiva&lt;br/&gt;con multa de reconexión&quot;]):::mal
 PV([&quot;Sumar un proveedor&quot;]):::ini --&gt; PV1[&quot;Solo VIDA ve el módulo Proveedores:&lt;br/&gt;las tiendas ya no ven RIF ni contactos&quot;]:::nuevo --&gt; PV2[&quot;Alta: datos, sucursales con dirección,&lt;br/&gt;horario y ubicación, y % de comisión&quot;]:::nuevo --&gt; PV3{&quot;¿Tiene&lt;br/&gt;API?&quot;}:::nuevo
 PV3 --&gt;|Sí| PV4([&quot;Se conecta su API de pedidos y cobro&quot;]):::fin
-PV3 --&gt;|No| PV5([&quot;Le damos acceso al Portal de proveedores&quot;]):::fin
+PV3 --&gt;|No| PV5([&quot;Portal de proveedores y su lista&lt;br/&gt;de precios por Excel, que VIDA aprueba&quot;]):::fin
 U([&quot;Dar acceso a alguien&quot;]):::ini --&gt; U1[&quot;Nuevo usuario: rol, ámbito y módulos&quot;]:::acc --&gt; U3{&quot;¿Hay correo&lt;br/&gt;configurado?&quot;}:::dec
 U3 --&gt;|Sí| U4([&quot;Le llega la invitación&quot;]):::fin
 U3 --&gt;|No| U5([&quot;El panel muestra la contraseña&lt;br/&gt;temporal para entregarla&quot;]):::fin
@@ -530,7 +532,7 @@ M2 --&gt;|Vence pronto| M4([&quot;Aviso antes del corte&quot;]):::nauto
 M2 --&gt;|Pasó la tolerancia| M3([&quot;Suspendo la tienda y aviso&quot;]):::mal
 M --&gt; M5([&quot;Corte de las tarjetas de crédito VIDA&quot;]):::nauto
 K([&quot;En cada cobro&quot;]):::ini --&gt; K1[&quot;Consulto la tasa BCV del día&quot;]:::auto --&gt; K2([&quot;Cada venta guarda su tasa&quot;]):::fin
-R([&quot;En cada reabasto pagado&quot;]):::ini --&gt; R1([&quot;Mando el pedido al proveedor por API o portal&lt;br/&gt;y registro la comisión de VIDA&quot;]):::nauto
+R([&quot;En cada reabasto pagado&quot;]):::ini --&gt; R1([&quot;Nace la orden de compra y la mando por API o portal;&lt;br/&gt;registro la comisión de VIDA&quot;]):::nauto
 
 classDef ini fill:#D3F2E4,stroke:#2E9E78,stroke-width:2.5px,color:#0B4A38,font-weight:bold
 classDef dec fill:#E9F8F1,stroke:#2E9E78,stroke-width:2px,color:#0B4A38

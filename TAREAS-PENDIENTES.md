@@ -31,7 +31,7 @@ Cada una indica de dónde salió y su estado.
 | 24 | **Pedido de la tienda al proveedor por su API, con cobro en línea y seguimiento GPS hasta la tienda** (flujo que propone Israel; reúne las tareas 2, 3, 5 y 17) | Audio de Israel (28 oct 2026) + decisiones de Diego | **Fase 1 programada** (28 oct, sin subir): pedido a VIDA, pago, paquetes por proveedor, Portal de proveedores, recepción · falta: app del repartidor de proveedores |
 | 25 | Activar Google Routes (rutas por las calles en los mapas de las apps) | Diego (28 oct 2026) | **Código listo** · falta la llave de la API |
 | 26 | **Catálogo del proveedor por layout de Excel** (costos, precios y productos), para los proveedores que no tienen API | Diego (27 nov 2026) | **Programada** (27 nov): Proveedores → Lista de precios (Excel) y Productos por aprobar |
-| 27 | **Ajuste del flujo de reabasto:** sin días de crédito, VIDA valida el pedido y genera la orden de compra al proveedor; se define si la tienda recoge o va un repartidor de la app. Actualizar el flujograma | Diego (27 nov 2026) | **Anotada · se empieza** |
+| 27 | **Ajuste del flujo de reabasto:** sin días de crédito, VIDA valida el pedido y genera la orden de compra al proveedor; se define si la tienda recoge o va un repartidor de la app. Actualizar el flujograma | Diego (27 nov 2026) | **Programada** (27 nov): orden de compra al validar el pago, VIDA define cómo se recoge, todo de contado |
 
 ---
 
@@ -693,6 +693,14 @@ Diagrama actualizado: `pos-venezuela-deploy/reabasto-vida.html` y https://claude
 - **Orden de compra formal** con folio al validar: documento (PDF) para el proveedor, con su código de producto y su costo (tarea 26). Para el proveedor sin portal ni API, se le manda por WhatsApp o correo.
 - **Elegir la forma de recoger** al validar o al pedir, según se decida.
 - **Flujograma:** actualizar los diagramas del panel (`flujograma-vida.html`, `diagrama-flujo-vida-futuro.html`) quitando el crédito y el almacén de la Matriz.
+
+**Cómo quedó (27 nov 2026, programado):**
+- **De contado en los dos lados.** El flujo de pedir a VIDA ya era así (la tienda paga antes; a VIDA se le genera la cuenta por pagar al proveedor sin plazo). Se quitaron los días de crédito que quedaban en los flujos anteriores: el reabasto desde el almacén de la Matriz (cuenta por cobrar a la tienda) y las órdenes de compra antiguas (cuenta por pagar al proveedor). Todo nace con vencimiento el mismo día.
+- **VIDA valida y nace la orden de compra.** En el pedido, el botón ahora dice «Aprobar y generar órdenes de compra»: al aprobar el pago, cada proveedor recibe su orden con el folio de VIDA, sus códigos de producto y su precio de lista (tarea 26).
+- **VIDA define cómo se recoge** al validar: «La tienda recoge» o «Repartidor de la app». Parte de lo que eligió la tienda y queda en el historial si VIDA lo cambia.
+- **Orden de compra en PDF y por WhatsApp:** en cada paquete, VIDA baja la orden de compra en PDF (logo, folio, proveedor, punto de retiro, productos, comisión, total a pagar y condiciones de contado) o se la manda al proveedor por WhatsApp con el enlace a su portal. El proveedor también la descarga desde su Portal. Nunca lleva datos de la tienda.
+- **Flujograma** «Cómo funcionará VIDA» (sección 8 y 9) actualizado con este flujo.
+- Decisiones tomadas por defecto (cámbialas si no es así): sin crédito también con el proveedor; la tienda elige al pedir y VIDA puede cambiarlo; VIDA valida el pago (no confirma existencia con el proveedor antes de cobrar).
 
 **Por definir:**
 - ¿Sin crédito también entre VIDA y el proveedor (VIDA le paga de contado), o solo para la tienda?

@@ -7,9 +7,10 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import QRCode from 'qrcode';
 import {
   ShoppingCart, Plus, Minus, Search, X, Send, Check, Truck, Trash2, Package,
-  MapPin, Clock, Store, CreditCard, ShieldCheck, Ban, Star, UserPlus, UserCheck, AlertTriangle,
+  MapPin, Clock, Store, CreditCard, ShieldCheck, Ban, Star, UserPlus, UserCheck, AlertTriangle, FileText, MessageCircle,
 } from 'lucide-react';
 import api from '../services/api.js';
+import { descargarOrdenCompra, mensajeWhatsApp, telefonoWhatsApp } from '../utils/ordenCompraPDF.js';
 
 const USD = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const FECHA = (f) => f ? new Date(f).toLocaleString('es-VE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -294,6 +295,47 @@ function AsignarRepartidor({ paq, onAsignado }) {
 }
 
 // ─── Un paquete del pedido ─────────────────────────────────────────────────────
+// Orden de compra de un paquete (tarea 27): nace al validar el pago. VIDA la
+// baja en PDF o se la manda por WhatsApp al proveedor que no usa su portal.
+function OrdenCompra({ paq }) {
+  const [proc, setProc] = useState('');
+  const [error, setError] = useState('');
+  async function datos() {
+    const oc = (await api.get(`/reabasto-vida/paquetes/${paq.idPedidoProveedor}/orden-compra`)).data;
+    return { ...oc, portalUrl: oc.proveedor?.PortalRuta ? `${window.location.origin}${oc.proveedor.PortalRuta}` : null };
+  }
+  async function hacer(que) {
+    setProc(que); setError('');
+    // La ventana de WhatsApp se abre antes de esperar al servidor (si no, el navegador la bloquea)
+    const ventana = que === 'wa' ? window.open('', '_blank') : null;
+    try {
+      const oc = await datos();
+      if (que === 'pdf') await descargarOrdenCompra(oc);
+      else {
+        const tel = telefonoWhatsApp(oc.proveedor?.Telefono);
+        const url = `https://wa.me/${tel || ''}?text=${encodeURIComponent(mensajeWhatsApp(oc))}`;
+        if (ventana) ventana.location.href = url; else window.open(url, '_blank');
+        if (!tel) setError('El proveedor no tiene un teléfono válido: elige el contacto en WhatsApp.');
+      }
+    } catch (e) { ventana?.close(); setError(e.response?.data?.error || 'No se pudo armar la orden de compra'); }
+    finally { setProc(''); }
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 pt-1">
+      <span className="font-semibold">Orden de compra {paq.Folio}</span>
+      <button onClick={() => hacer('pdf')} disabled={!!proc}
+        className="inline-flex items-center gap-1 bg-white border border-purple-200 rounded-lg px-2 py-1 font-semibold hover:bg-purple-100 disabled:opacity-50">
+        <FileText size={13} /> {proc === 'pdf' ? 'Armando…' : 'PDF'}
+      </button>
+      <button onClick={() => hacer('wa')} disabled={!!proc}
+        className="inline-flex items-center gap-1 bg-white border border-purple-200 rounded-lg px-2 py-1 font-semibold hover:bg-purple-100 disabled:opacity-50">
+        <MessageCircle size={13} /> WhatsApp
+      </button>
+      {error && <span className="w-full text-red-600">{error}</span>}
+    </div>
+  );
+}
+
 function Paquete({ paq, pedido, onRecibido, onCambiado }) {
   const [cant, setCant] = useState(() => Object.fromEntries(paq.lineas.map(l => [l.idDetalle, l.CantidadSolicitada])));
   const [proc, setProc] = useState(false);
@@ -329,6 +371,7 @@ function Paquete({ paq, pedido, onRecibido, onCambiado }) {
           <p>VIDA le paga {USD(paq.TotalPagarUSD)} (comisión {Number(paq.ComisionPct)} %)</p>
           {paq.EnvioApiResultado && <p>API: {paq.EnvioApiResultado}</p>}
           {paq.NotasProveedor && <p>Nota del proveedor: {paq.NotasProveedor}</p>}
+          {!['POR_PAGAR', 'CANCELADO'].includes(paq.Status) && <OrdenCompra paq={paq} />}
         </div>
       )}
       {envioVida && paq.idRepartidor && (
@@ -391,6 +434,7 @@ export function ModalPedidoVida({ idPedidoMatriz, onClose, onCambiado, recargarS
   const [metodo, setMetodo] = useState('PAGO_MOVIL');
   const [ref, setRef] = useState('');
   const [motivo, setMotivo] = useState('');
+  const [modoVal, setModoVal] = useState(null);   // VIDA puede cambiar cómo se recoge al validar
 
   const cargar = useCallback(async () => {
     setCarg(true);
@@ -465,15 +509,30 @@ export function ModalPedidoVida({ idPedidoMatriz, onClose, onCambiado, recargarS
                 </p>
                 {ped.operaVida ? (
                   <>
-                    <p className="text-xs text-blue-800">Revisa que llegó {USD(ped.TotalUSD)} a la cuenta de VIDA. Al aprobar, el pedido se manda a los proveedores.</p>
+                    <p className="text-xs text-blue-800">Revisa que llegó {USD(ped.TotalUSD)} a la cuenta de VIDA (de contado, sin crédito). Al aprobar nace la <b>orden de compra</b> de cada proveedor y se le manda.</p>
+                    <div className="bg-white/70 rounded-xl p-2 space-y-1" role="radiogroup" aria-label="Cómo se recoge el pedido">
+                      <p className="text-xs font-semibold text-blue-900">¿Cómo se recoge? <span className="font-normal">(la tienda eligió {MODOS[ped.ModoRecepcion]?.label})</span></p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {Object.entries(MODOS).map(([k, m]) => {
+                          const activo = (modoVal ?? ped.ModoRecepcion) === k, Icon = m.icon;
+                          return (
+                            <button key={k} type="button" role="radio" aria-checked={activo} onClick={() => setModoVal(k)}
+                              className={`text-left rounded-lg border px-2 py-1.5 text-xs ${activo ? 'border-vida-blue bg-white font-semibold text-vida-blue' : 'border-blue-100 text-gray-600'}`}>
+                              <span className="flex items-center gap-1"><Icon size={13} /> {k === 'RECOJO' ? 'La tienda recoge' : 'Repartidor de la app'}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                     <input value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Motivo si lo rechazas" aria-label="Motivo del rechazo"
                       className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm bg-white" />
                     <div className="flex flex-wrap gap-2 justify-end">
                       <button disabled={proc || !motivo.trim()} onClick={() => accion('validar-pago', { aprobar: false, Notas: motivo.trim() }, 'Pago rechazado; la tienda debe reportarlo de nuevo.')}
                         className="border border-red-200 text-red-600 rounded-xl px-4 py-2 text-sm hover:bg-red-50 disabled:opacity-50">Rechazar</button>
-                      <button disabled={proc} onClick={() => accion('validar-pago', { aprobar: true }, 'Pago aprobado: el pedido ya está con los proveedores.')}
+                      <button disabled={proc} onClick={() => accion('validar-pago', { aprobar: true, ModoRecepcion: modoVal ?? ped.ModoRecepcion },
+                          d => `Pago aprobado: ${d.ordenesCompra} orden${d.ordenesCompra === 1 ? '' : 'es'} de compra enviada${d.ordenesCompra === 1 ? '' : 's'} a los proveedores.`)}
                         className="flex items-center gap-2 bg-vida-green text-white rounded-xl px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50">
-                        <ShieldCheck size={15} /> Aprobar pago
+                        <ShieldCheck size={15} /> Aprobar y generar órdenes de compra
                       </button>
                     </div>
                   </>

@@ -625,12 +625,12 @@ export async function crearOrden(request, reply) {
 // en vez de 8. Además corría fuera de transacción, así que un fallo a la mitad
 // dejaba unos productos con stock y otros no.
 //
-// Body: { StatusNuevo, Notas?, cantidadesRecibidas?, Folio?, DiasPlazo? }
+// Body: { StatusNuevo, Notas?, cantidadesRecibidas?, Folio? }  (sin días de crédito: tarea 27)
 //   cantidadesRecibidas: [{ idDetalle, CantidadRecibida }] — requerido al recibir
 export async function cambiarEstadoOrden(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const { idOrden } = request.params;
-  const { StatusNuevo, Notas, cantidadesRecibidas, Folio, DiasPlazo } = request.body || {};
+  const { StatusNuevo, Notas, cantidadesRecibidas, Folio } = request.body || {};
 
   if (!StatusNuevo) return reply.code(400).send({ error: 'StatusNuevo es requerido' });
 
@@ -664,10 +664,9 @@ export async function cambiarEstadoOrden(request, reply) {
         transicionesValidas: permitidos,
       });
 
-    // El plazo sale del proveedor y se puede pisar por documento
-    const plazo = DiasPlazo != null && DiasPlazo !== ''
-      ? Math.max(0, parseInt(DiasPlazo) || 0)
-      : (parseInt(orden.DiasCredito) || 0);
+    // Tarea 27 (27 nov 2026): sin días de crédito con los proveedores; se paga
+    // de contado. Los DiasCredito/DiasPlazo que lleguen ya no cuentan.
+    const plazo = 0;
 
     if (esRecepcion) await prepararMoneda(pool,request.user);
     await tx.begin(); enTx = true;

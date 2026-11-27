@@ -5,8 +5,9 @@
 // código del QR.
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Package, Check, Truck, MapPin, RefreshCw, ClipboardCheck, KeyRound } from 'lucide-react';
+import { Package, Check, Truck, MapPin, RefreshCw, ClipboardCheck, KeyRound, FileText } from 'lucide-react';
 import api from '../services/api.js';
+import { descargarOrdenCompra } from '../utils/ordenCompraPDF.js';
 
 const USD = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const FECHA = (f) => f ? new Date(f).toLocaleString('es-VE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -18,7 +19,7 @@ const STATUS = {
   RECIBIDO:   { label: 'Entregado', color: 'bg-green-100 text-green-700' },
 };
 
-function Pedido({ ped, token, onCambio }) {
+function Pedido({ ped, token, onCambio, proveedor }) {
   const [codigo, setCodigo] = useState('');
   const [notas, setNotas] = useState('');
   const [proc, setProc] = useState(false);
@@ -70,7 +71,16 @@ function Pedido({ ped, token, onCambio }) {
         <span className="text-gray-500">Comisión VIDA {Number(ped.ComisionPct)} %</span>
         <span className="font-black text-vida-blue">VIDA te paga {USD(ped.TotalPagarUSD)}</span>
       </div>
-      <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-1.5">Ya está pagado a VIDA. VIDA te paga al recibir la mercancía.</p>
+      <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-1.5">Ya está pagado a VIDA. VIDA te paga de contado al recibir la mercancía, sin días de crédito.</p>
+      <button onClick={() => descargarOrdenCompra({
+          Folio: ped.Folio, Fecha: ped.FechaAlta, Entrega: ped.Recoge === 'CLIENTE_VIDA' ? 'RECOGE_CLIENTE_VIDA' : 'REPARTIDOR_VIDA',
+          proveedor: { Nombre: proveedor }, retiro: ped.Sucursal || ped.DireccionSucursal ? { Sucursal: ped.Sucursal, Direccion: ped.DireccionSucursal } : null,
+          lineas: ped.productos, TotalListaUSD: ped.TotalListaUSD, ComisionPct: ped.ComisionPct, TotalPagarUSD: ped.TotalPagarUSD,
+          portalUrl: window.location.href,
+        }).catch(() => {})}
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-vida-blue border border-vida-blue/30 rounded-lg px-3 py-1.5 hover:bg-vida-blue-light">
+        <FileText size={13} /> Orden de compra (PDF)
+      </button>
       {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
       {ped.Status === 'ENVIADO' && (
@@ -149,10 +159,10 @@ export default function PortalProveedor() {
           <>
             <h2 className="text-sm font-bold text-gray-500 uppercase">Por atender ({pendientes.length})</h2>
             {pendientes.length === 0 && <p className="text-center text-gray-400 py-8 text-sm bg-white rounded-2xl">No tienes pedidos pendientes.</p>}
-            {pendientes.map(p => <Pedido key={p.Folio} ped={p} token={token} onCambio={cargar} />)}
+            {pendientes.map(p => <Pedido key={p.Folio} ped={p} token={token} onCambio={cargar} proveedor={datos.proveedor} />)}
             {entregados.length > 0 && <>
               <h2 className="text-sm font-bold text-gray-500 uppercase pt-4">Entregados en los últimos 30 días</h2>
-              {entregados.map(p => <Pedido key={p.Folio} ped={p} token={token} onCambio={cargar} />)}
+              {entregados.map(p => <Pedido key={p.Folio} ped={p} token={token} onCambio={cargar} proveedor={datos.proveedor} />)}
             </>}
           </>
         )}

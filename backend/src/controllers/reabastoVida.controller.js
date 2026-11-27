@@ -8,6 +8,11 @@
 // contra el código del QR; la tienda recibe, sube su inventario y nace la
 // cuenta por pagar de VIDA al proveedor: precio de lista menos la comisión.
 //
+// Desde el 27 nov 2026 (tarea 27): sin días de crédito. La tienda paga antes
+// de que se pida nada, y al validar ese pago nace la ORDEN DE COMPRA de cada
+// proveedor (el paquete, con su folio); VIDA le paga de contado al recibir.
+// VIDA puede cambiar al validar si la tienda recoge o va un repartidor.
+//
 // Dos reglas que no se negocian:
 //   · la tienda nunca recibe el nombre, RIF ni contacto del proveedor;
 //   · el proveedor nunca recibe el nombre ni la dirección de la tienda.
@@ -396,9 +401,10 @@ export async function reportarPago(request, reply) {
 export async function validarPago(request, reply) {
   const { idBranch, idCuenta, idUsuario } = request.user;
   const idPedidoMatriz = parseInt(request.params.idPedidoMatriz);
-  const { aprobar, Notas } = request.body || {};
+  const { aprobar, Notas, ModoRecepcion } = request.body || {};
   const pool = await getPool();
   if (!(await operaVida(request.user, pool))) return reply.code(403).send({ error: 'Solo VIDA valida los pagos' });
+  if (ModoRecepcion != null && !MODOS.includes(ModoRecepcion)) return reply.code(400).send({ error: 'Forma de entrega no válida' });
   if (!aprobar && !String(Notas || '').trim()) return reply.code(400).send({ error: 'Explica por qué rechazas el pago' });
   let tx;
   try {
@@ -408,11 +414,18 @@ export async function validarPago(request, reply) {
     if (!ped) { await tx.rollback(); tx = null; return reply.code(404).send({ error: 'Pedido no encontrado' }); }
     if (ped.Status !== 'PAGO_REPORTADO') { await tx.rollback(); tx = null; return reply.code(409).send({ error: 'No hay un pago por validar en este pedido' }); }
     const nuevo = aprobar ? 'EN_PROCESO' : 'POR_PAGAR';
+    // VIDA define cómo se recoge: lo que eligió la tienda, salvo que lo cambie aquí
+    const modo = aprobar && ModoRecepcion ? ModoRecepcion : ped.ModoRecepcion;
+    const nOrdenes = aprobar ? (await new sql.Request(tx)
+      .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta).input('id', sql.BigInt, idPedidoMatriz)
+      .query(`SELECT COUNT(*) AS n FROM VIDA_PEDIDOS_PROVEEDOR
+              WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoMatriz=@id AND Status='POR_PAGAR'`)).recordset[0].n : 0;
     const r = new sql.Request(tx)
       .input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
-      .input('id', sql.BigInt, idPedidoMatriz).input('Usu', sql.VarChar(30), `U:${idUsuario}`);
+      .input('id', sql.BigInt, idPedidoMatriz).input('Usu', sql.VarChar(30), `U:${idUsuario}`)
+      .input('Modo', sql.VarChar(12), modo);
     await r.query(aprobar
-      ? `UPDATE VIDA_PEDIDOS_MATRIZ SET Status='EN_PROCESO', PagoValidadoPor=@Usu, PagoValidadoFecha=GETUTCDATE(), FechaMod=GETUTCDATE()
+      ? `UPDATE VIDA_PEDIDOS_MATRIZ SET Status='EN_PROCESO', ModoRecepcion=@Modo, PagoValidadoPor=@Usu, PagoValidadoFecha=GETUTCDATE(), FechaMod=GETUTCDATE()
            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoMatriz=@id;
          UPDATE VIDA_PEDIDOS_PROVEEDOR SET Status='ENVIADO', FechaMod=GETUTCDATE()
            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoMatriz=@id AND Status='POR_PAGAR';`
@@ -420,7 +433,10 @@ export async function validarPago(request, reply) {
            WHERE idBranch=@idBranch AND idCuenta=@idCuenta AND idPedidoMatriz=@id;`);
     await historial(tx, {
       idBranch, idCuenta, idPedidoMatriz, anterior: 'PAGO_REPORTADO', nuevo,
-      notas: aprobar ? 'Pago validado por VIDA; pedido enviado a los proveedores' : `Pago rechazado: ${String(Notas).trim()}`,
+      notas: aprobar
+        ? `Pago validado por VIDA: ${nOrdenes} orden${nOrdenes === 1 ? '' : 'es'} de compra a proveedor${nOrdenes === 1 ? '' : 'es'}`
+          + (modo !== ped.ModoRecepcion ? `; VIDA cambió la entrega a ${modo === 'RECOJO' ? 'recojo en el punto de retiro' : 'Envío VIDA'}` : '')
+        : `Pago rechazado: ${String(Notas).trim()}`,
       usuario: `U:${idUsuario}`,
     });
     await tx.commit();
@@ -428,12 +444,13 @@ export async function validarPago(request, reply) {
 
     // Fuera de la transacción: avisar por API a los proveedores que la tengan.
     // Si falla, el pedido igual queda en su Portal de proveedores.
-    if (aprobar) await notificarProveedoresApi(pool, { idBranch, idCuenta, idPedidoMatriz, ModoRecepcion: ped.ModoRecepcion }, request.log);
+    if (aprobar) await notificarProveedoresApi(pool, { idBranch, idCuenta, idPedidoMatriz, ModoRecepcion: modo }, request.log);
     registrarAuditoria(pool, {
       idBranch, idCuenta, entityType: 'PEDIDO_MATRIZ', entityId: idPedidoMatriz,
-      accion: aprobar ? 'PAGO_VALIDADO' : 'PAGO_RECHAZADO', actor: `U:${idUsuario}`, data: { Referencia: ped.PagoReferencia },
+      accion: aprobar ? 'PAGO_VALIDADO' : 'PAGO_RECHAZADO', actor: `U:${idUsuario}`,
+      data: { Referencia: ped.PagoReferencia, ...(aprobar ? { ordenesCompra: nOrdenes, ModoRecepcion: modo } : {}) },
     }, request.log).catch(() => {});
-    return reply.send({ ok: true, status: nuevo });
+    return reply.send({ ok: true, status: nuevo, ordenesCompra: nOrdenes, ModoRecepcion: modo });
   } catch (err) {
     if (tx) { try { await tx.rollback(); } catch {} }
     request.log.error(err);
@@ -762,5 +779,59 @@ export async function asignarRepartidorEnvio(request, reply) {
   } catch (err) {
     request.log.error(err);
     return reply.code(500).send({ error: 'No se pudo asignar el repartidor' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ORDEN DE COMPRA de un paquete (tarea 27) — solo VIDA
+// GET /reabasto-vida/paquetes/:idPedidoProveedor/orden-compra
+// Nace al validar el pago de la tienda. El panel arma el PDF y el mensaje de
+// WhatsApp para el proveedor que no usa su portal. Lleva el código de cada
+// producto del proveedor (su lista de precios) y NUNCA datos de la tienda.
+// ══════════════════════════════════════════════════════════════════════════
+export async function ordenCompraPaquete(request, reply) {
+  const { idBranch, idCuenta } = request.user;
+  const pool = await getPool();
+  if (!(await operaVida(request.user, pool))) return reply.code(403).send({ error: 'Solo VIDA ve las órdenes de compra' });
+  try {
+    const base = () => pool.request().input('idBranch', sql.BigInt, idBranch).input('idCuenta', sql.BigInt, idCuenta)
+      .input('pp', sql.BigInt, request.params.idPedidoProveedor);
+    const [cabR, linR] = await Promise.all([
+      base().query(`SELECT pp.Folio, pp.Status, pp.TotalListaUSD, pp.ComisionPct, pp.TotalPagarUSD, pp.CanalEnvio,
+                           pm.ModoRecepcion, pm.PagoValidadoFecha,
+                           pr.Nombre AS Proveedor, pr.RIF, pr.Telefono, pr.Email, pr.PortalToken,
+                           s.Nombre AS Sucursal, s.Direccion AS DireccionSucursal, s.Horario
+                    FROM VIDA_PEDIDOS_PROVEEDOR pp
+                    JOIN VIDA_PEDIDOS_MATRIZ pm ON pm.idBranch=pp.idBranch AND pm.idCuenta=pp.idCuenta AND pm.idPedidoMatriz=pp.idPedidoMatriz
+                    JOIN VIDA_PROVEEDORES pr ON pr.idBranch=pp.idBranch AND pr.idCuenta=pp.idCuenta AND pr.idProveedor=pp.idProveedor
+                    LEFT JOIN VIDA_PROVEEDORES_SUCURSALES s ON s.idBranch=pp.idBranch AND s.idCuenta=pp.idCuenta
+                      AND s.idProveedor=pp.idProveedor AND s.idSucursal=pp.idSucursal
+                    WHERE pp.idBranch=@idBranch AND pp.idCuenta=@idCuenta AND pp.idPedidoProveedor=@pp`),
+      base().query(`SELECT pr.CodigoProveedor, p.Nombre, p.UnidadMedida, d.CantidadSolicitada AS Cantidad, d.PrecioListaUnitario AS PrecioLista
+                    FROM VIDA_PEDIDOS_MATRIZ_DETALLE d
+                    JOIN VIDA_PEDIDOS_PROVEEDOR pp ON pp.idBranch=d.idBranch AND pp.idCuenta=d.idCuenta AND pp.idPedidoProveedor=d.idPedidoProveedor
+                    JOIN VIDA_INVENTARIO_PRODUCTOS p ON p.idBranch=d.idBranch AND p.idCuenta=d.idCuenta AND p.idProducto=d.idProducto
+                    LEFT JOIN VIDA_PROVEEDORES_PRODUCTOS pr ON pr.idBranch=d.idBranch AND pr.idCuenta=d.idCuenta
+                      AND pr.idProveedor=pp.idProveedor AND pr.idProducto=d.idProducto
+                    WHERE d.idBranch=@idBranch AND d.idCuenta=@idCuenta AND d.idPedidoProveedor=@pp
+                    ORDER BY p.Nombre`),
+    ]);
+    const c = cabR.recordset[0];
+    if (!c) return reply.code(404).send({ error: 'Paquete no encontrado' });
+    if (['POR_PAGAR', 'CANCELADO'].includes(c.Status))
+      return reply.code(409).send({ error: c.Status === 'CANCELADO' ? 'El pedido se canceló: no hay orden de compra' : 'La orden de compra nace cuando VIDA valida el pago de la tienda' });
+    return reply.send({
+      Folio: c.Folio, Status: c.Status, Fecha: c.PagoValidadoFecha, CanalEnvio: c.CanalEnvio,
+      Entrega: c.ModoRecepcion === 'RECOJO' ? 'RECOGE_CLIENTE_VIDA' : 'REPARTIDOR_VIDA',
+      proveedor: { Nombre: c.Proveedor, RIF: c.RIF, Telefono: c.Telefono, Email: c.Email, PortalRuta: c.PortalToken ? `/proveedor/${c.PortalToken}` : null },
+      retiro: c.Sucursal || c.DireccionSucursal ? { Sucursal: c.Sucursal, Direccion: c.DireccionSucursal, Horario: c.Horario } : null,
+      lineas: linR.recordset.map(l => ({ ...l, Cantidad: Number(l.Cantidad), PrecioLista: Number(l.PrecioLista),
+        Importe: Math.round(Number(l.Cantidad) * Number(l.PrecioLista) * 100) / 100 })),
+      TotalListaUSD: Number(c.TotalListaUSD), ComisionPct: Number(c.ComisionPct), TotalPagarUSD: Number(c.TotalPagarUSD),
+      Condiciones: 'Pago de contado al recibir la mercancía, sin días de crédito.',
+    });
+  } catch (err) {
+    request.log.error(err);
+    return reply.code(500).send({ error: 'Error al armar la orden de compra' });
   }
 }
