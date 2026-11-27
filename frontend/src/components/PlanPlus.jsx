@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Star, Search, Store, Save, Target, AlertTriangle, Plus, X, Scale } from 'lucide-react';
 import api from '../services/api.js';
+import BotonManual from './BotonManual.jsx';
 
 const USD = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const PCT = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
@@ -91,6 +92,7 @@ export default function TabPlanPlus({ filtros, puedeVerRed, onIrRentabilidad }) 
 
   return (
     <div className="space-y-5 max-w-6xl">
+      <BotonManual />
       {puedeVerRed && (
         <div className="bg-white rounded-2xl border border-gray-100 p-4 flex flex-wrap items-center gap-3">
           <Store size={16} className="text-vida-blue" />

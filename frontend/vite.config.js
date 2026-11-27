@@ -28,7 +28,8 @@ export default defineConfig({
         // Páginas sueltas y públicas (flujograma-vida.html, manual-vida.html):
         // sin esto, el service worker responde index.html a cualquier
         // navegación y el panel manda al login.
-        navigateFallbackDenylist: [/\.html$/],
+        // Igual los manuales en PDF de /manuales.
+        navigateFallbackDenylist: [/\.html$/, /\.pdf$/],
         // API: NetworkFirst solo para GETs de catálogo — los POST nunca se
         // cachean (la cola offline de IndexedDB maneja las escrituras)
         runtimeCaching: [

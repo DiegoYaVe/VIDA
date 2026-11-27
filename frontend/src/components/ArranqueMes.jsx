@@ -9,6 +9,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Rocket, Store, Star, Award, TrendingUp, Search, Save, X, Pencil, Package, Table2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
 import api from '../services/api.js';
+import { useAuthStore } from '../store/authStore.js';
+import BotonManual from './BotonManual.jsx';
 
 const USD = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const PCT = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
@@ -23,7 +25,15 @@ const nombreMes = (per, largo = false) => {
 // (incompleto) va en el mismo tono más claro para que no se lea como caída.
 const C_VENTA = '#0A1E3F', C_VENTA_CURSO = '#8FA3C0', C_PLUS = '#46A657', C_PLUS_CURSO = '#A9DDB2', C_META = '#E8A33D';
 
-export default function ArranqueMes({ filtros, puedeVerRed }) {
+// Solo VIDA (roles de red del backend, arranque.controller) elige tienda y ve
+// el ranking de la red. El ADMIN de una tienda cuenta como "red" en otras
+// pestañas de Reportes, pero aquí el backend lo limita a su tienda: ve directo
+// su cuadro, sin selector.
+const ROLES_VIDA = ['SUPER_ADMIN', 'ADMIN_PAIS', 'ADMIN_ESTADO'];
+
+export default function ArranqueMes({ filtros }) {
+  const { usuario } = useAuthStore();
+  const puedeVerRed = ROLES_VIDA.includes(usuario?.TipoUsuario);
   const [idPV, setIdPV] = useState('');
   const [datos, setDatos] = useState(null);
   const [red, setRed] = useState(null);
@@ -55,6 +65,7 @@ export default function ArranqueMes({ filtros, puedeVerRed }) {
 
   return (
     <div className="space-y-5 max-w-6xl">
+      <BotonManual />
       {puedeVerRed && (
         <div className="bg-white rounded-2xl border border-gray-100 p-4 flex flex-wrap items-center gap-3">
           <Store size={16} className="text-vida-blue" />

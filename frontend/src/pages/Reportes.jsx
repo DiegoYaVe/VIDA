@@ -1979,7 +1979,9 @@ export default function Reportes() {
 
       {/* Tabs */}
       <div className="bg-white border-b border-gray-100 px-6">
-        <div className="flex gap-1">
+        {/* Son muchas pestañas: se desplazan solas, sin empujar la página de lado */}
+        <div className="flex gap-1 overflow-x-auto">
+          {/* (cada botón es whitespace-nowrap: no se encoge, la fila se desplaza) */}
           {tabsVisibles.map(t => {
             const Icon = t.icon;
             return (
@@ -2008,7 +2010,7 @@ export default function Reportes() {
         {tab === 'movimientos' && <TabMovimientos filtros={filtros} />}
         {tab === 'metas' && <TabMetas filtros={filtros} puedeVerRed={puedeVerRed} />}
         {tab === 'rentabilidad' && <TabRentabilidad filtros={filtros} puedeVerRed={puedeVerRed} />}
-        {tab === 'arranque' && <ArranqueMes filtros={filtros} puedeVerRed={puedeVerRed} />}
+        {tab === 'arranque' && <ArranqueMes filtros={filtros} />}
         {tab === 'planplus' && <TabPlanPlus filtros={filtros} puedeVerRed={puedeVerRed} onIrRentabilidad={() => setTab('rentabilidad')} />}
       </div>
     </div>

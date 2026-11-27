@@ -1,0 +1,392 @@
+<!doctype html>
+<!-- Fuente del PDF frontend/public/manuales/manual-plus-estrella.pdf.
+     Para regenerarlo: node docs/manuales/generar-pdf.mjs -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Manual del Producto PLUS y el Producto Estrella · Comercializadora VIDA</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0A1E3F; --navy-2: #16345E; --navy-light: #E9EEF5;
+    --green: #5BBE6A; --green-dark: #46A657; --green-light: #EAF7EE;
+    --aqua: #54C4E0; --amber: #F2B01E; --amber-light: #FDF4DC;
+    --ink: #1F2937; --muted: #5B6573; --rule: #E3E8EE;
+  }
+  @page { size: A4; margin: 18mm 18mm 20mm 18mm;
+    @bottom-left { content: "Comercializadora VIDA · Manual PLUS y Estrella"; font: 600 8pt 'Nunito', sans-serif; color: #8A94A3; }
+    @bottom-right { content: counter(page) " / " counter(pages); font: 700 8pt 'Nunito', sans-serif; color: #8A94A3; }
+  }
+  @page portada { margin: 0; @bottom-left { content: none; } @bottom-right { content: none; } }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font-family: 'Nunito', 'Segoe UI', sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.5; }
+
+  /* ── Portada ── */
+  .portada { page: portada; height: 297mm; width: 210mm; display: flex; flex-direction: column; break-after: page; }
+  .portada .arriba { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 22mm; text-align: center; }
+  .portada img { width: 120mm; margin-bottom: 18mm; }
+  .portada .eyebrow { font-weight: 800; letter-spacing: .18em; text-transform: uppercase; color: var(--green-dark); font-size: 10pt; margin-bottom: 4mm; }
+  .portada h1 { font-size: 30pt; line-height: 1.12; margin: 0 0 6mm; color: var(--navy); font-weight: 900; }
+  .portada .sub { font-size: 12.5pt; color: var(--muted); max-width: 140mm; margin: 0 auto; }
+  .portada .sellos { display: flex; gap: 6mm; justify-content: center; margin-top: 12mm; }
+  .portada .abajo { background: var(--navy); color: #fff; padding: 10mm 22mm; display: flex; justify-content: space-between; align-items: center; font-size: 9.5pt; }
+  .portada .abajo b { color: var(--aqua); }
+  .franja { height: 4mm; background: linear-gradient(90deg, var(--aqua), var(--green)); }
+
+  /* ── Etiquetas como en el sistema ── */
+  .tag { display: inline-block; font-weight: 900; font-size: 8pt; padding: 1px 7px; border-radius: 5px; color: #fff; letter-spacing: .02em; white-space: nowrap; vertical-align: 1px; }
+  .tag.plus { background: var(--amber); }
+  .tag.estrella { background: var(--navy); }
+  .portada .tag { font-size: 12pt; padding: 4px 14px; border-radius: 8px; }
+
+  /* ── Contenido ── */
+  .intro { background: var(--navy-light); border-left: 4px solid var(--navy); border-radius: 0 8px 8px 0; padding: 5mm 6mm; margin-bottom: 7mm; }
+  h2 { font-size: 15pt; color: var(--navy); margin: 9mm 0 3mm; font-weight: 900; display: flex; align-items: center; gap: 3mm; break-after: avoid; }
+  h2 .num { flex: none; width: 9mm; height: 9mm; border-radius: 50%; background: linear-gradient(135deg, var(--aqua), var(--green)); color: #fff; font-size: 11pt; display: inline-flex; align-items: center; justify-content: center; }
+  h3 { font-size: 11pt; color: var(--navy); margin: 5mm 0 2mm; font-weight: 800; break-after: avoid; }
+  p { margin: 0 0 3mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1.5mm; }
+  b, strong { color: var(--navy); }
+  .seccion { }
+  .junta { break-inside: avoid; }
+  .pasos > li, .clave, .dos { break-inside: avoid; }
+  .nueva-pagina { break-before: page; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 2mm 0 4mm; font-size: 9.5pt; break-inside: avoid; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+  th { background: var(--navy); color: #fff; text-align: left; padding: 2.5mm 3mm; font-weight: 800; }
+  td { padding: 2.5mm 3mm; border-top: 1px solid var(--rule); vertical-align: top; }
+  tr:nth-child(even) td { background: #F7F9FB; }
+  td:first-child { font-weight: 700; color: var(--navy); }
+  .nota { font-size: 9pt; color: var(--muted); }
+  .clave { background: var(--green-light); border-radius: 8px; padding: 4mm 5mm; margin: 3mm 0 4mm; border: 1px solid #CDEBD4; break-inside: avoid; }
+  .clave.estrella { background: var(--navy-light); border-color: #CBD6E6; }
+  .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin: 3mm 0 4mm; }
+  .tarjeta { border: 1px solid var(--rule); border-radius: 10px; padding: 4mm 5mm; break-inside: avoid; }
+  .tarjeta.plus { border-top: 4px solid var(--amber); }
+  .tarjeta.estrella { border-top: 4px solid var(--navy); }
+  .tarjeta h3 { margin-top: 0; }
+  .pasos { counter-reset: paso; list-style: none; padding-left: 0; }
+  .pasos > li { counter-increment: paso; position: relative; padding-left: 9mm; margin-bottom: 2.2mm; }
+  .pasos > li::before { content: counter(paso); position: absolute; left: 0; top: 0; width: 6mm; height: 6mm; border-radius: 50%; background: var(--navy); color: #fff; font-weight: 800; font-size: 8.5pt; display: flex; align-items: center; justify-content: center; }
+  .check { list-style: none; padding-left: 0; }
+  .check li { padding-left: 7mm; position: relative; }
+  .check li::before { content: ""; position: absolute; left: 0; top: 1.2mm; width: 3.6mm; height: 3.6mm; border: 1.5px solid var(--green-dark); border-radius: 3px; }
+  .faq { break-inside: avoid; margin-bottom: 3.5mm; }
+  .faq b { display: block; margin-bottom: .5mm; }
+  .reglas { background: var(--navy); color: #fff; border-radius: 12px; padding: 6mm 8mm; margin-top: 5mm; break-inside: avoid; }
+  .reglas h2 { color: #fff; margin-top: 0; }
+  .reglas ol { padding-left: 6mm; }
+  .reglas li { margin-bottom: 2mm; }
+  .reglas b { color: var(--aqua); }
+  .cierre { text-align: center; margin-top: 4mm; color: var(--muted); font-size: 9pt; }
+  .cierre img { width: 45mm; display: block; margin: 0 auto 2mm; }
+  .paso { break-inside: avoid; margin-bottom: 3mm; }
+  .fig img { width: 100%; display: block; border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 1px 4px rgba(10,30,63,.08); }
+  .leyenda { list-style: none; padding: 0; margin: 3mm 0 2mm; }
+  .leyenda li { position: relative; padding-left: 8.5mm; margin-bottom: 1.8mm; }
+  .leyenda li::before { content: attr(data-n); position: absolute; left: 0; top: 0; width: 6mm; height: 6mm; border-radius: 50%;
+    background: #E5484D; color: #fff; font-weight: 800; font-size: 8.5pt; display: flex; align-items: center; justify-content: center; }
+  h2.nueva { break-before: page; }
+  svg text { font-family: 'Nunito', 'Segoe UI', sans-serif; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ PORTADA ═══════════ -->
+<section class="portada">
+  <div class="franja"></div>
+  <div class="arriba">
+    <img src="../../frontend/public/logo-reporte.png" alt="Comercializadora VIDA">
+    <div class="eyebrow">Manual para tiendas de la red</div>
+    <h1>Producto PLUS<br>y Producto Estrella</h1>
+    <p class="sub">Qué son, cómo reconocerlos en el sistema, cómo venderlos y cómo medir tu avance cada mes.</p>
+    <div class="sellos"><span class="tag plus">PLUS</span><span class="tag estrella">★ ESTRELLA</span></div>
+  </div>
+  <div class="abajo">
+    <span><b>Comercializadora VIDA</b> · Plataforma de Desarrollo Empresarial</span>
+    <span>Noviembre 2026</span>
+  </div>
+</section>
+
+<!-- ═══════════ CONTENIDO ═══════════ -->
+<div class="intro">
+  <b>Para el empresario y el equipo de cada tienda VIDA.</b> Tu tienda gana más con dos herramientas que VIDA le asigna:
+  los <b>Productos PLUS</b>, el grupo de productos que más ganancia te deja, y el <b>Producto Estrella</b>, el producto
+  en que toda la tienda se enfoca este mes.
+</div>
+
+<div class="dos">
+  <div class="tarjeta plus">
+    <h3><span class="tag plus">PLUS</span>&nbsp; Productos PLUS</h3>
+    <p style="margin:0">Un <b>grupo</b> de hasta 30 productos que más ganancia le dejan a tu tienda. Se venden todo el año.</p>
+  </div>
+  <div class="tarjeta estrella">
+    <h3><span class="tag estrella">★ ESTRELLA</span>&nbsp; Producto Estrella</h3>
+    <p style="margin:0"><b>El</b> producto (hasta 3) en que la tienda pone su energía <b>este mes</b>. Una sola prioridad para todo el equipo.</p>
+  </div>
+</div>
+
+<div class="seccion">
+<h2><span class="num">1</span> Qué es un Producto PLUS</h2>
+<p>Un Producto PLUS es uno de los productos que <b>más ganancia le deja a tu tienda</b> por cada unidad vendida. No es necesariamente el más caro ni el que más se vende: es el que tiene mejor margen.</p>
+<ul>
+  <li><b>Los define VIDA</b> para cada tienda, según su catálogo y sus márgenes. Cada tienda puede tener hasta 30 PLUS propios.</li>
+  <li>Si tu tienda todavía no tiene PLUS propios, usa los <b>PLUS generales</b> del catálogo VIDA.</li>
+  <li>La lista puede cambiar de un mes a otro. Revisa siempre la que muestra el sistema.</li>
+</ul>
+</div>
+
+<div class="seccion">
+<h2><span class="num">2</span> Por qué vender PLUS</h2>
+<p>Con la misma venta, un PLUS te deja más del doble de ganancia que un producto normal. Por eso cubre antes los gastos fijos de la bodega (alquiler, luz, sueldos) y lo que vendas después es ganancia.</p>
+<table>
+  <tr><th style="width:42%">Ejemplo ilustrativo</th><th>Producto normal</th><th>Producto PLUS</th></tr>
+  <tr><td>Margen de ganancia</td><td>15%</td><td>35%</td></tr>
+  <tr><td>Ganancia por cada $10 vendidos</td><td>$1.50</td><td>$3.50</td></tr>
+  <tr><td>Venta necesaria para ganar $100</td><td>$667</td><td>$286</td></tr>
+</table>
+<p class="nota">Los márgenes reales de tu tienda están en Reportes → Rentabilidad.</p>
+<div class="clave">En este ejemplo, para ganar lo mismo necesitas vender menos de la mitad si lo haces con PLUS. La regla es simple: <b>cuando el cliente duda, recomienda el PLUS.</b></div>
+</div>
+
+<div class="seccion">
+<h2><span class="num">3</span> Qué es el Producto Estrella</h2>
+<p>El Producto Estrella es <b>el producto en que toda la tienda pone su energía este mes</b>. Mientras los PLUS son una lista, la estrella es una sola prioridad clara para todo el equipo.</p>
+<ul>
+  <li><b>Lo elige VIDA</b> para cada tienda, normalmente entre sus productos de mayor margen.</li>
+  <li>Puede haber <b>hasta 3</b> por tienda, pero lo más efectivo es enfocarse en uno.</li>
+  <li><b>Puede cambiar cada mes</b>, según la temporada, el inventario o lo que VIDA quiera impulsar.</li>
+  <li>En la caja lleva la etiqueta <span class="tag estrella">★ ESTRELLA</span>.</li>
+</ul>
+<div class="clave estrella"><b>Por qué funciona:</b> un equipo que empuja un solo producto lo vende mucho más que uno que intenta empujar treinta. La estrella le da a tu tienda un objetivo concreto y fácil de medir: cuántas unidades vendiste este mes contra el anterior.</div>
+</div>
+
+<div class="seccion">
+<h2><span class="num">4</span> PLUS y Producto Estrella: la diferencia</h2>
+<table>
+  <tr><th style="width:24%"></th><th>Productos PLUS</th><th>Producto Estrella</th></tr>
+  <tr><td>Qué es</td><td>Los de mayor ganancia de la tienda</td><td>El producto en que se enfoca la tienda este mes</td></tr>
+  <tr><td>Cuántos</td><td>Hasta 30 por tienda</td><td>Hasta 3 por tienda</td></tr>
+  <tr><td>Quién lo define</td><td>VIDA</td><td>VIDA</td></tr>
+  <tr><td>En la caja</td><td><span class="tag plus">PLUS</span> etiqueta dorada</td><td><span class="tag estrella">★ ESTRELLA</span> etiqueta azul</td></tr>
+  <tr><td>Qué se mide</td><td>Unidades PLUS y % de la venta en PLUS</td><td>Unidades vendidas este mes contra el anterior</td></tr>
+</table>
+<p>Un producto puede ser PLUS y estrella a la vez; en ese caso lleva las dos etiquetas.</p>
+</div>
+
+<div class="seccion">
+<div class="junta">
+<h2><span class="num">5</span> Dónde los ves en el sistema</h2>
+<p>No tienes que memorizar la lista: el sistema marca los PLUS y la estrella en cada lugar donde vendes.</p>
+<table>
+  <tr><th style="width:26%">Dónde</th><th style="width:38%">Qué ves</th><th>Para qué te sirve</th></tr>
+  <tr><td>Caja (menú Tienda)</td><td>Etiquetas <span class="tag plus">PLUS</span> y <span class="tag estrella">★ ESTRELLA</span> junto al nombre</td><td>El cajero sabe qué recomendar al cobrar</td></tr>
+  <tr><td>Inventario</td><td>Etiqueta dorada <span class="tag plus">PLUS</span> en la lista</td><td>Revisar que nunca te falte stock de un PLUS</td></tr>
+  <tr><td>App de clientes</td><td>Los PLUS de tu tienda y la sección <b>Productos Club VIDA</b></td><td>El cliente los descubre antes de llegar o al pedir a domicilio</td></tr>
+  <tr><td>Reportes → Arranque del mes</td><td>Unidades PLUS, % de la venta en PLUS y tu Producto Estrella</td><td>Medir si vas bien y corregir a tiempo</td></tr>
+  <tr><td>Reportes → Plan PLUS</td><td>Unidades de cada PLUS a vender al mes y al día</td><td>Saber la meta exacta para cubrir tus gastos fijos</td></tr>
+</table>
+<p class="nota">Si un producto no aparece marcado como esperabas, recarga el panel con Ctrl + F5 y, si sigue igual, avisa a VIDA.</p>
+</div>
+<div class="paso">
+<h3>Así se ve en la caja</h3>
+<div class="fig"><img src="capturas/05-caja-etiquetas.jpg" alt="Caja con etiquetas ESTRELLA y PLUS"></div>
+<ul class="leyenda">
+  <li data-n="1">Para vender, entra a <b>Tienda</b> en el menú.</li>
+  <li data-n="2"><span class="tag estrella">★ ESTRELLA</span>: tu producto del mes. Ofrécelo primero a cada cliente.</li>
+  <li data-n="3"><span class="tag plus">PLUS</span>: producto de buena ganancia. Recomiéndalo cuando el cliente dude.</li>
+</ul>
+</div>
+</div>
+
+<div class="seccion">
+<h2><span class="num">6</span> Cómo vender más PLUS</h2>
+<p>Siete prácticas que puedes aplicar desde hoy, sin gastar más:</p>
+<ol class="pasos">
+  <li><b>Ponlos a la vista.</b> Coloca los PLUS a la altura de los ojos y cerca de la caja. El Producto Estrella va en el mejor lugar de la tienda.</li>
+  <li><b>Recomienda en la caja.</b> Cuando el sistema muestre la etiqueta PLUS o ★ ESTRELLA, ofrécelo: “¿Ya probaste este? Es de los que más recomendamos”.</li>
+  <li><b>Ofrece el PLUS como alternativa.</b> Si el cliente pide un producto normal, menciona el PLUS equivalente y su beneficio, sin presionar.</li>
+  <li><b>Arma combos.</b> Junta un PLUS con un producto de alta rotación (por ejemplo, el PLUS con el pan o el café del día).</li>
+  <li><b>Nunca te quedes sin stock.</b> Revisa el inventario de tus PLUS cada semana; un PLUS agotado es ganancia perdida.</li>
+  <li><b>Entrena a tu equipo.</b> Que cada cajero sepa cuáles son los PLUS y la estrella del mes y por qué convienen.</li>
+  <li><b>Invita a la app.</b> En la app los clientes ven la sección Productos Club VIDA y pueden pedir a domicilio.</li>
+</ol>
+</div>
+
+<div class="seccion">
+<div class="junta">
+<h2><span class="num">7</span> Cómo vender el Producto Estrella</h2>
+<p>La meta mínima con la estrella es <b>vender más unidades que el mes pasado</b>. Conviértela en una meta diaria que todo el equipo conozca.</p>
+<div class="dos">
+  <div class="tarjeta estrella">
+    <h3>Tu meta diaria, en un minuto</h3>
+    <ol class="pasos" style="margin:0">
+      <li>En Reportes → Arranque del mes, mira cuántas unidades de tu estrella vendiste el mes pasado.</li>
+      <li>Súmale lo que quieras crecer (por ejemplo, un 10%).</li>
+      <li>Divídelo entre los días del mes.</li>
+    </ol>
+  </div>
+  <div class="tarjeta estrella">
+    <h3>Ejemplo</h3>
+    <p>El mes pasado vendiste <b>44 unidades</b>.</p>
+    <p>Con un 10% más, la meta es <b>48 unidades</b>.</p>
+    <p style="margin:0">En un mes de 30 días son unas <b>2 por día</b>.</p>
+  </div>
+</div>
+</div>
+<h3>Cinco prácticas para la estrella</h3>
+<ol class="pasos">
+  <li><b>El mejor lugar de la tienda.</b> A la entrada o junto a la caja, a la altura de los ojos y siempre bien surtido.</li>
+  <li><b>Un cartel sencillo.</b> “Producto del mes” o “Recomendado VIDA”, con el precio visible.</li>
+  <li><b>Una frase para todos.</b> Que cada cajero ofrezca la estrella con la misma frase corta, a cada cliente.</li>
+  <li><b>Meta del día a la vista.</b> Anota cuántas llevas hoy y cuántas faltan; celebra cuando el equipo la cumple.</li>
+  <li><b>Stock asegurado.</b> La estrella nunca puede agotarse: revísala cada día y pide reabasto con tiempo.</li>
+</ol>
+</div>
+
+<div class="seccion">
+<div class="junta">
+<h2><span class="num">8</span> Cómo medir tu avance, paso a paso</h2>
+<p>Todo está en el panel, en <b>Reportes → Arranque del mes</b>. Sigue estos cuatro pasos; los números rojos de cada imagen te dicen dónde picar o qué mirar.</p>
+
+<div class="paso">
+<h3>Paso 1. Abre el Arranque del mes</h3>
+<div class="fig"><img src="capturas/01-llegar-arranque.jpg" alt="Menú Reportes y pestaña Arranque del mes"></div>
+<ul class="leyenda">
+  <li data-n="1">En el menú de la izquierda, pica <b>Reportes y Estadísticas</b>.</li>
+  <li data-n="2">Pica la pestaña <b>Arranque del mes</b>. Si no la ves, desliza las pestañas hacia la izquierda.</li>
+  <li data-n="3">Con este botón abres este manual cuando lo necesites.</li>
+</ul>
+</div>
+</div>
+
+<div class="paso">
+<h3>Paso 2. Revisa cómo va tu mes</h3>
+<div class="fig"><img src="capturas/02-resumen-mes.jpg" alt="Resumen del mes"></div>
+<ul class="leyenda">
+  <li data-n="1"><b>Vendido este mes:</b> lo que llevas vendido y cuánto vendiste el mes pasado.</li>
+  <li data-n="2"><b>Proyección al cierre:</b> si sigues a este ritmo, cuánto venderás en el mes y si llegas a la meta.</li>
+  <li data-n="3"><b>Unidades PLUS:</b> cuántas llevas y la diferencia con el mes pasado.</li>
+  <li data-n="4"><b>Venta en PLUS:</b> qué parte de lo que vendes es PLUS. Mientras más alto, más ganas.</li>
+  <li data-n="5"><b>Barra de avance:</b> si la barra pasa la marca gris (el día del mes) va en verde y vas al ritmo; si se queda atrás se pone naranja y vas atrasado.</li>
+</ul>
+</div>
+
+<div class="paso">
+<h3>Paso 3. Mira tu tendencia de 6 meses</h3>
+<div class="fig"><img src="capturas/03-graficas.jpg" alt="Gráficas de ventas y unidades PLUS por mes"></div>
+<ul class="leyenda">
+  <li data-n="1">La línea punteada es tu <b>meta mensual</b>. Las barras que la pasan son meses en que cumpliste.</li>
+  <li data-n="2">La barra clara es el <b>mes en curso</b>: todavía no termina, no la compares como si fuera un mes completo.</li>
+  <li data-n="3"><b>Unidades PLUS</b> del mes en curso. La meta es que cada mes sea más alta que la anterior.</li>
+</ul>
+</div>
+
+<div class="paso">
+<h3>Paso 4. Revisa tu Producto Estrella y tus PLUS</h3>
+<div class="fig"><img src="capturas/04-estrella-plus.jpg" alt="Producto estrella, productos PLUS y lo más vendido"></div>
+<ul class="leyenda">
+  <li data-n="1">Tu <b>Producto Estrella</b>: unidades de este mes y la diferencia con el mes pasado.</li>
+  <li data-n="2">Tus <b>Productos PLUS</b>: unidades de cada uno este mes y el mes pasado. Empuja los que bajaron.</li>
+  <li data-n="3">La etiqueta <span class="tag plus">PLUS</span> en lo más vendido te muestra cuáles de tus productos estrella de venta son PLUS.</li>
+</ul>
+</div>
+
+<div class="tarjeta" style="margin-top:2mm">
+  <h3>¿Y cuánto tengo que vender? Plan PLUS</h3>
+  <ol class="pasos" style="margin:0">
+    <li>Abre <b>Reportes → Plan PLUS</b> (la pestaña de al lado).</li>
+    <li>El sistema te dice cuántas unidades de cada PLUS vender <b>al mes y al día</b> para cubrir tus gastos fijos.</li>
+    <li>Compáralo con lo que vendiste en los últimos 30 días y ajusta tu exhibición y tus recomendaciones.</li>
+  </ol>
+</div>
+<p class="nota" style="margin-top:3mm">Si no tienes meta mensual, defínela primero en Reportes → Metas; sin ella, el cuadro no puede medir tu avance.</p>
+</div>
+
+<div class="seccion junta">
+<h2><span class="num">9</span> Tu rutina de cada mes</h2>
+<p>Tres momentos, quince minutos cada uno: arrancar, revisar cada semana y cerrar. Lo que aprendes al cierre te prepara el arranque del mes siguiente.</p>
+<svg viewBox="0 0 760 244" width="100%" role="img" aria-label="Ciclo mensual: arrancar, revisar y cerrar">
+  <defs><marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8A94A3"/></marker></defs>
+  <g fill="none" stroke="#8A94A3" stroke-width="1.5">
+    <path d="M232 114H268" marker-end="url(#fl)"/><path d="M476 114H512" marker-end="url(#fl)"/>
+    <path d="M616 172V204H128V172" marker-end="url(#fl)"/>
+  </g>
+  <rect x="24" y="56" width="208" height="116" rx="10" fill="#EAF7EE" stroke="#46A657" stroke-width="2"/>
+  <rect x="268" y="56" width="208" height="116" rx="10" fill="#fff" stroke="#C9D1DB" stroke-width="1.5"/>
+  <rect x="512" y="56" width="208" height="116" rx="10" fill="#fff" stroke="#C9D1DB" stroke-width="1.5"/>
+  <g font-size="11.5" fill="#1F2937">
+    <text x="36" y="80" font-size="15" font-weight="800" fill="#0A1E3F">1. Arrancar</text>
+    <text x="36" y="98" fill="#5B6573">Días 1 al 3</text>
+    <text x="36" y="122">Revisa el cierre anterior</text><text x="36" y="138">Confirma meta y estrella</text><text x="36" y="154">Reacomoda la exhibición</text>
+    <text x="280" y="80" font-size="15" font-weight="800" fill="#0A1E3F">2. Revisar</text>
+    <text x="280" y="98" fill="#5B6573">Cada semana</text>
+    <text x="280" y="122">Avance contra el día</text><text x="280" y="138">Unidades PLUS vs semana</text><text x="280" y="154">Stock de PLUS y estrella</text>
+    <text x="524" y="80" font-size="15" font-weight="800" fill="#0A1E3F">3. Cerrar</text>
+    <text x="524" y="98" fill="#5B6573">Últimos 2 días</text>
+    <text x="524" y="122">Venta contra la meta</text><text x="524" y="138">PLUS que más y menos salen</text><text x="524" y="154">Comparte con tu equipo</text>
+    <text x="372" y="226" text-anchor="middle" fill="#5B6573">Lo aprendido al cierre prepara el arranque del mes siguiente</text>
+  </g>
+</svg>
+<div class="dos" style="grid-template-columns: 1fr 1fr 1fr">
+  <div class="tarjeta">
+    <h3>Al iniciar el mes</h3>
+    <ul class="check" style="margin:0">
+      <li>Ver cómo cerró el mes anterior</li>
+      <li>Confirmar tu meta mensual</li>
+      <li>Revisar tus PLUS y tu estrella</li>
+      <li>Revisar el Plan PLUS</li>
+      <li>Reacomodar la exhibición</li>
+      <li>Explicar al equipo los PLUS y la estrella</li>
+    </ul>
+  </div>
+  <div class="tarjeta">
+    <h3>Cada semana</h3>
+    <ul class="check" style="margin:0">
+      <li>Ver la barra de avance contra la marca del día</li>
+      <li>Comparar las unidades PLUS con la semana anterior</li>
+      <li>Revisar el stock de PLUS y estrella</li>
+      <li>Si vas atrasado: más recomendación y un combo con la estrella</li>
+    </ul>
+  </div>
+  <div class="tarjeta">
+    <h3>Al cerrar el mes</h3>
+    <ul class="check" style="margin:0">
+      <li>Comparar lo vendido con la meta y la proyección</li>
+      <li>Anotar qué PLUS se vendieron más y menos</li>
+      <li>Compartir el resultado con tu equipo y con VIDA</li>
+    </ul>
+  </div>
+</div>
+</div>
+
+<h2><span class="num">10</span> Preguntas frecuentes</h2>
+<div class="faq"><b>¿PLUS y Producto Estrella son lo mismo?</b>No. Los PLUS son un grupo de hasta 30 productos de buena ganancia; la estrella es el producto (hasta 3) en que te enfocas este mes. Un producto puede ser las dos cosas a la vez.</div>
+<div class="faq"><b>¿Puedo cambiar mi Producto Estrella?</b>No directamente: lo asigna VIDA. Si crees que otro producto funcionaría mejor en tu tienda, propónselo a VIDA con tus números del mes.</div>
+<div class="faq"><b>Mi tienda no tiene Producto Estrella. ¿Qué hago?</b>En Reportes → Arranque del mes verás el aviso de que aún no tiene. Mientras VIDA lo asigna, enfócate en tus PLUS.</div>
+<div class="faq"><b>¿Puedo elegir yo mis productos PLUS?</b>No. Los define VIDA según los márgenes de tu tienda. Si crees que un producto debería ser PLUS, propónselo a VIDA.</div>
+<div class="faq"><b>¿Por qué mis PLUS no son los mismos que los de otra tienda?</b>Cada tienda tiene su catálogo, sus precios y sus clientes. VIDA puede asignar PLUS distintos a cada una.</div>
+<div class="faq"><b>¿Qué pasa si mi tienda no tiene PLUS asignados?</b>Se usan los PLUS generales del catálogo VIDA hasta que VIDA asigne los tuyos.</div>
+<div class="faq"><b>¿De dónde salen los números del Arranque del mes?</b>De las ventas entregadas de tu tienda, tanto en caja como en la app. Una venta anulada o un pedido no entregado no cuenta.</div>
+<div class="faq"><b>¿Qué significa la proyección al cierre?</b>Es lo que venderías en el mes si mantienes el ritmo diario que llevas hasta hoy. Al inicio del mes cambia mucho; desde la segunda semana es una buena guía.</div>
+<div class="faq"><b>No veo la pestaña Arranque del mes. ¿Qué hago?</b>Recarga el panel con Ctrl + F5. Si usas el panel desde Messenger o WhatsApp, ábrelo en Chrome.</div>
+
+<div class="reglas">
+  <h2>Las reglas de oro: PLUS y Estrella</h2>
+  <ol>
+    <li><b>A la vista:</b> la estrella en el mejor lugar, los PLUS cerca de la caja.</li>
+    <li><b>Recomienda siempre:</b> si ves la etiqueta PLUS o ★ ESTRELLA en la caja, ofrécelo.</li>
+    <li><b>Nunca agotados:</b> revisa su stock cada semana; la estrella, cada día.</li>
+    <li><b>Mide cada semana:</b> Reportes → Arranque del mes.</li>
+    <li><b>Todo el equipo sabe:</b> cuáles son y por qué convienen.</li>
+    <li><b>Una estrella, una meta diaria:</b> supera las unidades del mes pasado, día a día.</li>
+  </ol>
+</div>
+
+<div class="cierre">
+  Comercializadora VIDA · Por Venezuela, sus productos y su gente
+</div>
+
+</body>
+</html>
